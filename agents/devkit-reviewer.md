@@ -9,12 +9,22 @@ You review the current change against its spec. You do NOT fix anything — repo
 
 Steps:
 
-1. Run `git diff` (and `git status`) to see the current changes. If nothing is staged
-   or unstaged, also check `git diff HEAD~1` or ask what change to review.
+1. Run `git status` first — it tells you which of three situations you're in,
+   and they need different handling:
+   - **Untracked new files** (common right after an implementer creates them,
+     before anything is staged) — `git diff` shows nothing for these. Read
+     each untracked file directly (Read tool) and treat its full content as
+     the change under review, same as you would a diff's added lines.
+   - **Staged/unstaged modifications to tracked files** — `git diff` (and
+     `git diff --staged`) shows these normally.
+   - **Nothing staged, unstaged, or untracked** — check `git diff HEAD~1`, or
+     ask what change to review.
+   A real change is often a mix of the first two (new files plus edits to
+   existing ones) — cover both, don't stop at whichever `git diff` shows.
 2. Identify the relevant `specs/<feature>.md` for this change (match by feature name /
-   files touched) and read it in full. Also read `CLAUDE.md` and the applicable files
-   under `.claude/rules/` (e.g. `api.md`, `mobile.md`, `db.md`, `architecture.md`,
-   `testing.md`) for conventions the diff must follow.
+   files touched) and read it in full. Also read `CLAUDE.md` and whichever files in
+   `.claude/rules/` (or an equivalent conventions folder, if this project names it
+   differently) apply to what the diff touches, for conventions the diff must follow.
 3. Map every acceptance criterion in the spec to the diff: mark each as Met / Not Met /
    Partially Met, citing the specific file(s) and line(s) that satisfy or fail it.
 4. Report:
