@@ -114,7 +114,16 @@ $totalCost = 0.0
 $byModel = @()
 foreach ($model in $results.Keys) {
     $r = $results[$model]
+    # Match the bare model ID first; a subagent's recorded model can carry a
+    # dated-snapshot suffix (e.g. "claude-haiku-4-5-20251001") that an exact
+    # match against this table's bare keys ("claude-haiku-4-5") would miss -
+    # found for real: 1.9M real haiku tokens silently fell into
+    # unknownModelTokens before this fallback existed.
     $p = $Pricing[$model]
+    if (-not $p) {
+        $stripped = $model -replace '-\d{8}$', ''
+        if ($stripped -ne $model) { $p = $Pricing[$stripped] }
+    }
     $modelCost = $null
     if ($p) {
         $modelCost = ($r.input / 1000000 * $p.input) +
