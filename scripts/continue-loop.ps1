@@ -3,14 +3,46 @@ param()
 
 # Stop hook: reads the JSON the harness pipes on stdin, looks for the first
 # unchecked milestone in the host project's PROGRESS.md, and if found, blocks
-# the stop (exit 2) with a stderr instruction telling Claude what to do next.
-# Exits 0 (allow the stop) in every other case: no PROGRESS.md, no unchecked
+# the stop (exit 2) with a stderr instruction telling Claude what to do next
+# - draft a spec first if none exists yet, otherwise implement it. Exits 0
+# (allow the stop) in every other case: no PROGRESS.md, no unchecked
 # milestone left, the project has its own loop skill, or the nudge cap is hit.
 
 # Windows PowerShell 5.1's -Encoding utf8 always writes a BOM, which breaks a
 # strict line-by-line JSON parser on the very first line of the telemetry
 # log. Write without one explicitly instead.
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+# Finds a spec file for a milestone, matching devkit-specify's own
+# specs/<kebab-case-feature>.md convention. Tries the kebab-case guess first
+# (name with any trailing "(...)" qualifier stripped), then falls back to
+# scanning each spec's header line for this milestone's number, in case the
+# filename doesn't follow the convention. Returns $null if nothing matches -
+# that's a normal outcome (milestone hasn't been spec'd yet), not an error.
+function Find-SpecForMilestone {
+    param($ProjectDir, $MilestoneNumber, $MilestoneName)
+
+    $specsDir = Join-Path $ProjectDir 'specs'
+    if (-not (Test-Path -LiteralPath $specsDir)) { return $null }
+
+    $core = $MilestoneName -replace '\s*\([^)]*\)\s*$', ''
+    $kebab = ($core.ToLower() -replace '[^a-z0-9]+', '-').Trim('-')
+    if ($kebab) {
+        $guess = Join-Path $specsDir "$kebab.md"
+        if (Test-Path -LiteralPath $guess) { return $guess }
+    }
+
+    if ($MilestoneNumber) {
+        $pattern = "Milestone:.*\bM?$([regex]::Escape($MilestoneNumber))\b"
+        foreach ($file in (Get-ChildItem -LiteralPath $specsDir -Filter '*.md' -File -ErrorAction SilentlyContinue)) {
+            $head = Get-Content -LiteralPath $file.FullName -TotalCount 5 -ErrorAction SilentlyContinue
+            foreach ($line in $head) {
+                if ($line -match $pattern) { return $file.FullName }
+            }
+        }
+    }
+    return $null
+}
 
 $raw = [Console]::In.ReadToEnd()
 $hookInput = $null
@@ -43,23 +75,27 @@ if (-not (Test-Path -LiteralPath $progressPath)) {
     exit 0
 }
 
-$milestone = $null
+$milestoneNumber = $null
+$milestoneName = $null
 foreach ($line in Get-Content -LiteralPath $progressPath) {
     # Milestone table row: | # | Milestone name | <not-started glyph> | ...
     if ($line -match '^\s*\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|\s*(⬜|⏳)\s*(\||$)') {
-        $milestone = "M$($Matches[1]) - $($Matches[2].Trim())"
+        $milestoneNumber = $Matches[1]
+        $milestoneName = $Matches[2].Trim()
         break
     }
     # Plain markdown task list: - [ ] <text>
     if ($line -match '^\s*-\s*\[\s*\]\s*(.+)$') {
-        $milestone = $Matches[1].Trim()
+        $milestoneName = $Matches[1].Trim()
         break
     }
 }
 
-if (-not $milestone) {
+if (-not $milestoneName) {
     exit 0
 }
+
+$milestone = if ($milestoneNumber) { "M$milestoneNumber - $milestoneName" } else { $milestoneName }
 
 # Runaway-loop guard: a counter keyed to this project + this exact milestone,
 # capped at 8 nudges. State lives outside the repo (OS temp) so it never gets
@@ -93,8 +129,11 @@ if ($count -gt 8) {
 )
 
 # Telemetry: log a "started" event the first time this milestone is seen (not
-# on every repeat nudge). track-milestones.ps1 logs the matching "shipped"
-# event when PROGRESS.md marks it done; devkit-stats pairs the two by name.
+# on every repeat nudge) - regardless of whether the nudge below is toward
+# specifying or implementing, since from the user's perspective work on this
+# milestone began the moment it was first mentioned. track-milestones.ps1
+# logs the matching "shipped" event when PROGRESS.md marks it done;
+# devkit-stats pairs the two by name.
 if ($count -eq 1) {
     $telemetryDir = Join-Path $env:LOCALAPPDATA 'rajesh-devkit\telemetry'
     New-Item -ItemType Directory -Force -Path $telemetryDir | Out-Null
@@ -107,9 +146,19 @@ if ($count -eq 1) {
     [System.IO.File]::AppendAllText($telemetryPath, $line + [Environment]::NewLine, $Utf8NoBom)
 }
 
-$message = "Next milestone from PROGRESS.md: $milestone. Implement it with strict TDD " +
-    "(red-green, one acceptance criterion at a time per this project's own testing " +
-    "conventions), then invoke the devkit-reviewer subagent against the diff before treating " +
-    "it as done."
+$specPath = Find-SpecForMilestone -ProjectDir $projectDir -MilestoneNumber $milestoneNumber -MilestoneName $milestoneName
+
+if (-not $specPath) {
+    $message = "Next milestone from PROGRESS.md: $milestone. No spec exists for it yet - " +
+        "draft one first: say `"spec this feature: $milestoneName`" to invoke devkit-specify " +
+        "and write specs/<kebab-case-feature>.md. Once the spec exists, implement it with " +
+        "strict TDD (red-green, one acceptance criterion at a time), then invoke the " +
+        "devkit-reviewer subagent against the diff before treating it as done."
+} else {
+    $message = "Next milestone from PROGRESS.md: $milestone. Its spec already exists at " +
+        "$specPath - implement it with strict TDD (red-green, one acceptance criterion at a " +
+        "time per this project's own testing conventions), then invoke the devkit-reviewer " +
+        "subagent against the diff before treating it as done."
+}
 [Console]::Error.WriteLine($message)
 exit 2

@@ -1,6 +1,23 @@
 {
-  "description": "rajesh-devkit: nudges toward the next PROGRESS.md milestone on Stop, and runs the host project's verify script after edits.",
+  "description": "rajesh-devkit: nudges toward the next PROGRESS.md milestone on Stop, runs the host project's verify script after edits, and greets a new session with what's next.",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PLUGIN_ROOT}/scripts/session-welcome.ps1"
+            ]
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
