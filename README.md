@@ -23,17 +23,22 @@ against any host project's `PROGRESS.md`, if it has one.
   ecosystems are actually present (npm, PyPI, NuGet, pub, Go, Cargo, Maven, ...).
 - `continue-loop.ps1` (Stop hook) — when a session stops, checks the host
   project's `PROGRESS.md` for the next not-started milestone and, if one
-  exists, blocks the stop with an instruction to implement it test-first and
-  run the reviewer.
+  exists, blocks the stop with an instruction to draft a spec first (if none
+  exists yet) or implement it test-first and run the reviewer (if one does).
 - `run-verify.ps1` (PostToolUse hook) — after every `Edit`/`Write`, runs the
   host project's own `.claude\verify.ps1` if it provides one.
 - `track-milestones.ps1` (PostToolUse hook) — after every `Edit`/`Write`,
   detects any milestone that just flipped to done in `PROGRESS.md` and logs
   a timestamped "shipped" event, pairing with the "started" event
   `continue-loop.ps1` already logs.
-- `devkit-stats` — a skill that reports wall-clock duration per milestone
-  from that local telemetry log (timing only for now — see "Telemetry"
-  below).
+- `session-welcome.ps1` (`SessionStart` hook) — greets a new session with
+  what's next: the bootstrap checklist if `PROGRESS.md` doesn't exist yet,
+  or the next milestone's status otherwise.
+- `devkit-help` — the on-demand, verified version of the same check, for
+  when you'd rather ask than wait for the automatic banner.
+- `devkit-stats` — a skill that reports real duration, real USD cost, and a
+  heuristic manual-effort comparison per milestone from that local telemetry
+  log (see "Telemetry" below).
 
 Nothing here is specific to any one codebase or language. The skill and
 agents infer a project's layout, conventions, test runner, and dependency
@@ -73,15 +78,19 @@ rajesh-devkit/
 ├── skills/
 │   ├── devkit-specify/
 │   │   └── SKILL.md             # spec-drafting, product-owner style
+│   ├── devkit-help/
+│   │   └── SKILL.md             # on-demand "what's next" (verified SessionStart fallback)
 │   └── devkit-stats/
-│       └── SKILL.md             # milestone timing report
+│       └── SKILL.md             # timing + real cost + heuristic effort report
 ├── hooks/
-│   └── hooks.json               # Stop -> continue-loop.ps1
+│   └── hooks.json               # SessionStart -> session-welcome.ps1
+│                                 # Stop -> continue-loop.ps1
 │                                 # PostToolUse (Edit|Write) -> run-verify.ps1, track-milestones.ps1
 ├── scripts/
 │   ├── continue-loop.ps1        # Stop hook: nudge toward next milestone
 │   ├── run-verify.ps1           # PostToolUse hook: host project's verify.ps1
 │   ├── track-milestones.ps1     # PostToolUse hook: log milestone-shipped events
+│   ├── session-welcome.ps1      # SessionStart hook: "what's next" banner
 │   └── token-report.ps1         # not a hook - invoked by devkit-stats on demand;
 │                                 # scans session transcripts for real cost/tokens
 └── README.md
@@ -104,11 +113,82 @@ Run both from inside the host project's repo root (e.g. `MyHomeMaintenance`).
 so it only applies there — repeat the two commands in any other project you
 want it in.
 
+## Getting started in a brand-new project
+
+This is the full sequence, from an empty folder to the loop nudging you
+toward milestone 1. Steps 1-2 are collaborative conversation, not commands —
+don't skip them by jumping straight to `PROGRESS.md`, since everything after
+depends on them.
+
+1. **`git init`** in the project folder.
+2. **Talk through the product intent with Claude** — what this actually is,
+   who it's for, what it deliberately isn't. This is a conversation, not
+   something any skill here automates (`CLAUDE.md` is about conventions, not
+   intent — keep them separate). Save the result somewhere like
+   `docs/product_vision.md`.
+3. **Run `claude init`** to generate/update `CLAUDE.md` from the repo as it
+   stands (even a near-empty scaffold is fine — it's meant to grow, not be
+   complete on day one). Point it at the vision doc from step 2 in a
+   "where the detail lives" table, since `devkit-specify` reads `CLAUDE.md`
+   first.
+4. **Break the vision into milestones and write `PROGRESS.md`** — a table
+   per phase, every row starting unstarted:
+
+   ```markdown
+   ## Phase 1 — <name>
+
+   | # | Milestone | Status |
+   |---|---|---|
+   | 1 | <name> | ⬜ |
+   | 2 | <name> | ⬜ |
+   ```
+
+   This is the one file the plugin's hooks actually require. Everything
+   before this step is prep; this step is what the loop reads.
+5. *(Optional)* **Seed `docs/adr/`** if any big, hard-to-reverse decisions
+   are already made (a datastore choice, an auth mechanism). Not required
+   to start — `devkit-specify` checks for this folder and reads whatever's
+   there, but there's no auto-created ADR template the way there is for
+   specs, so write the first one by hand (or ask Claude to draft it) to
+   establish the format.
+6. **Install the plugin** (the two commands above).
+7. **Start a session** (or say "how do I use this plugin" / "what's next"
+   any time). The `SessionStart` hook checks project state automatically —
+   if `PROGRESS.md` doesn't exist yet, it repeats steps 2-5 as a checklist;
+   if it does, it names the next unstarted milestone and tells you whether
+   it needs a spec first. `devkit-help` is the on-demand version of the same
+   check, in case the automatic banner doesn't show up the way you'd expect
+   in your setup (see Troubleshooting).
+
+## Creating the first spec, then starting the dev loop
+
+Once the milestone queue exists, there is no separate "start the loop"
+command — the `Stop` hook nudges automatically the next time a session
+pauses. The one thing worth doing deliberately first:
+
+1. **Say "spec this feature: `<milestone name>`"** (or just "spec this
+   feature" and name it when asked) — invokes `devkit-specify`, which reads
+   the repo and `CLAUDE.md` first, interviews you for anything it can't
+   infer, and writes `specs/<kebab-case-feature>.md`.
+2. **Once the spec exists, either say "implement it"** (invokes
+   `devkit-implementer` directly), **or just keep working and let the
+   session pause naturally** — `continue-loop.ps1` checks for that spec
+   before nudging, so from here on it tells you to implement with strict
+   TDD and then invokes `devkit-reviewer`, rather than nudging toward a spec
+   that doesn't exist yet.
+3. **From here it's genuinely a loop**, not a one-shot: once `devkit-
+   reviewer` gives a `ship` verdict and `PROGRESS.md`'s row flips to `✅`,
+   the next session pause nudges toward the *next* milestone — spec first
+   if it needs one, implement directly if it already has one. Run
+   `devkit-stats` any time to see real duration/cost and the heuristic
+   effort comparison so far.
+
 ## Skills
 
 | Name | Trigger | Model / effort | What it does |
 |---|---|---|---|
 | `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. |
+| `devkit-help` | "how do I use this plugin", "devkit help", "get me started", "what's next", "getting started with rajesh-devkit" | `haiku` | Runs the same state check as the `SessionStart` hook (below) and relays it conversationally — the verified on-demand fallback for the automatic banner. Read-only. |
 | `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.ps1`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
 
 ## Subagents
@@ -123,7 +203,8 @@ want it in.
 
 | Event | Matcher | Script | Trigger condition | Blocking behaviour |
 |---|---|---|---|---|
-| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.ps1` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — writes the next milestone name to stderr with an instruction to implement it test-first (RED-GREEN, one acceptance criterion at a time) and then invoke `devkit-reviewer` on the diff before treating it as done. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
+| `SessionStart` | *(none supported)* | `scripts/session-welcome.ps1` | Fires when a genuine new session starts (`source: "startup"` — skips resume/clear/compact to avoid repetitive noise mid-project). | Never blocks — always exits 0. Prints contextual guidance: the bootstrap checklist if `PROGRESS.md` doesn't exist, "let's spec this" if the next milestone has none, "implement it" if it does, or "nothing queued" if none are unstarted. Its exact on-screen behavior via the harness is unverified (see Troubleshooting) — `devkit-help` is the tested fallback. |
+| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.ps1` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — checks whether a spec exists for the milestone (kebab-case filename guess, falling back to a header scan) and writes a matching instruction to stderr: draft one with `devkit-specify` if none exists, or implement it test-first (RED-GREEN, one acceptance criterion at a time) and invoke `devkit-reviewer` on the diff if it does. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
 | `PostToolUse` | `Edit\|Write` | `scripts/run-verify.ps1` | Fires after every Edit or Write tool call. | If `.claude\verify.ps1` doesn't exist in the host project, exits 0 silently (no-op). If it exists, runs it and **exits with whatever code it returned** — no remapping. `verify.ps1`'s own exit-code convention is what decides whether Claude sees the failure (see the contract below). |
 | `PostToolUse` | `Edit\|Write` | `scripts/track-milestones.ps1` | Fires after every Edit or Write tool call, alongside `run-verify.ps1` (same matcher, both run). | Never blocks — always exits 0. Re-parses `PROGRESS.md`'s milestone statuses, diffs against a stored snapshot, and appends a `milestone_shipped` telemetry event for anything that just flipped to done. No-ops silently if there's no `PROGRESS.md` or no recognisable milestone lines. |
 
@@ -258,6 +339,21 @@ agent involved, which is worth enabling regardless (Settings → Code security
 
 ## Troubleshooting
 
+- **No welcome banner appears when a new session starts.** `SessionStart`
+  hooks' exact on-screen behavior wasn't empirically verified against a
+  live harness while building this (this plugin's own OAuth doesn't carry
+  into a nested `claude` session, so a real end-to-end "does the banner
+  actually render" test wasn't possible — `session-welcome.ps1`'s own logic
+  *was* fully tested by direct invocation, in all five states). If nothing
+  shows up automatically, ask "how do I use this plugin" or "what's next" —
+  that invokes `devkit-help`, which runs the identical check and is
+  guaranteed to work the same way any other skill does.
+- **The Stop hook still tells me to write a spec even though one exists.**
+  Its spec-existence check tries a kebab-case filename guess first
+  (matching `devkit-specify`'s own naming), then falls back to scanning
+  each spec's header line for the milestone's number — if neither matches
+  (an unusual filename with no `Milestone: M<N>` header line), it won't be
+  found. Rename the file or add that header line.
 - **The Stop hook never fires.** Check `$env:CLAUDE_PROJECT_DIR` is set (the
   harness sets it automatically) and that `PROGRESS.md` exists at that root,
   not in a subfolder. Confirm the plugin is actually installed for this
@@ -318,6 +414,7 @@ agent involved, which is worth enabling regardless (Settings → Code security
 | `8e3d28c` | 2026-09-15 | Fixed `devkit-reviewer`'s untracked-files gap and hardcoded rule filenames — found by a real review run against freshly created, unstaged files |
 | `afc0d00` | 2026-09-15 | Fixed `devkit-dep-audit` creating a `package-lock.json` to make `npm audit` runnable, violating its own report-only contract; also fixed advisory-list truncation |
 | `ae54ee7` | 2026-09-15 | Added `token-report.ps1` (real USD cost from session transcripts, pricing sourced from the `claude-api` skill, verified against a real transcript) and extended `devkit-stats` with cost + a heuristic manual-effort/speedup comparison; dogfooding this one too found and fixed a real pairing gap (a `milestone_shipped` event with no preceding `milestone_started` — a telemetry reset mid-milestone, not a bug — wasn't handled, only the reverse case was) |
+| `f63d6fd` | 2026-09-15 | Added a spec-existence check to `continue-loop.ps1` (it previously nudged toward implementing a milestone even with no spec yet — verified in all three cases: no spec, kebab-case filename match, header-scan fallback match); added `session-welcome.ps1` (`SessionStart` hook) and `devkit-help` (the verified on-demand fallback, since `SessionStart`'s exact on-screen behavior couldn't be tested against a live harness) |
 
 The last six commits all came from actually running each shipped file against
 [a scratch regression fixture](../scratch-devkit-test) rather than just reading
