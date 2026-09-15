@@ -35,6 +35,15 @@ assuming anything.
      every criterion.
    - If nothing matches, say so and ask rather than guessing a command that
      might not exist.
+   - If the detected command exists but doesn't actually run correctly on
+     this machine/runtime (a CLI-parsing quirk, a version mismatch, an
+     argument the installed version doesn't accept) — as opposed to the test
+     inside it failing — that's a tooling problem, not a RED result. Try an
+     equivalent invocation that exercises the same tests (a different flag,
+     no path argument, the underlying binary directly) rather than stopping,
+     but don't silently edit the project's own script/config to paper over
+     it — flag the discrepancy in your final report so a human decides
+     whether the script itself needs fixing.
 
 3. **If a criterion needs an external service** (a database, a queue, a
    mocked third-party API) that might time out or idle out during a long
@@ -51,6 +60,16 @@ assuming anything.
      genuinely missing, not a typo, bad fixture, or compile error (RED).
    - Write the minimum code to make it pass, then run that test *and* the
      full suite for whatever's affected (GREEN — no regressions elsewhere).
+     "Minimum" means minimum *scope* — implement what the criterion actually
+     describes, generally, rather than special-casing the one example value
+     the test happens to use (fake-it-till-you-make-it hardcoding). If the
+     correct general behavior is no more code than the hardcoded special
+     case would be, write the general version — don't manufacture a fake
+     implementation for its own sake. It's normal and fine for a later
+     criterion's test to pass immediately with no new code, because an
+     earlier criterion's general implementation already covers it — that's
+     a sign the earlier step was scoped correctly, not something to force a
+     failure for.
    - Refactor if worth it, keeping the suite green.
    - **Checkpoint before moving to the next criterion**, if this project
      tracks milestones in a `PROGRESS.md` with an `## In flight` block (the
