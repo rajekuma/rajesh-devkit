@@ -183,6 +183,86 @@ pauses. The one thing worth doing deliberately first:
    `devkit-stats` any time to see real duration/cost and the heuristic
    effort comparison so far.
 
+## Adding to an existing project (already has code, or cloned from GitHub)
+
+The install commands are identical to the brand-new-project case — the
+difference is what to check *before* installing, because an existing repo
+usually already has some (or all) of what the brand-new walkthrough builds
+from scratch, and blindly repeating those steps risks clobbering or
+duplicating it.
+
+1. **Inventory what already exists, before touching anything.** Ask Claude
+   directly: *"Search this project's `.claude` folder (and
+   `%USERPROFILE%\.claude`) for any existing skills, subagents, commands, or
+   hooks, and check for `CLAUDE.md`, a `specs/` folder, `docs/adr/`, and any
+   milestone/roadmap tracking file (`PROGRESS.md`, `ROADMAP.md`, `TODO.md`,
+   GitHub Issues/Projects) — list what's there before we go further."* This
+   is exactly the inventory step this plugin itself started from — a
+   30-second check that avoids every collision risk below.
+   - **A same-named skill/agent already exists** (e.g. a project that
+     already has its own `specify` or `reviewer`) — this plugin's `devkit-`
+     prefix means it won't collide (see "Why `devkit-` prefixed names"
+     above), but confirm there isn't already a `devkit-`-prefixed one from
+     a previous install.
+   - **A `.claude/skills/spec-loop/SKILL.md`-shaped skill already exists** —
+     `continue-loop.ps1` defers to it entirely and never fires (see "Why
+     the Stop hook defers to a project's own loop skill"). Not a problem,
+     just don't expect the automatic nudge if this project already has its
+     own loop.
+2. **`CLAUDE.md` already exists.** Review it first. Running `claude init`
+   again should read and refine what's there rather than blindly overwrite
+   it — but this hasn't been independently verified against every version,
+   so skim the diff afterward rather than trusting it blind. If there's no
+   `CLAUDE.md` at all despite real code existing, this is exactly the case
+   `claude init` is built for — it has an actual codebase to learn from,
+   unlike the brand-new-project case where it produces something thin.
+3. **Product intent is probably already documented somewhere** — a
+   `README.md`, a wiki, an existing `docs/` folder, even just commit
+   history and open issues. Don't start the product-intent conversation
+   from zero: ask Claude to read what already exists and summarize its
+   understanding back to you for correction, then save the confirmed
+   version to `docs/product_vision.md` (or wherever this project already
+   keeps that kind of doc — match its existing convention rather than
+   imposing a new one).
+4. **`PROGRESS.md` — the real judgment call for a project with history.**
+   Two honest options, pick based on how much you value complete history
+   versus getting the loop running quickly:
+   - **Lightweight (faster):** start `PROGRESS.md` now with only
+     upcoming/planned milestones as rows, and one short prose note at the
+     top along the lines of "existing functionality (auth, the X module,
+     ...) predates this tracker and isn't retroactively itemized here." The
+     loop only cares about unstarted rows going forward.
+   - **Thorough (more complete, more upfront work):** retroactively write a
+     row — optionally backed by a retroactive spec written from the actual
+     existing code — for each major already-shipped feature, marked `✅`
+     from day one. This is a real, working pattern (a project this plugin
+     was itself modeled on did exactly this: "started writing one
+     retroactive spec per milestone from the actual code, for future
+     reference"), but it's genuinely more work before the loop does
+     anything new.
+5. **`docs/adr/` — backfill only what's actually load-bearing.** If a past
+   decision is still shaping how you'd implement new milestones (a datastore
+   choice, an auth mechanism already baked into the codebase), write it down
+   now so `devkit-specify` doesn't contradict it later. Skip decisions that
+   don't actually constrain anything going forward.
+6. **Install** (same two commands as the brand-new-project case):
+
+   ```bash
+   claude plugin marketplace add /c/Dev/dev-marketplace
+   claude plugin install rajesh-devkit@dev-marketplace --scope project
+   ```
+
+7. From here, it's the same as any project: the `SessionStart` banner (or
+   `devkit-help` on demand) tells you what's next, and "Creating the first
+   spec, then starting the dev loop" above applies unchanged.
+
+One reassurance worth stating plainly for a repo that already has its own
+git remote, CI, and branch protections: nothing in this plugin commits,
+pushes, or touches git config on its own. `devkit-implementer` explicitly
+leaves its work uncommitted unless told otherwise (the working tree is its
+own checkpoint) — everything that touches the remote stays your explicit
+action.
+
 ## Skills
 
 | Name | Trigger | Model / effort | What it does |
