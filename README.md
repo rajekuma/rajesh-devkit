@@ -62,6 +62,7 @@ want it in.
 
 | Name | Model | Tools | Trigger | Verdict format |
 |---|---|---|---|---|
+| `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "audit dependencies", "check for vulnerable packages", "scan dependencies for CVEs", "dependency security check" | Report-only. Runs `dotnet list package --vulnerable --include-transitive` (NuGet) and `osv-scanner --recursive` (pub/Dart, and NuGet lock files too if present) — both back onto the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
 | `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
 
 ## Hooks
@@ -107,6 +108,25 @@ since `run-verify.ps1` doesn't redirect it). Any other non-zero code still
 propagates but isn't guaranteed the same treatment. A typical `verify.ps1`
 runs the project's fast checks — lint, a quick test subset, a build — and
 should stay fast, since it runs after *every* edit.
+
+## Security tooling
+
+`devkit-dep-audit` (above) only answers one question: does a dependency you
+pulled in already have a public CVE/advisory against it? It does not look for
+flaws in the code you wrote yourself — injection, auth bugs, hardcoded
+secrets, logic errors. For that, install Anthropic's official
+[`claude-security`](https://claude.com/product/claude-security) plugin
+separately (from the marketplace you already have registered):
+
+```bash
+claude plugin install claude-security@claude-plugins-official
+```
+
+The two are complementary, not overlapping — run both if you want real
+coverage before something ships. Neither replaces GitHub Dependabot alerts if
+the repo lives on GitHub: Dependabot runs continuously with no session or
+agent involved, which is worth enabling regardless (Settings → Code security
+→ Dependabot alerts, or `gh api` — see your host project's own setup notes).
 
 ## Troubleshooting
 
