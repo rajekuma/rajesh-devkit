@@ -45,24 +45,39 @@ actually present before choosing what to run.
    (`go install github.com/google/osv-scanner/cmd/osv-scanner@latest`, or a
    direct binary from its GitHub Releases) — do not install it yourself.
 
-3. **Ecosystem-native fallback passes, only where they add coverage the
+3. **Never create or modify any file to make a scan runnable — that includes
+   a lock file a tool needs but the project doesn't have.** `npm audit` (and
+   the yarn/pnpm equivalents) can't run at all without `package-lock.json` /
+   `yarn.lock` / `pnpm-lock.yaml`, and it's tempting to generate one with
+   `npm install --package-lock-only` just to get output — don't. That's an
+   edit, and this agent doesn't make edits, full stop. A missing lock file is
+   the same situation as NuGet without one: report the ecosystem as
+   unscannable by that path and say why, rather than manufacturing the file
+   the tool needed.
+
+4. **Ecosystem-native fallback passes, only where they add coverage the
    universal pass can't reach** (or as a second opinion where you have doubts
-   about lock-file coverage):
+   about lock-file coverage), and only when they can run against what's
+   already there without creating anything:
    - **NuGet without a lock file** (no `packages.lock.json` present, so
      OSV-Scanner has nothing to read for it): run
-     `dotnet list <sln-or-csproj> package --vulnerable --include-transitive`.
+     `dotnet list <sln-or-csproj> package --vulnerable --include-transitive`
+     — this reads installed/restored packages directly, no lock file needed.
      If `dotnet` isn't on `PATH`, check the common per-user install location
      before concluding it's unavailable (Windows: `%LOCALAPPDATA%\dotnet`;
      note in your report if you had to fall back to it).
-   - **npm/yarn/pnpm**: `npm audit --omit=dev` (or the yarn/pnpm equivalent)
-     as Node's own native check, in addition to OSV-Scanner.
+   - **npm/yarn/pnpm, only if a lock file already exists**: `npm audit
+     --omit=dev` (or the yarn/pnpm equivalent) as Node's own native check, in
+     addition to OSV-Scanner. If no lock file exists, this fallback isn't
+     runnable — report it as such per step 3, don't generate one.
    - **Python**: `pip-audit` (PyPA's own official tool) if installed, as
-     Python's own native check, in addition to OSV-Scanner.
+     Python's own native check, in addition to OSV-Scanner — it works
+     against `requirements.txt` directly, no lock file required.
    - Skip a fallback pass entirely, without comment, when the universal pass
      already had a lock file to read for that ecosystem — don't run a
      redundant check just because you can.
 
-4. **Report, structured like this:**
+5. **Report, structured like this:**
    - **Coverage** — which ecosystems exist in this project, which of them you
      were actually able to scan (universal pass, fallback pass, or both), and
      why not for any you couldn't (tool missing, no lock file, etc.). Never
@@ -70,13 +85,16 @@ actually present before choosing what to run.
    - **Findings** — a table: Package | Ecosystem | Installed version |
      Severity (Critical/High/Medium/Low, as the advisory source assigns it —
      don't invent your own) | Advisory ID/URL | Fixed-in version (if the tool
-     reported one).
+     reported one). List **every** advisory a tool reports for a package, not
+     just the first few — a package with six known advisories against it is a
+     materially different finding than one with a single low-severity one,
+     and trimming the list hides that.
    - Nothing found in a scanned ecosystem is itself worth stating plainly
      ("npm: 0 vulnerable packages found among N scanned"), the same way
      `claude-security` reports what it examined rather than leaving it
      assumed.
 
-5. **End with a single verdict line**, same convention as `devkit-reviewer`:
+6. **End with a single verdict line**, same convention as `devkit-reviewer`:
 
    **Verdict: ship** — every ecosystem present was scanned; no Critical or
    High findings.
@@ -87,6 +105,6 @@ actually present before choosing what to run.
    can't be confidently attested — the owner decides whether shipping without
    that coverage is acceptable, you don't guess.
 
-6. Below the verdict, one line: ecosystems scanned (count) and total packages
+7. Below the verdict, one line: ecosystems scanned (count) and total packages
    evaluated across them, so cost stays visible the same way `devkit-reviewer`
    tracks diff size.
