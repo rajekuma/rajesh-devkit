@@ -85,7 +85,7 @@ if ($count -gt 8) {
 
 $message = "Next milestone from PROGRESS.md: $milestone. Implement it with strict TDD " +
     "(red-green, one acceptance criterion at a time per this project's own testing " +
-    "conventions), then invoke the reviewer subagent against the diff before treating " +
+    "conventions), then invoke the devkit-reviewer subagent against the diff before treating " +
     "it as done."
 [Console]::Error.WriteLine($message)
 exit 2

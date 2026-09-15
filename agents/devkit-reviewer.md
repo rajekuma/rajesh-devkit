@@ -1,5 +1,5 @@
 ---
-name: reviewer
+name: devkit-reviewer
 description: Reviews the current change against its spec, report-only. Trigger phrases — "review the diff", "review against the spec".
 model: haiku
 tools: Read, Bash, Glob, Grep

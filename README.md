@@ -6,12 +6,12 @@ dev loop against any host project's `PROGRESS.md`.
 
 ## What this plugin is
 
-- `specify` — an interactive skill that drafts a feature spec into
+- `devkit-specify` — an interactive skill that drafts a feature spec into
   `specs/<kebab-feature>.md`, reading the host repo's own code and `docs/adr/`
   first, then interviewing you one question at a time for anything it can't
   confidently infer.
-- `reviewer` — a report-only subagent that diffs the current change against its
-  spec and ends with a single verdict line.
+- `devkit-reviewer` — a report-only subagent that diffs the current change
+  against its spec and ends with a single verdict line.
 - `continue-loop.ps1` (Stop hook) — when a session stops, checks the host
   project's `PROGRESS.md` for the next not-started milestone and, if one
   exists, blocks the stop with an instruction to implement it test-first and
@@ -23,6 +23,22 @@ Nothing here is specific to any one codebase — the skill, agent, and hooks
 only assume a `specs/` folder and a `PROGRESS.md` with milestone rows, which
 is a convention this plugin expects the host project to follow (see "What the
 host project must provide" below).
+
+**Why `devkit-` prefixed names.** Claude Code's component loader treats a
+`name:` collision between two loaded components as an error ("all discovered
+components register — name conflicts cause errors" per the plugin-structure
+reference). A host project that already has its own `specify` skill or
+`reviewer` agent — this plugin was itself modeled on one that does — would
+collide with unprefixed names the moment this plugin was installed there. The
+`devkit-` prefix means this plugin installs cleanly everywhere, including a
+project that already has its own identically-purposed components under
+different names, at the cost of typing `devkit-specify`/`devkit-reviewer`
+instead of the shorter form. One residual thing worth knowing: the *trigger
+phrases* in each description ("write a spec", "review the diff", etc.) still
+overlap with a project's own similarly-described skill/agent if both are
+installed at once — different `name:` avoids a load error, but doesn't
+guarantee which one a natural-language trigger picks when two plausible
+matches exist in the same project.
 
 ## Install
 
@@ -40,19 +56,19 @@ want it in.
 
 | Name | Trigger | Model / effort | What it does |
 |---|---|---|---|
-| `specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Reads the relevant code and `docs/adr/`, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. |
+| `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Reads the relevant code and `docs/adr/`, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. |
 
 ## Subagents
 
 | Name | Model | Tools | Trigger | Verdict format |
 |---|---|---|---|---|
-| `reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
+| `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
 
 ## Hooks
 
 | Event | Matcher | Script | Trigger condition | Blocking behaviour |
 |---|---|---|---|---|
-| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.ps1` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — writes the next milestone name to stderr with an instruction to implement it test-first (RED-GREEN, one acceptance criterion at a time) and then invoke `reviewer` on the diff before treating it as done. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
+| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.ps1` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — writes the next milestone name to stderr with an instruction to implement it test-first (RED-GREEN, one acceptance criterion at a time) and then invoke `devkit-reviewer` on the diff before treating it as done. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
 | `PostToolUse` | `Edit\|Write` | `scripts/run-verify.ps1` | Fires after every Edit or Write tool call. | If `.claude\verify.ps1` doesn't exist in the host project, exits 0 silently (no-op). If it exists, runs it and **exits with whatever code it returned** — no remapping. `verify.ps1`'s own exit-code convention is what decides whether Claude sees the failure (see the contract below). |
 
 ### Why the Stop hook defers to a project's own loop skill

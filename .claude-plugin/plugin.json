@@ -1,7 +1,7 @@
 {
   "name": "rajesh-devkit",
   "version": "0.1.0",
-  "description": "Personal dev-loop toolkit: a spec-drafting skill, a report-only reviewer subagent, and hooks that nudge an unattended session toward the next PROGRESS.md milestone and run a host project's verify script after edits.",
+  "description": "Personal dev-loop toolkit: a spec-drafting skill (devkit-specify), a report-only reviewer subagent (devkit-reviewer), and hooks that nudge an unattended session toward the next PROGRESS.md milestone and run a host project's verify script after edits.",
   "author": {
     "name": "Rajesh",
     "email": "satheeshrajesh@gmail.com"

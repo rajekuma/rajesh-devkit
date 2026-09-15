@@ -1,5 +1,5 @@
 ---
-name: specify
+name: devkit-specify
 description: Drafts a feature spec for this repo by reading the relevant code and docs/adr/ first, then interviewing the user for anything that can't be confidently inferred, and writes the result to specs/<kebab-feature>.md for review before any implementation. Trigger phrases — "write a spec", "spec this feature", "specify <feature>", "draft a spec for <feature>", "let's spec <feature>".
 argument-hint: <feature>
 model: fable
