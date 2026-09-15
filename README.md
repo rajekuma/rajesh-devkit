@@ -81,7 +81,9 @@ rajesh-devkit/
 ├── scripts/
 │   ├── continue-loop.ps1        # Stop hook: nudge toward next milestone
 │   ├── run-verify.ps1           # PostToolUse hook: host project's verify.ps1
-│   └── track-milestones.ps1     # PostToolUse hook: log milestone-shipped events
+│   ├── track-milestones.ps1     # PostToolUse hook: log milestone-shipped events
+│   └── token-report.ps1         # not a hook - invoked by devkit-stats on demand;
+│                                 # scans session transcripts for real cost/tokens
 └── README.md
 ```
 
@@ -107,7 +109,7 @@ want it in.
 | Name | Trigger | Model / effort | What it does |
 |---|---|---|---|
 | `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. |
-| `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats" | `haiku` | Reads the local telemetry log (see "Telemetry" below), pairs each milestone's started/shipped events, and reports duration per milestone plus summary stats (count, average, fastest, slowest) and anything still in progress. Read-only, timing only — no token/cost figures yet. |
+| `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.ps1`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
 
 ## Subagents
 
@@ -174,25 +176,62 @@ uses, computed the same way, but stored under `%LOCALAPPDATA%` rather than
 `%TEMP%` since telemetry is meant to survive across sessions, not just one
 run). `devkit-stats` reads that file and reports duration per milestone.
 
-**This is timing only, and only for milestones actually driven through the
-Stop hook.** A milestone implemented by hand in a session that never
-stopped won't have a `milestone_started` event and won't show a duration —
+**Timing coverage is only for milestones actually driven through the Stop
+hook.** A milestone implemented by hand in a session that never stopped
+won't have a `milestone_started` event and won't show a duration —
 `devkit-stats` says so rather than silently omitting it.
 
-**Deliberately not built yet: tokens and cost per milestone/step.** Claude
-Code's session transcript (the JSONL file under `~/.claude/projects/...`)
-carries per-turn token usage, which is exactly what would let a script sum
-tokens between a milestone's started/shipped timestamps — the same kind of
-data an existing usage-explaining skill already reads for its own reports.
-What's unverified is whether a subagent invocation (`devkit-implementer`,
-`devkit-reviewer`, `devkit-dep-audit`) appears as a separable entry in that
-same transcript, which decides whether "tokens spent in devkit-reviewer for
-M24" is actually extractable or only "tokens spent in the whole session
-between M24's timestamps." Worth building once that's checked against a real
-transcript rather than assumed.
+**Real USD cost per milestone.** `scripts/token-report.ps1` scans this
+project's own session transcripts — the main session and every delegated
+subagent run — for a given time window and sums their real `usage` fields.
+It finds the right transcript directory deterministically from
+`$CLAUDE_PROJECT_DIR` using Claude Code's own path-sanitization scheme
+(every `: \ / .` and space becomes a literal hyphen — verified empirically
+against real transcript folder names, including a nested-worktree path with
+a leading dot), then reads each session's `<id>.jsonl` plus every
+`<id>/subagents/agent-*.jsonl` it finds, filtering to assistant turns whose
+own `timestamp` falls inside the window. Subagent invocations *do* get their
+own transcript file (with a `.meta.json` naming the agent type/description),
+so a subagent's spend is separable from the main thread's — confirmed by
+inspecting a real transcript, not assumed.
+
+Cost uses a pricing table baked into the script (input/output/cache-write/
+cache-read per model, sourced from the `claude-api` skill, cached
+2026-06-24 — **not fetched live**, so it goes stale if Anthropic changes
+prices):
+
+| Model | Input $/MTok | Output $/MTok | Cache write 5m / 1h $/MTok | Cache read $/MTok |
+|---|---|---|---|---|
+| `claude-opus-5` | 5.00 | 25.00 | 6.25 / 10.00 | 0.50 |
+| `claude-sonnet-5` | 2.00 | 10.00 | 2.50 / 4.00 | 0.20 |
+| `claude-haiku-4-5` | 1.00 | 5.00 | 1.25 / 2.00 | 0.10 |
+| `claude-fable-5-1` | 10.00 | 50.00 | 12.50 / 20.00 | 0.25 |
+
+Fable 5.1's cache-read rate (0.25) is a documented flat rate, not the usual
+0.1× multiplier — don't "fix" it to match the others. A model outside this
+table still reports its token counts (`unknownModelTokens`), just no dollar
+figure — never silently dropped, never guessed.
+
+**Verified, not just designed:** ran against a real subagent transcript from
+this plugin's own end-to-end test (a `devkit-implementer` run, 72 turns) and
+got $2.21 — cross-checked the raw usage-field sums against the transcript
+file directly (not just trusted the script's own output) before trusting the
+number.
+
+**Heuristic manual-effort comparison, clearly separated from the two
+measured figures above.** `devkit-stats` also estimates a person-hours range
+for what the same milestone would take a competent engineer without AI
+assistance, reasoning from the spec's acceptance criteria and whether any of
+them touch something the spec's own template flags as sensitive (a new
+invariant, a security boundary, a data-model change, an external
+integration). This is a judgment call, not a measurement — always reported
+as a range with reasoning shown and flagged `🚩 Heuristic estimate, not
+measured`, never as a bare precise number. The implied speedup (estimate
+midpoint ÷ real duration) is reported the same way, and only when both
+figures actually exist for that milestone.
 
 For overall session-level cost/token/tool-usage metrics (not milestone-level,
-but real and zero-code today), Claude Code has a built-in OpenTelemetry
+but real and zero-code today), Claude Code also has a built-in OpenTelemetry
 exporter: set `CLAUDE_CODE_ENABLE_TELEMETRY=1` plus `OTEL_METRICS_EXPORTER`
 and `OTEL_EXPORTER_OTLP_ENDPOINT` to point it at Prometheus/Grafana/any OTLP
 backend. See Claude Code's own telemetry documentation for the full env-var
@@ -231,6 +270,17 @@ agent involved, which is worth enabling regardless (Settings → Code security
   the skill file is exactly at `.claude\skills\spec-loop\SKILL.md` relative to
   the project root — a differently-named or differently-located loop skill
   isn't detected, by design (this plugin can't guess every possible name).
+- **`devkit-stats` reports $0 cost for a milestone that clearly took real
+  work.** Check the milestone's started/shipped timestamps actually bracket
+  when the work happened — a milestone whose telemetry got reset partway
+  through (see the Telemetry section's "shipped, no started event" case)
+  has no valid window to scan, and `$0`/`unavailable` is the honest answer,
+  not a bug in `token-report.ps1`.
+- **`devkit-stats` shows a cost total but `unknownModelTokens` is
+  non-zero.** A model outside `token-report.ps1`'s pricing table appeared in
+  the window — check its `byModel` output for which one, then update the
+  `$Pricing` table in the script if it's a model this plugin should know
+  about now.
 - **`run-verify.ps1` does nothing.** By design, unless
   `.claude\verify.ps1` exists in the host project. Create it if you want the
   edit-time check.
@@ -267,8 +317,9 @@ agent involved, which is worth enabling regardless (Settings → Code security
 | `7ba1949` | 2026-09-15 | Fixed `devkit-implementer`'s missing broken-tooling branch and ambiguous "minimum code" guidance — found by a real RED-GREEN run (`npm test` genuinely fails on Node 22/Windows) |
 | `8e3d28c` | 2026-09-15 | Fixed `devkit-reviewer`'s untracked-files gap and hardcoded rule filenames — found by a real review run against freshly created, unstaged files |
 | `afc0d00` | 2026-09-15 | Fixed `devkit-dep-audit` creating a `package-lock.json` to make `npm audit` runnable, violating its own report-only contract; also fixed advisory-list truncation |
+| `ae54ee7` | 2026-09-15 | Added `token-report.ps1` (real USD cost from session transcripts, pricing sourced from the `claude-api` skill, verified against a real transcript) and extended `devkit-stats` with cost + a heuristic manual-effort/speedup comparison; dogfooding this one too found and fixed a real pairing gap (a `milestone_shipped` event with no preceding `milestone_started` — a telemetry reset mid-milestone, not a bug — wasn't handled, only the reverse case was) |
 
-The last five commits all came from actually running each shipped file against
+The last six commits all came from actually running each shipped file against
 [a scratch regression fixture](../scratch-devkit-test) rather than just reading
 them — see that project's `CLAUDE.md` for what's real there versus deliberately
 broken/vulnerable on purpose.
