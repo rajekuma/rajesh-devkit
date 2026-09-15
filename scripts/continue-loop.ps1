@@ -7,6 +7,11 @@ param()
 # Exits 0 (allow the stop) in every other case: no PROGRESS.md, no unchecked
 # milestone left, the project has its own loop skill, or the nudge cap is hit.
 
+# Windows PowerShell 5.1's -Encoding utf8 always writes a BOM, which breaks a
+# strict line-by-line JSON parser on the very first line of the telemetry
+# log. Write without one explicitly instead.
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 $raw = [Console]::In.ReadToEnd()
 $hookInput = $null
 if ($raw) {
@@ -81,7 +86,11 @@ if ($count -gt 8) {
     exit 0
 }
 
-@{ milestone = $milestone; count = $count } | ConvertTo-Json -Compress | Set-Content -LiteralPath $statePath -Encoding utf8
+[System.IO.File]::WriteAllText(
+    $statePath,
+    (@{ milestone = $milestone; count = $count } | ConvertTo-Json -Compress),
+    $Utf8NoBom
+)
 
 # Telemetry: log a "started" event the first time this milestone is seen (not
 # on every repeat nudge). track-milestones.ps1 logs the matching "shipped"
@@ -90,11 +99,12 @@ if ($count -eq 1) {
     $telemetryDir = Join-Path $env:LOCALAPPDATA 'rajesh-devkit\telemetry'
     New-Item -ItemType Directory -Force -Path $telemetryDir | Out-Null
     $telemetryPath = Join-Path $telemetryDir "$projectHash.jsonl"
-    @{
+    $line = @{
         event     = 'milestone_started'
         milestone = $milestone
         timestamp = (Get-Date).ToUniversalTime().ToString('o')
-    } | ConvertTo-Json -Compress | Add-Content -LiteralPath $telemetryPath -Encoding utf8
+    } | ConvertTo-Json -Compress
+    [System.IO.File]::AppendAllText($telemetryPath, $line + [Environment]::NewLine, $Utf8NoBom)
 }
 
 $message = "Next milestone from PROGRESS.md: $milestone. Implement it with strict TDD " +

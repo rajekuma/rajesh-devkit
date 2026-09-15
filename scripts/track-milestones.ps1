@@ -8,6 +8,11 @@ param()
 # event (matched by the same display-name format) so devkit-stats can report
 # a duration per milestone. Never blocks anything - always exits 0.
 
+# Windows PowerShell 5.1's -Encoding utf8 always writes a BOM, which breaks a
+# strict line-by-line JSON parser on the very first line of the telemetry
+# log. Write without one explicitly instead.
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
 [Console]::In.ReadToEnd() | Out-Null
 
 $projectDir = $env:CLAUDE_PROJECT_DIR
@@ -68,16 +73,17 @@ foreach ($key in $current.Keys) {
     $wasDone = $false
     if ($previous.ContainsKey($key)) { $wasDone = $previous[$key] }
     if ($current[$key].done -and -not $wasDone) {
-        @{
+        $line = @{
             event     = 'milestone_shipped'
             milestone = $current[$key].display
             timestamp = $nowUtc
-        } | ConvertTo-Json -Compress | Add-Content -LiteralPath $telemetryPath -Encoding utf8
+        } | ConvertTo-Json -Compress
+        [System.IO.File]::AppendAllText($telemetryPath, $line + [Environment]::NewLine, $Utf8NoBom)
     }
 }
 
 $snapshot = @{}
 foreach ($key in $current.Keys) { $snapshot[$key] = $current[$key].done }
-$snapshot | ConvertTo-Json -Compress | Set-Content -LiteralPath $snapshotPath -Encoding utf8
+[System.IO.File]::WriteAllText($snapshotPath, ($snapshot | ConvertTo-Json -Compress), $Utf8NoBom)
 
 exit 0
