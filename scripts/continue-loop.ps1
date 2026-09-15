@@ -83,6 +83,20 @@ if ($count -gt 8) {
 
 @{ milestone = $milestone; count = $count } | ConvertTo-Json -Compress | Set-Content -LiteralPath $statePath -Encoding utf8
 
+# Telemetry: log a "started" event the first time this milestone is seen (not
+# on every repeat nudge). track-milestones.ps1 logs the matching "shipped"
+# event when PROGRESS.md marks it done; devkit-stats pairs the two by name.
+if ($count -eq 1) {
+    $telemetryDir = Join-Path $env:LOCALAPPDATA 'rajesh-devkit\telemetry'
+    New-Item -ItemType Directory -Force -Path $telemetryDir | Out-Null
+    $telemetryPath = Join-Path $telemetryDir "$projectHash.jsonl"
+    @{
+        event     = 'milestone_started'
+        milestone = $milestone
+        timestamp = (Get-Date).ToUniversalTime().ToString('o')
+    } | ConvertTo-Json -Compress | Add-Content -LiteralPath $telemetryPath -Encoding utf8
+}
+
 $message = "Next milestone from PROGRESS.md: $milestone. Implement it with strict TDD " +
     "(red-green, one acceptance criterion at a time per this project's own testing " +
     "conventions), then invoke the devkit-reviewer subagent against the diff before treating " +

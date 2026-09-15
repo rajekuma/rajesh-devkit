@@ -27,6 +27,13 @@ against any host project's `PROGRESS.md`, if it has one.
   run the reviewer.
 - `run-verify.ps1` (PostToolUse hook) — after every `Edit`/`Write`, runs the
   host project's own `.claude\verify.ps1` if it provides one.
+- `track-milestones.ps1` (PostToolUse hook) — after every `Edit`/`Write`,
+  detects any milestone that just flipped to done in `PROGRESS.md` and logs
+  a timestamped "shipped" event, pairing with the "started" event
+  `continue-loop.ps1` already logs.
+- `devkit-stats` — a skill that reports wall-clock duration per milestone
+  from that local telemetry log (timing only for now — see "Telemetry"
+  below).
 
 Nothing here is specific to any one codebase or language. The skill and
 agents infer a project's layout, conventions, test runner, and dependency
@@ -70,6 +77,7 @@ want it in.
 | Name | Trigger | Model / effort | What it does |
 |---|---|---|---|
 | `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. |
+| `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats" | `haiku` | Reads the local telemetry log (see "Telemetry" below), pairs each milestone's started/shipped events, and reports duration per milestone plus summary stats (count, average, fastest, slowest) and anything still in progress. Read-only, timing only — no token/cost figures yet. |
 
 ## Subagents
 
@@ -85,6 +93,7 @@ want it in.
 |---|---|---|---|---|
 | `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.ps1` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — writes the next milestone name to stderr with an instruction to implement it test-first (RED-GREEN, one acceptance criterion at a time) and then invoke `devkit-reviewer` on the diff before treating it as done. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
 | `PostToolUse` | `Edit\|Write` | `scripts/run-verify.ps1` | Fires after every Edit or Write tool call. | If `.claude\verify.ps1` doesn't exist in the host project, exits 0 silently (no-op). If it exists, runs it and **exits with whatever code it returned** — no remapping. `verify.ps1`'s own exit-code convention is what decides whether Claude sees the failure (see the contract below). |
+| `PostToolUse` | `Edit\|Write` | `scripts/track-milestones.ps1` | Fires after every Edit or Write tool call, alongside `run-verify.ps1` (same matcher, both run). | Never blocks — always exits 0. Re-parses `PROGRESS.md`'s milestone statuses, diffs against a stored snapshot, and appends a `milestone_shipped` telemetry event for anything that just flipped to done. No-ops silently if there's no `PROGRESS.md` or no recognisable milestone lines. |
 
 ### Why the Stop hook defers to a project's own loop skill
 
@@ -122,6 +131,42 @@ since `run-verify.ps1` doesn't redirect it). Any other non-zero code still
 propagates but isn't guaranteed the same treatment. A typical `verify.ps1`
 runs the project's fast checks — lint, a quick test subset, a build — and
 should stay fast, since it runs after *every* edit.
+
+## Telemetry
+
+`continue-loop.ps1` logs a `milestone_started` event the first time it nudges
+toward a new milestone; `track-milestones.ps1` logs the matching
+`milestone_shipped` event the moment `PROGRESS.md` marks it done. Both append
+to one JSONL file per project:
+`%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl`, where `<hash>` is the
+uppercase-hex MD5 of the project's path (same value the nudge-cap counter
+uses, computed the same way, but stored under `%LOCALAPPDATA%` rather than
+`%TEMP%` since telemetry is meant to survive across sessions, not just one
+run). `devkit-stats` reads that file and reports duration per milestone.
+
+**This is timing only, and only for milestones actually driven through the
+Stop hook.** A milestone implemented by hand in a session that never
+stopped won't have a `milestone_started` event and won't show a duration —
+`devkit-stats` says so rather than silently omitting it.
+
+**Deliberately not built yet: tokens and cost per milestone/step.** Claude
+Code's session transcript (the JSONL file under `~/.claude/projects/...`)
+carries per-turn token usage, which is exactly what would let a script sum
+tokens between a milestone's started/shipped timestamps — the same kind of
+data an existing usage-explaining skill already reads for its own reports.
+What's unverified is whether a subagent invocation (`devkit-implementer`,
+`devkit-reviewer`, `devkit-dep-audit`) appears as a separable entry in that
+same transcript, which decides whether "tokens spent in devkit-reviewer for
+M24" is actually extractable or only "tokens spent in the whole session
+between M24's timestamps." Worth building once that's checked against a real
+transcript rather than assumed.
+
+For overall session-level cost/token/tool-usage metrics (not milestone-level,
+but real and zero-code today), Claude Code has a built-in OpenTelemetry
+exporter: set `CLAUDE_CODE_ENABLE_TELEMETRY=1` plus `OTEL_METRICS_EXPORTER`
+and `OTEL_EXPORTER_OTLP_ENDPOINT` to point it at Prometheus/Grafana/any OTLP
+backend. See Claude Code's own telemetry documentation for the full env-var
+list.
 
 ## Security tooling
 
@@ -166,6 +211,17 @@ agent involved, which is worth enabling regardless (Settings → Code security
   confirm nothing upstream (a system-wide `AllSigned` policy via Group Policy)
   overrides `-ExecutionPolicy Bypass` at the machine level — that one flag
   can't override a Group-Policy-enforced restriction.
+- **`devkit-stats` says no telemetry exists yet.** Either the Stop hook has
+  never fired for this project (check `PROGRESS.md` exists and has a
+  recognisable milestone line), or the milestone in question was implemented
+  by hand without the session ever stopping in between — that's the known
+  timing-only coverage gap documented above, not a bug to chase.
+- **A milestone shows "started" but never "shipped."** `track-milestones.ps1`
+  only logs a ship event when a milestone's *status glyph itself* changes to
+  `✅` (or `- [x]`) in `PROGRESS.md` — if the milestone shipped some other way
+  (a different tracker file, a manual status note instead of the glyph),
+  it won't be detected. Check the actual line in `PROGRESS.md` matches one of
+  the two recognised formats.
 - **Marketplace add fails on the relative path.** `dev-marketplace`'s
   `marketplace.json` points at `rajesh-devkit` with `"source": "../rajesh-devkit"`,
   which assumes the two folders stay siblings. If you move either one,
