@@ -38,9 +38,17 @@ repo's own files and the user's answers.
    feature sounds simple: a spec written from assumption instead of the real
    code is worse than no spec at all.
 
-3. **Open the template.** Read `specs/_template.md`. If it doesn't exist,
-   create it first with exactly this content (five sections, one page, no
-   more):
+3. **Open the template.** Check `specs/` for what this project already uses,
+   in this order, before falling back to anything of your own:
+   - A dedicated template file — `_template.md`, `TEMPLATE.md`, or similarly
+     named — if one exists, use it as-is.
+   - Otherwise, if `specs/` already has other spec files, treat the most
+     recently written one's structure as this project's de facto template —
+     don't impose a different shape on a project that already has one, even
+     an informal one.
+   - Only if `specs/` is empty, or has nothing that reveals a shape, create
+     `specs/_template.md` with exactly this fallback content (five sections,
+     one page, no more):
 
    ```markdown
    # Spec: <short feature name>
@@ -82,20 +90,25 @@ repo's own files and the user's answers.
    - [ ] ...
    ```
 
-   If the project already has its own spec template (check `specs/` for one
-   before assuming this one applies), use that instead — this is a fallback,
-   not a house style to impose on a project that has its own.
-
 4. **Interview, one question at a time.** For every section, fill in what you
    can confidently infer from the code and docs you just read, and say what
    you're basing each inference on. For anything you can't confidently infer —
    the actual desired behaviour, edge-case decisions, what's deliberately out
    of scope, concrete acceptance criteria — ask the user **one question at a
    time** and wait for the answer before asking the next. Do not guess and do
-   not silently fill gaps yourself. If keeping the interview moving requires a
-   reasonable default instead of asking about every last detail, that's fine —
-   but flag it clearly inline in the draft (e.g. "🚩 assumption, not
-   confirmed") rather than presenting a guess as settled fact.
+   not silently fill gaps yourself.
+
+   The one exception, so a one-line function doesn't turn into a five-question
+   interrogation: a **narrow, low-stakes** gap — the answer doesn't change the
+   feature's shape, doesn't touch security/auth/data-model/money, and a wrong
+   guess costs one correction on review rather than a rebuild — can take a
+   reasonable default instead of a question, flagged inline as "🚩 assumption,
+   not confirmed" rather than presented as settled fact. Default to asking
+   whenever you're unsure which side of that line something falls on. If you
+   find yourself about to flag more than two or three assumptions in the same
+   section, that's a sign the section itself is under-specified — ask one
+   consolidated question about the section's actual intent instead of
+   individually defaulting every gap inside it.
 
 5. **Write the file.** Once every section has real content — no section left
    as a placeholder or a bare "TBD" — write the result to
