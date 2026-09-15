@@ -1,17 +1,26 @@
 # rajesh-devkit
 
-A personal Claude Code plugin: one spec-drafting skill, one report-only reviewer
-subagent, and two hooks that turn an unattended session into a milestone-driven
-dev loop against any host project's `PROGRESS.md`.
+A personal Claude Code plugin: a full spec→implement→review→dependency-audit
+dev loop, stack-agnostic by design — it infers a project's own layout, test
+runner, and package ecosystem rather than assuming .NET/Flutter or any other
+specific stack. Two hooks turn it into a milestone-driven *unattended* loop
+against any host project's `PROGRESS.md`, if it has one.
 
 ## What this plugin is
 
-- `devkit-specify` — an interactive skill that drafts a feature spec into
-  `specs/<kebab-feature>.md`, reading the host repo's own code and `docs/adr/`
-  first, then interviewing you one question at a time for anything it can't
-  confidently infer.
+- `devkit-specify` — an interactive skill acting as product owner: drafts a
+  feature spec into `specs/<kebab-feature>.md`, reading the host repo's own
+  code and decision-record docs first, then interviewing you one question at
+  a time for anything it can't confidently infer.
+- `devkit-implementer` — implements one spec test-first (RED-GREEN), one
+  acceptance criterion at a time, detecting whatever test runner the project
+  actually uses (`npm test`, `pytest`, `dotnet test`, `flutter test`, `go
+  test`, `cargo test`, ...) instead of assuming one.
 - `devkit-reviewer` — a report-only subagent that diffs the current change
   against its spec and ends with a single verdict line.
+- `devkit-dep-audit` — a report-only subagent that checks the project's
+  dependencies for known-vulnerable versions, across whichever package
+  ecosystems are actually present (npm, PyPI, NuGet, pub, Go, Cargo, Maven, ...).
 - `continue-loop.ps1` (Stop hook) — when a session stops, checks the host
   project's `PROGRESS.md` for the next not-started milestone and, if one
   exists, blocks the stop with an instruction to implement it test-first and
@@ -19,10 +28,14 @@ dev loop against any host project's `PROGRESS.md`.
 - `run-verify.ps1` (PostToolUse hook) — after every `Edit`/`Write`, runs the
   host project's own `.claude\verify.ps1` if it provides one.
 
-Nothing here is specific to any one codebase — the skill, agent, and hooks
-only assume a `specs/` folder and a `PROGRESS.md` with milestone rows, which
-is a convention this plugin expects the host project to follow (see "What the
-host project must provide" below).
+Nothing here is specific to any one codebase or language. The skill and
+agents infer a project's layout, conventions, test runner, and dependency
+ecosystems from what's actually in the repo (`CLAUDE.md`, `.claude/rules/`,
+marker files like `package.json`/`pyproject.toml`/`*.csproj`/`pubspec.yaml`) —
+the one convention this plugin does expect, and cannot infer, is a
+`PROGRESS.md` with milestone rows, and only the two hooks depend on that (see
+"What the host project must provide" below). The skill and subagents work
+with or without one.
 
 **Why `devkit-` prefixed names.** Claude Code's component loader treats a
 `name:` collision between two loaded components as an error ("all discovered
@@ -56,13 +69,14 @@ want it in.
 
 | Name | Trigger | Model / effort | What it does |
 |---|---|---|---|
-| `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Reads the relevant code and `docs/adr/`, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. |
+| `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. |
 
 ## Subagents
 
 | Name | Model | Tools | Trigger | Verdict format |
 |---|---|---|---|---|
-| `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "audit dependencies", "check for vulnerable packages", "scan dependencies for CVEs", "dependency security check" | Report-only. Runs `dotnet list package --vulnerable --include-transitive` (NuGet) and `osv-scanner --recursive` (pub/Dart, and NuGet lock files too if present) — both back onto the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
+| `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "implement the spec", "build the next milestone", "implement \<feature\>" | Not report-only — writes code and tests. Detects the project's test runner from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) instead of assuming one. Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
+| `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "audit dependencies", "check for vulnerable packages", "scan dependencies for CVEs", "dependency security check" | Report-only. Detects whichever package ecosystems are present (npm/yarn/pnpm, PyPI, NuGet, pub/Dart, Go, Cargo, Maven, ...) from marker files, then runs `osv-scanner --recursive` as the universal pass (covers most ecosystems in one command) plus ecosystem-native fallbacks (`dotnet list package --vulnerable`, `npm audit`, `pip-audit`) only where the universal pass can't reach (e.g. NuGet without a lock file) — all backed by the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file, unrecognised ecosystem) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
 | `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
 
 ## Hooks
