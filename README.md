@@ -60,6 +60,36 @@ installed at once — different `name:` avoids a load error, but doesn't
 guarantee which one a natural-language trigger picks when two plausible
 matches exist in the same project.
 
+## Repository layout
+
+```
+rajesh-devkit/
+├── .claude-plugin/
+│   └── plugin.json              # name, version, description, author, license
+├── agents/
+│   ├── devkit-dep-audit.md      # dependency CVE audit, report-only
+│   ├── devkit-implementer.md    # RED-GREEN implementer, stack-agnostic
+│   └── devkit-reviewer.md       # spec-compliance review, report-only
+├── skills/
+│   ├── devkit-specify/
+│   │   └── SKILL.md             # spec-drafting, product-owner style
+│   └── devkit-stats/
+│       └── SKILL.md             # milestone timing report
+├── hooks/
+│   └── hooks.json               # Stop -> continue-loop.ps1
+│                                 # PostToolUse (Edit|Write) -> run-verify.ps1, track-milestones.ps1
+├── scripts/
+│   ├── continue-loop.ps1        # Stop hook: nudge toward next milestone
+│   ├── run-verify.ps1           # PostToolUse hook: host project's verify.ps1
+│   └── track-milestones.ps1     # PostToolUse hook: log milestone-shipped events
+└── README.md
+```
+
+Installed elsewhere as a git submodule at `dev-marketplace/plugins/rajesh-devkit`
+(see "Install" below) — a real git checkout of this same repo pinned to one
+commit, not a duplicated copy of the files. It needs an explicit sync after
+changes here (see Troubleshooting), it doesn't track this repo live.
+
 ## Install
 
 ```bash
@@ -222,7 +252,41 @@ agent involved, which is worth enabling regardless (Settings → Code security
   (a different tracker file, a manual status note instead of the glyph),
   it won't be detected. Check the actual line in `PROGRESS.md` matches one of
   the two recognised formats.
-- **Marketplace add fails on the relative path.** `dev-marketplace`'s
-  `marketplace.json` points at `rajesh-devkit` with `"source": "../rajesh-devkit"`,
-  which assumes the two folders stay siblings. If you move either one,
-  update that path (or switch it to an absolute path).
+
+## Commit history
+
+| Commit | Date | Summary |
+|---|---|---|
+| `6931fe2` | 2026-09-15 | Initial scaffold: `devkit-specify`/`devkit-reviewer` copied with explicit `name:` frontmatter, `continue-loop.ps1`/`run-verify.ps1` hooks |
+| `db7be31` | 2026-09-15 | Renamed to `devkit-specify`/`devkit-reviewer` to avoid a name-conflict load error in a host project that already has its own `specify`/`reviewer` |
+| `b50897f` | 2026-09-15 | Added `devkit-dep-audit` for dependency CVE scanning |
+| `94cd457` | 2026-09-15 | Generalized `devkit-specify` and `devkit-dep-audit` off MyHomeMaintenance-specific assumptions (`api/`/`mobile/` folders, dotnet/pub-only scanning); added `devkit-implementer` |
+| `2e3de90` | 2026-09-15 | Added timing-only telemetry (`milestone_started`/`milestone_shipped` events) and `devkit-stats` |
+| `c2d62d4` | 2026-09-15 | Fixed a UTF-8 BOM in telemetry/state writes (Windows PowerShell 5.1's `-Encoding utf8` quirk) — found by running the hooks against a real scratch project |
+| `c64b340` | 2026-09-15 | Fixed `devkit-specify`'s circular template-precedence logic and undefined ask/default threshold — found by dogfooding the skill against a scratch project |
+| `7ba1949` | 2026-09-15 | Fixed `devkit-implementer`'s missing broken-tooling branch and ambiguous "minimum code" guidance — found by a real RED-GREEN run (`npm test` genuinely fails on Node 22/Windows) |
+| `8e3d28c` | 2026-09-15 | Fixed `devkit-reviewer`'s untracked-files gap and hardcoded rule filenames — found by a real review run against freshly created, unstaged files |
+| `afc0d00` | 2026-09-15 | Fixed `devkit-dep-audit` creating a `package-lock.json` to make `npm audit` runnable, violating its own report-only contract; also fixed advisory-list truncation |
+
+The last five commits all came from actually running each shipped file against
+[a scratch regression fixture](../scratch-devkit-test) rather than just reading
+them — see that project's `CLAUDE.md` for what's real there versus deliberately
+broken/vulnerable on purpose.
+- **Marketplace install fails with "source: Invalid input" or "source type
+  your Claude Code version does not support."** Tested empirically: a
+  `marketplace.json` plugin entry only accepts the bare relative-path string
+  form (`"./plugins/<name>"`, matching the official `claude-plugins-official`
+  marketplace's own pattern) — it rejects a path outside the marketplace's
+  own tree (`"../rajesh-devkit"` fails validation) and rejects object-form
+  sources (`{"source": "directory", ...}`, `{"source": "git", ...}`) as
+  unsupported, regardless of CLI version (checked on 2.1.269 and 2.1.272).
+  That's why this plugin is installed as a **git submodule** at
+  `dev-marketplace/plugins/rajesh-devkit` rather than a true sibling folder —
+  if you're setting this up fresh, see `dev-marketplace`'s own README/commit
+  history for the exact `git submodule add` command, and don't revert to a
+  sibling-folder layout, it won't install.
+- **Changed something in `rajesh-devkit` but the installed plugin doesn't
+  reflect it.** The submodule under `dev-marketplace/plugins/rajesh-devkit`
+  is a pinned commit, not a live link — after committing here, sync it:
+  `cd dev-marketplace/plugins/rajesh-devkit && git fetch <path-to-rajesh-devkit> master && git checkout FETCH_HEAD`,
+  then commit the updated submodule pointer in `dev-marketplace` itself.
