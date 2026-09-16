@@ -325,17 +325,39 @@ propagates but isn't guaranteed the same treatment. A typical `verify.ps1`
 runs the project's fast checks — lint, a quick test subset, a build — and
 should stay fast, since it runs after *every* edit.
 
+**What this plugin writes into the host project, unprompted.** Beyond
+reading `PROGRESS.md`/`specs/`/`CLAUDE.md`, two things get created
+automatically the first time a milestone is nudged: `.claude\rajesh-devkit\`
+(telemetry — see "Telemetry" below) and a `.gitignore` entry for it. Nothing
+else in the plugin writes to the host project unprompted — `devkit-implementer`
+only writes what you asked it to implement, and every report-only component
+(`devkit-reviewer`, `devkit-dep-audit`, `devkit-stats`) never writes anything.
+
 ## Telemetry
 
 `continue-loop.ps1` logs a `milestone_started` event the first time it nudges
 toward a new milestone; `track-milestones.ps1` logs the matching
 `milestone_shipped` event the moment `PROGRESS.md` marks it done. Both append
-to one JSONL file per project:
-`%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl`, where `<hash>` is the
-uppercase-hex MD5 of the project's path (same value the nudge-cap counter
-uses, computed the same way, but stored under `%LOCALAPPDATA%` rather than
-`%TEMP%` since telemetry is meant to survive across sessions, not just one
-run). `devkit-stats` reads that file and reports duration per milestone.
+to one JSONL file **inside the host project**:
+`.claude\rajesh-devkit\telemetry.jsonl` (plus `telemetry.snapshot.json`,
+`track-milestones.ps1`'s own bookkeeping for detecting a status flip).
+`devkit-stats` reads that file and reports duration per milestone.
+
+**Why in-project rather than a machine-global path.** An earlier version
+stored this at `%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl` — the
+reasoning at the time was avoiding any modification to a host project's git
+tracking without being asked first. That held up, but came at a real cost:
+not portable across machines or a `git clone`, not discoverable without
+knowing the hash formula, and gone for good if the profile ever gets
+cleared. Asked directly, and moved it: the first time either script writes
+here, it also adds one `.gitignore` line for `.claude/rajesh-devkit/` —
+idempotent (checked before appending), preserves whatever's already in
+`.gitignore` including a file with no trailing newline, and creates
+`.gitignore` from scratch if the project has none yet. Verified both edge
+cases directly, not assumed. The nudge-cap counter (a different concern —
+a runaway-loop safety valve, not telemetry) stays at
+`%TEMP%\rajesh-devkit-continue-loop\<hash>.json`: that one genuinely
+benefits from the OS clearing it eventually, so it was left where it was.
 
 **Timing coverage is only for milestones actually driven through the Stop
 hook.** A milestone implemented by hand in a session that never stopped
@@ -371,7 +393,11 @@ prices):
 Fable 5.1's cache-read rate (0.25) is a documented flat rate, not the usual
 0.1× multiplier — don't "fix" it to match the others. A model outside this
 table still reports its token counts (`unknownModelTokens`), just no dollar
-figure — never silently dropped, never guessed.
+figure — never silently dropped, never guessed. Lookup also falls back to
+the bare model ID when the transcript records a dated snapshot suffix (e.g.
+`claude-haiku-4-5-20251001`) — found for real: a genuine report understated
+its total by ~10% before this fallback existed, since the exact-match lookup
+silently routed those tokens into `unknownModelTokens` instead.
 
 **Verified, not just designed:** ran against a real subagent transcript from
 this plugin's own end-to-end test (a `devkit-implementer` run, 72 turns) and
@@ -419,6 +445,15 @@ agent involved, which is worth enabling regardless (Settings → Code security
 
 ## Troubleshooting
 
+- **Don't want the automatic `.gitignore` edit at all.** Add
+  `.claude/rajesh-devkit/` to `.gitignore` yourself before the first
+  milestone nudge — both scripts check for that exact line first and skip
+  the write entirely if it's already there, so pre-adding it is a complete
+  opt-out of the auto-edit, not just a race you might win.
+- **Telemetry from before this was moved is stranded at
+  `%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl`.** There's no
+  auto-migration — it's an orphaned file now. Safe to delete once you don't
+  need the history; nothing reads that path anymore.
 - **No welcome banner appears when a new session starts.** `SessionStart`
   hooks' exact on-screen behavior wasn't empirically verified against a
   live harness while building this (this plugin's own OAuth doesn't carry
@@ -496,6 +531,8 @@ agent involved, which is worth enabling regardless (Settings → Code security
 | `ae54ee7` | 2026-09-15 | Added `token-report.ps1` (real USD cost from session transcripts, pricing sourced from the `claude-api` skill, verified against a real transcript) and extended `devkit-stats` with cost + a heuristic manual-effort/speedup comparison; dogfooding this one too found and fixed a real pairing gap (a `milestone_shipped` event with no preceding `milestone_started` — a telemetry reset mid-milestone, not a bug — wasn't handled, only the reverse case was) |
 | `f63d6fd` | 2026-09-15 | Added a spec-existence check to `continue-loop.ps1` (it previously nudged toward implementing a milestone even with no spec yet — verified in all three cases: no spec, kebab-case filename match, header-scan fallback match); added `session-welcome.ps1` (`SessionStart` hook) and `devkit-help` (the verified on-demand fallback, since `SessionStart`'s exact on-screen behavior couldn't be tested against a live harness) |
 | `a23f59f` | 2026-09-16 | Documented the existing/downloaded-project onboarding path alongside the brand-new-project one — inventory existing `.claude` components first, review rather than regenerate an existing `CLAUDE.md`, read existing docs for product intent instead of starting fresh, and the lightweight-vs-thorough `PROGRESS.md` retrofit choice |
+| `070a524` | 2026-09-16 | Fixed `token-report.ps1`: a dated model-snapshot ID (`claude-haiku-4-5-20251001`) wasn't matching the pricing table's bare key, silently understating a real report's total by ~10% — found running an actual report, not a scripted test |
+| `97d392e` | 2026-09-16 | Moved telemetry from `%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl` to in-project `.claude/rajesh-devkit/` (gitignored automatically, one idempotent `.gitignore` edit) — asked directly why it wasn't in-project, and the portability/discoverability tradeoffs favored moving it; verified against a `.gitignore` with no trailing newline and an already-existing one |
 
 The last six commits all came from actually running each shipped file against
 [a scratch regression fixture](../scratch-devkit-test) rather than just reading
