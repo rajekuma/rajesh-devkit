@@ -19,8 +19,20 @@ assuming anything.
    layering rules, naming conventions. Follow what's documented; don't invent
    a convention the project hasn't stated.
 
-2. **Work out the test runner from what's actually in the repo** — don't
-   assume one:
+2. **Check for a cached test command before working anything out from
+   scratch.** This project's test runner is a stable fact, not something
+   worth re-deriving every milestone — read
+   `.claude\rajesh-devkit\test-runners.json` if it exists (this plugin's
+   own convention for per-machine, per-project cached facts — same folder
+   its telemetry lives in, see the plugin's README). It's an array of
+   `{"area": ..., "command": ..., "workingDirectory": ..., "detectedFrom": ...}`
+   entries, one per stack in a monorepo. If an entry's `area` matches what
+   this criterion touches, **use its `command` verbatim** — skip straight to
+   step 4.
+
+   **Only if no cache file exists, or none of its entries match this
+   criterion's area**, work out the test runner from what's actually in the
+   repo (don't assume one):
    - `package.json` with a `test` script → `npm test` (or `yarn test` /
      `pnpm test`, matching whichever lockfile is present)
    - `pytest.ini`, `pyproject.toml` with a `[tool.pytest...]` section, or a
@@ -32,18 +44,34 @@ assuming anything.
    - If more than one of these is present (a monorepo with, say, a Python
      backend and a React frontend), work out from the spec's own content
      which side this criterion belongs to — don't run every test suite for
-     every criterion.
+     every criterion. Each side gets its own cache entry (see below), keyed
+     by a short `area` name (e.g. `"frontend"`, `"backend"`) you choose
+     consistently — reuse the same `area` string next time the same side
+     comes up, so the cache lookup above actually matches.
    - If nothing matches, say so and ask rather than guessing a command that
-     might not exist.
-   - If the detected command exists but doesn't actually run correctly on
-     this machine/runtime (a CLI-parsing quirk, a version mismatch, an
-     argument the installed version doesn't accept) — as opposed to the test
-     inside it failing — that's a tooling problem, not a RED result. Try an
-     equivalent invocation that exercises the same tests (a different flag,
-     no path argument, the underlying binary directly) rather than stopping,
-     but don't silently edit the project's own script/config to paper over
-     it — flag the discrepancy in your final report so a human decides
-     whether the script itself needs fixing.
+     might not exist. Don't cache a guess.
+
+   **Once you've worked out a real, working command this way, write it to
+   the cache** before running anything else, so every future milestone in
+   this project skips this step for the same area: append
+   `{area, command, workingDirectory, detectedFrom}` to
+   `.claude\rajesh-devkit\test-runners.json` (create the file — a JSON
+   array — and the `.claude\rajesh-devkit\` folder if either doesn't exist
+   yet; this folder is meant to be gitignored, matching the plugin's own
+   telemetry files there — don't fight that).
+
+   **If a command you're using — cached or freshly derived — doesn't
+   actually run correctly on this machine/runtime** (a CLI-parsing quirk, a
+   version mismatch, an argument the installed version doesn't accept) — as
+   opposed to the test inside it failing — that's a tooling problem, not a
+   RED result. Try an equivalent invocation that exercises the same tests (a
+   different flag, no path argument, the underlying binary directly) rather
+   than stopping, but don't silently edit the project's own script/config to
+   paper over it — flag the discrepancy in your final report so a human
+   decides whether the script itself needs fixing. If the broken command
+   came from the cache, **update that cache entry** to the working
+   equivalent you found — otherwise every future milestone hits the same
+   broken command again.
 
 3. **If a criterion needs an external service** (a database, a queue, a
    mocked third-party API) that might time out or idle out during a long
