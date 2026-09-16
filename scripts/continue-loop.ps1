@@ -19,6 +19,23 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # scanning each spec's header line for this milestone's number, in case the
 # filename doesn't follow the convention. Returns $null if nothing matches -
 # that's a normal outcome (milestone hasn't been spec'd yet), not an error.
+function Ensure-GitignoreEntry {
+    param($ProjectDir, $Entry)
+
+    $gitignorePath = Join-Path $ProjectDir '.gitignore'
+    $existingText = ''
+    if (Test-Path -LiteralPath $gitignorePath) {
+        $existingText = Get-Content -LiteralPath $gitignorePath -Raw -ErrorAction SilentlyContinue
+        if ($null -eq $existingText) { $existingText = '' }
+    }
+    if (($existingText -split "`r?`n") -contains $Entry) { return }
+
+    $prefix = ''
+    if ($existingText.Length -gt 0 -and -not $existingText.EndsWith("`n")) { $prefix = "`n" }
+    $block = "$prefix`n# rajesh-devkit: per-machine dev-loop telemetry, not shared history`n$Entry`n"
+    [System.IO.File]::AppendAllText($gitignorePath, $block, $Utf8NoBom)
+}
+
 function Find-SpecForMilestone {
     param($ProjectDir, $MilestoneNumber, $MilestoneName)
 
@@ -133,11 +150,15 @@ if ($count -gt 8) {
 # specifying or implementing, since from the user's perspective work on this
 # milestone began the moment it was first mentioned. track-milestones.ps1
 # logs the matching "shipped" event when PROGRESS.md marks it done;
-# devkit-stats pairs the two by name.
+# devkit-stats pairs the two by name. Lives inside the project
+# (.claude\rajesh-devkit\) rather than a machine-global path, so it's
+# discoverable without knowing a hash formula - gitignored automatically
+# since it's per-machine data, not something to commit or share via git.
 if ($count -eq 1) {
-    $telemetryDir = Join-Path $env:LOCALAPPDATA 'rajesh-devkit\telemetry'
+    $telemetryDir = Join-Path $projectDir '.claude\rajesh-devkit'
     New-Item -ItemType Directory -Force -Path $telemetryDir | Out-Null
-    $telemetryPath = Join-Path $telemetryDir "$projectHash.jsonl"
+    Ensure-GitignoreEntry -ProjectDir $projectDir -Entry '.claude/rajesh-devkit/'
+    $telemetryPath = Join-Path $telemetryDir 'telemetry.jsonl'
     $line = @{
         event     = 'milestone_started'
         milestone = $milestone

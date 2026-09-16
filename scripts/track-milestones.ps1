@@ -13,6 +13,23 @@ param()
 # log. Write without one explicitly instead.
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+function Ensure-GitignoreEntry {
+    param($ProjectDir, $Entry)
+
+    $gitignorePath = Join-Path $ProjectDir '.gitignore'
+    $existingText = ''
+    if (Test-Path -LiteralPath $gitignorePath) {
+        $existingText = Get-Content -LiteralPath $gitignorePath -Raw -ErrorAction SilentlyContinue
+        if ($null -eq $existingText) { $existingText = '' }
+    }
+    if (($existingText -split "`r?`n") -contains $Entry) { return }
+
+    $prefix = ''
+    if ($existingText.Length -gt 0 -and -not $existingText.EndsWith("`n")) { $prefix = "`n" }
+    $block = "$prefix`n# rajesh-devkit: per-machine dev-loop telemetry, not shared history`n$Entry`n"
+    [System.IO.File]::AppendAllText($gitignorePath, $block, $Utf8NoBom)
+}
+
 [Console]::In.ReadToEnd() | Out-Null
 
 $projectDir = $env:CLAUDE_PROJECT_DIR
@@ -52,13 +69,14 @@ if ($current.Count -eq 0) {
     exit 0
 }
 
-$projectHash = [System.BitConverter]::ToString(
-    [System.Security.Cryptography.MD5]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($projectDir))
-) -replace '-', ''
-$telemetryDir = Join-Path $env:LOCALAPPDATA 'rajesh-devkit\telemetry'
+# Lives inside the project (.claude\rajesh-devkit\) rather than a
+# machine-global path, so it's discoverable without knowing a hash formula -
+# gitignored automatically since it's per-machine data, not shared history.
+$telemetryDir = Join-Path $projectDir '.claude\rajesh-devkit'
 New-Item -ItemType Directory -Force -Path $telemetryDir | Out-Null
-$snapshotPath = Join-Path $telemetryDir "$projectHash.snapshot.json"
-$telemetryPath = Join-Path $telemetryDir "$projectHash.jsonl"
+Ensure-GitignoreEntry -ProjectDir $projectDir -Entry '.claude/rajesh-devkit/'
+$snapshotPath = Join-Path $telemetryDir 'telemetry.snapshot.json'
+$telemetryPath = Join-Path $telemetryDir 'telemetry.jsonl'
 
 $previous = @{}
 if (Test-Path -LiteralPath $snapshotPath) {

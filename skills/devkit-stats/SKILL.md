@@ -34,15 +34,11 @@ silently dropped or guessed).
 
 ## Steps
 
-1. **Find the telemetry log.**
-
-   ```powershell
-   $h = [System.BitConverter]::ToString([System.Security.Cryptography.MD5]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($env:CLAUDE_PROJECT_DIR))) -replace '-',''
-   Get-Content "$env:LOCALAPPDATA\rajesh-devkit\telemetry\$h.jsonl"
-   ```
-
-   If the file doesn't exist, say plainly that no telemetry has been
-   recorded for this project yet — don't fabricate a report.
+1. **Find the telemetry log**, at `$env:CLAUDE_PROJECT_DIR\.claude\rajesh-devkit\telemetry.jsonl` —
+   inside the project itself (gitignored automatically), not a
+   machine-global path. If the file doesn't exist, say plainly that no
+   telemetry has been recorded for this project yet — don't fabricate a
+   report.
 
 2. **Parse and pair.** Each line is
    `{"event": "milestone_started"|"milestone_shipped", "milestone": "<name>", "timestamp": "<ISO 8601 UTC>"}`.
