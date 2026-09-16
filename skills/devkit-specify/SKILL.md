@@ -64,10 +64,13 @@ repo's own files and the user's answers.
    ## Behaviour / requirements
 
    What the system must do, in concrete terms — not an implementation plan. Prefer
-   numbered "given X, the system does Y" statements over prose. Call out explicitly if
-   this touches anything this project's own conventions flag as sensitive — an existing
-   invariant, a security or authorization boundary, a data-model change, an external
-   integration, or backward compatibility with something already shipped.
+   numbered "given X, the system does Y" statements over prose. If a requirement touches
+   an existing invariant, a security or authorization boundary, a data-model change, an
+   external integration, or backward compatibility with something already shipped,
+   prefix that requirement with "🔒 SENSITIVE:" exactly — this is a machine-checked
+   marker other parts of this toolkit key off of (the Stop hook's escalation gate), not
+   just a stylistic flag, so use it only for these five categories and use it every time
+   one applies, even if it feels obvious in context.
 
    ## Edge cases
 
@@ -90,7 +93,17 @@ repo's own files and the user's answers.
    - [ ] ...
    ```
 
-4. **Interview, one question at a time.** For every section, fill in what you
+4. **While writing Behaviour/requirements, actively check each requirement
+   against the five sensitive categories** (existing invariant, security/auth
+   boundary, data-model change, external integration, backward-compatibility
+   break) — don't wait for one to jump out at you; go through the list
+   deliberately for every requirement. Mark every match with `🔒 SENSITIVE:`
+   per the template. This is the one thing in this spec that a later
+   automated step (not a human) checks for, so a missed one doesn't just
+   cost a review comment — it means a milestone that should have paused for
+   a human decision gets automated straight through instead.
+
+5. **Interview, one question at a time.** For every section, fill in what you
    can confidently infer from the code and docs you just read, and say what
    you're basing each inference on. For anything you can't confidently infer —
    the actual desired behaviour, edge-case decisions, what's deliberately out
@@ -110,12 +123,23 @@ repo's own files and the user's answers.
    consolidated question about the section's actual intent instead of
    individually defaulting every gap inside it.
 
-5. **Write the file.** Once every section has real content — no section left
+6. **Write the file.** Once every section has real content — no section left
    as a placeholder or a bare "TBD" — write the result to
    `specs/<kebab-case-feature>.md`, following the template's structure and
    section order exactly.
 
-6. **Stop.** Show the user the finished spec and stop there. Do not write,
+7. **Stop, and lead with the sensitive flags if there are any.** If step 4
+   marked one or more requirements `🔒 SENSITIVE:`, say so plainly as the
+   first thing in your report — not buried after the spec content — and
+   name which requirements and why: this milestone may warrant implementing
+   directly at higher reasoning instead of delegating to the standard
+   implementer, and that's the user's call to make before implementation
+   starts, not something to decide implicitly by just proceeding. This
+   matters even though the Stop hook has its own automated check for the
+   same marker (see this plugin's README) — that check only fires if a
+   session actually stops in between; saying it here too covers the case
+   where implementation is requested in the very same turn. Then show the
+   finished spec and stop there. Do not write,
    edit, or scaffold any implementation code, migration, or test — this
    skill's job ends at the spec. Implementation only happens later, as a
    separate step the user explicitly asks for (respect a project's own

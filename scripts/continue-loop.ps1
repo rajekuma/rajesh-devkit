@@ -13,19 +13,33 @@ param()
 # log. Write without one explicitly instead.
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-# Finds a spec file for a milestone, matching devkit-specify's own
-# specs/<kebab-case-feature>.md convention. Tries the kebab-case guess first
-# (name with any trailing "(...)" qualifier stripped), then falls back to
-# scanning each spec's header line for this milestone's number, in case the
-# filename doesn't follow the convention. Returns $null if nothing matches -
-# that's a normal outcome (milestone hasn't been spec'd yet), not an error.
+# Every non-ASCII glyph this script matches against is built from its
+# Unicode codepoint, never embedded as a literal in this file's own source.
+# Found by actually running this: a BOM-less .ps1 file's multi-byte UTF-8
+# literals get misread by PowerShell 5.1's default-codepage script parsing
+# (real breakage for a 4-byte/astral character like the lock emoji - a
+# "Missing ')' in method call" syntax error). The status glyphs below
+# happened to keep matching anyway, but only because the same
+# misinterpretation hit both this file's regex literals *and* Get-Content's
+# default-encoding reads of PROGRESS.md the same way - mojibake cancelling
+# mojibake, not a real fix. Every codepoint here is verified against this
+# plugin's own real PROGRESS.md content, not typed from memory.
+$GlyphNotStarted = [char]::ConvertFromUtf32(0x2B1C)  # ⬜ WHITE LARGE SQUARE
+$GlyphHourglass  = [char]::ConvertFromUtf32(0x23F3)  # ⏳ HOURGLASS FLOWING SAND
+$GlyphSensitive  = [char]::ConvertFromUtf32(0x1F512) # 🔒 LOCK
+
+# Idempotently ensures one line exists in the host project's .gitignore -
+# used for the local telemetry/cache folder this plugin writes into, so it
+# never gets swept into a commit. Creates .gitignore if it doesn't exist;
+# preserves whatever's already there, including a file with no trailing
+# newline.
 function Ensure-GitignoreEntry {
     param($ProjectDir, $Entry)
 
     $gitignorePath = Join-Path $ProjectDir '.gitignore'
     $existingText = ''
     if (Test-Path -LiteralPath $gitignorePath) {
-        $existingText = Get-Content -LiteralPath $gitignorePath -Raw -ErrorAction SilentlyContinue
+        $existingText = Get-Content -LiteralPath $gitignorePath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
         if ($null -eq $existingText) { $existingText = '' }
     }
     if (($existingText -split "`r?`n") -contains $Entry) { return }
@@ -36,6 +50,12 @@ function Ensure-GitignoreEntry {
     [System.IO.File]::AppendAllText($gitignorePath, $block, $Utf8NoBom)
 }
 
+# Finds a spec file for a milestone, matching devkit-specify's own
+# specs/<kebab-case-feature>.md convention. Tries the kebab-case guess first
+# (name with any trailing "(...)" qualifier stripped), then falls back to
+# scanning each spec's header line for this milestone's number, in case the
+# filename doesn't follow the convention. Returns $null if nothing matches -
+# that's a normal outcome (milestone hasn't been spec'd yet), not an error.
 function Find-SpecForMilestone {
     param($ProjectDir, $MilestoneNumber, $MilestoneName)
 
@@ -52,7 +72,7 @@ function Find-SpecForMilestone {
     if ($MilestoneNumber) {
         $pattern = "Milestone:.*\bM?$([regex]::Escape($MilestoneNumber))\b"
         foreach ($file in (Get-ChildItem -LiteralPath $specsDir -Filter '*.md' -File -ErrorAction SilentlyContinue)) {
-            $head = Get-Content -LiteralPath $file.FullName -TotalCount 5 -ErrorAction SilentlyContinue
+            $head = Get-Content -LiteralPath $file.FullName -TotalCount 5 -Encoding UTF8 -ErrorAction SilentlyContinue
             foreach ($line in $head) {
                 if ($line -match $pattern) { return $file.FullName }
             }
@@ -94,9 +114,9 @@ if (-not (Test-Path -LiteralPath $progressPath)) {
 
 $milestoneNumber = $null
 $milestoneName = $null
-foreach ($line in Get-Content -LiteralPath $progressPath) {
+foreach ($line in (Get-Content -LiteralPath $progressPath -Encoding UTF8)) {
     # Milestone table row: | # | Milestone name | <not-started glyph> | ...
-    if ($line -match '^\s*\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|\s*(⬜|⏳)\s*(\||$)') {
+    if ($line -match "^\s*\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|\s*($GlyphNotStarted|$GlyphHourglass)\s*(\||`$)") {
         $milestoneNumber = $Matches[1]
         $milestoneName = $Matches[2].Trim()
         break
@@ -113,6 +133,25 @@ if (-not $milestoneName) {
 }
 
 $milestone = if ($milestoneNumber) { "M$milestoneNumber - $milestoneName" } else { $milestoneName }
+$specPath = Find-SpecForMilestone -ProjectDir $projectDir -MilestoneNumber $milestoneNumber -MilestoneName $milestoneName
+
+# Sensitive-milestone escalation gate: devkit-specify marks a requirement
+# "🔒 SENSITIVE:" when it touches an existing invariant, a security/auth
+# boundary, a data-model change, an external integration, or a
+# backward-compatibility break (see its own SKILL.md). If the spec has one,
+# this milestone shouldn't get automatically nudged toward standard
+# delegation the same way an ordinary one would - the escalation message
+# below asks the orchestrator to stop and ask the user whether to implement
+# it directly at higher reasoning instead. Shown once per milestone (see
+# $escalationShown below), not on every repeat nudge - once it's been
+# surfaced, a human has had the chance to act on it.
+$isSensitive = $false
+if ($specPath) {
+    $specContent = Get-Content -LiteralPath $specPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+    if ($specContent -and $specContent.Contains("$GlyphSensitive SENSITIVE:")) {
+        $isSensitive = $true
+    }
+}
 
 # Runaway-loop guard: a counter keyed to this project + this exact milestone,
 # capped at 8 nudges. State lives outside the repo (OS temp) so it never gets
@@ -125,11 +164,15 @@ New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 $statePath = Join-Path $stateDir "$projectHash.json"
 
 $count = 1
+$escalationShown = $false
 if (Test-Path -LiteralPath $statePath) {
     $previous = $null
-    try { $previous = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json } catch { $previous = $null }
+    try { $previous = Get-Content -LiteralPath $statePath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $previous = $null }
     if ($previous -and $previous.milestone -eq $milestone) {
         $count = [int]$previous.count + 1
+        if ($previous.PSObject.Properties.Match('escalationShown').Count -gt 0) {
+            $escalationShown = [bool]$previous.escalationShown
+        }
     }
 }
 
@@ -139,21 +182,25 @@ if ($count -gt 8) {
     exit 0
 }
 
+$showEscalation = $isSensitive -and -not $escalationShown
+if ($showEscalation) { $escalationShown = $true }
+
 [System.IO.File]::WriteAllText(
     $statePath,
-    (@{ milestone = $milestone; count = $count } | ConvertTo-Json -Compress),
+    (@{ milestone = $milestone; count = $count; escalationShown = $escalationShown } | ConvertTo-Json -Compress),
     $Utf8NoBom
 )
 
 # Telemetry: log a "started" event the first time this milestone is seen (not
 # on every repeat nudge) - regardless of whether the nudge below is toward
-# specifying or implementing, since from the user's perspective work on this
-# milestone began the moment it was first mentioned. track-milestones.ps1
-# logs the matching "shipped" event when PROGRESS.md marks it done;
-# devkit-stats pairs the two by name. Lives inside the project
-# (.claude\rajesh-devkit\) rather than a machine-global path, so it's
-# discoverable without knowing a hash formula - gitignored automatically
-# since it's per-machine data, not something to commit or share via git.
+# specifying, implementing, or escalating, since from the user's perspective
+# work on this milestone began the moment it was first mentioned.
+# track-milestones.ps1 logs the matching "shipped" event when PROGRESS.md
+# marks it done; devkit-stats pairs the two by name. Lives inside the
+# project (.claude\rajesh-devkit\) rather than a machine-global path, so
+# it's discoverable without knowing a hash formula - gitignored
+# automatically since it's per-machine data, not something to commit or
+# share via git.
 if ($count -eq 1) {
     $telemetryDir = Join-Path $projectDir '.claude\rajesh-devkit'
     New-Item -ItemType Directory -Force -Path $telemetryDir | Out-Null
@@ -167,9 +214,17 @@ if ($count -eq 1) {
     [System.IO.File]::AppendAllText($telemetryPath, $line + [Environment]::NewLine, $Utf8NoBom)
 }
 
-$specPath = Find-SpecForMilestone -ProjectDir $projectDir -MilestoneNumber $milestoneNumber -MilestoneName $milestoneName
-
-if (-not $specPath) {
+if ($showEscalation) {
+    $message = "Next milestone from PROGRESS.md: $milestone. Its spec ($specPath) flags one " +
+        "or more requirements as SENSITIVE (an existing invariant, a security/authorization " +
+        "boundary, a data-model change, an external integration, or a backward-compatibility " +
+        "break). STOP before delegating to devkit-implementer: ask the user one question " +
+        "(e.g. via AskUserQuestion) - implement this milestone directly yourself at higher " +
+        "reasoning, or standard delegation to devkit-implementer is fine for this one. Wait " +
+        "for their answer before proceeding either way; do not decide this yourself and do " +
+        "not auto-delegate. This is a one-time gate for this milestone - once answered, " +
+        "proceed with strict TDD as normal and invoke devkit-reviewer when done."
+} elseif (-not $specPath) {
     $message = "Next milestone from PROGRESS.md: $milestone. No spec exists for it yet - " +
         "draft one first: say `"spec this feature: $milestoneName`" to invoke devkit-specify " +
         "and write specs/<kebab-case-feature>.md. Once the spec exists, implement it with " +

@@ -21,6 +21,16 @@ param()
 # expected, `devkit-help` is the verified fallback - it just runs this same
 # script and relays the result as a normal conversational reply.
 
+# Every non-ASCII glyph this script matches against is built from its
+# Unicode codepoint, never embedded as a literal in this file's own source -
+# see continue-loop.ps1's comment on the same convention for why (a real,
+# reproduced BOM-less-.ps1-source parsing bug on a 4-byte glyph elsewhere).
+# Every codepoint here is verified against this plugin's own real
+# PROGRESS.md content, not typed from memory.
+$GlyphNotStarted = [char]::ConvertFromUtf32(0x2B1C)  # ⬜ WHITE LARGE SQUARE
+$GlyphHourglass  = [char]::ConvertFromUtf32(0x23F3)  # ⏳ HOURGLASS FLOWING SAND
+$GlyphSensitive  = [char]::ConvertFromUtf32(0x1F512) # 🔒 LOCK
+
 $raw = [Console]::In.ReadToEnd()
 $hookInput = $null
 if ($raw) {
@@ -52,7 +62,7 @@ function Find-SpecForMilestone {
     if ($MilestoneNumber) {
         $pattern = "Milestone:.*\bM?$([regex]::Escape($MilestoneNumber))\b"
         foreach ($file in (Get-ChildItem -LiteralPath $specsDir -Filter '*.md' -File -ErrorAction SilentlyContinue)) {
-            $head = Get-Content -LiteralPath $file.FullName -TotalCount 5 -ErrorAction SilentlyContinue
+            $head = Get-Content -LiteralPath $file.FullName -TotalCount 5 -Encoding UTF8 -ErrorAction SilentlyContinue
             foreach ($line in $head) {
                 if ($line -match $pattern) { return $file.FullName }
             }
@@ -96,8 +106,8 @@ next instead of this.
 
 $milestoneNumber = $null
 $milestoneName = $null
-foreach ($line in Get-Content -LiteralPath $progressPath) {
-    if ($line -match '^\s*\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|\s*(⬜|⏳)\s*(\||$)') {
+foreach ($line in (Get-Content -LiteralPath $progressPath -Encoding UTF8)) {
+    if ($line -match "^\s*\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|\s*($GlyphNotStarted|$GlyphHourglass)\s*(\||`$)") {
         $milestoneNumber = $Matches[1]
         $milestoneName = $Matches[2].Trim()
         break
@@ -116,7 +126,25 @@ if (-not $milestoneName) {
 $milestone = if ($milestoneNumber) { "M$milestoneNumber - $milestoneName" } else { $milestoneName }
 $specPath = Find-SpecForMilestone -ProjectDir $projectDir -MilestoneNumber $milestoneNumber -MilestoneName $milestoneName
 
-if (-not $specPath) {
+$isSensitive = $false
+if ($specPath) {
+    $specContent = Get-Content -LiteralPath $specPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
+    if ($specContent -and $specContent.Contains("$GlyphSensitive SENSITIVE:")) {
+        $isSensitive = $true
+    }
+}
+
+if ($isSensitive) {
+    Write-Output @"
+rajesh-devkit: next milestone is $milestone - its spec ($specPath) flags
+one or more requirements as SENSITIVE (an existing invariant, a
+security/authorization boundary, a data-model change, an external
+integration, or a backward-compatibility break). Before implementing:
+decide whether to implement this one yourself at higher reasoning instead
+of delegating to devkit-implementer, or whether standard delegation is
+fine here - that's your call to make, not something to skip past.
+"@
+} elseif (-not $specPath) {
     Write-Output @"
 rajesh-devkit: next milestone is $milestone - no spec yet.
 Let's start creating the first spec: say "spec this feature: $milestoneName"

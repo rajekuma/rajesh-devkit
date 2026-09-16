@@ -13,13 +13,25 @@ param()
 # log. Write without one explicitly instead.
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+# Every non-ASCII glyph this script matches against is built from its
+# Unicode codepoint, never embedded as a literal in this file's own source -
+# see continue-loop.ps1's comment on the same convention for why (a real,
+# reproduced BOM-less-.ps1-source parsing bug on a 4-byte glyph elsewhere).
+# Every codepoint here is verified against this plugin's own real
+# PROGRESS.md content, not typed from memory.
+$GlyphNotStarted = [char]::ConvertFromUtf32(0x2B1C)  # ⬜ WHITE LARGE SQUARE
+$GlyphHourglass  = [char]::ConvertFromUtf32(0x23F3)  # ⏳ HOURGLASS FLOWING SAND
+$GlyphInProgress = [char]::ConvertFromUtf32(0x1F7E8) # 🟨 LARGE YELLOW SQUARE
+$GlyphBlocked    = [char]::ConvertFromUtf32(0x23F8)  # ⏸ DOUBLE VERTICAL BAR
+$GlyphDone       = [char]::ConvertFromUtf32(0x2705)  # ✅ WHITE HEAVY CHECK MARK
+
 function Ensure-GitignoreEntry {
     param($ProjectDir, $Entry)
 
     $gitignorePath = Join-Path $ProjectDir '.gitignore'
     $existingText = ''
     if (Test-Path -LiteralPath $gitignorePath) {
-        $existingText = Get-Content -LiteralPath $gitignorePath -Raw -ErrorAction SilentlyContinue
+        $existingText = Get-Content -LiteralPath $gitignorePath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
         if ($null -eq $existingText) { $existingText = '' }
     }
     if (($existingText -split "`r?`n") -contains $Entry) { return }
@@ -47,12 +59,12 @@ if (-not (Test-Path -LiteralPath $progressPath)) {
 #   table row " | 13 | Blocks | ✅ | " -> key "M13", display "M13 - Blocks"
 #   checklist "- [x] Some task"        -> key "Some task", display "Some task"
 $current = @{}
-foreach ($line in Get-Content -LiteralPath $progressPath) {
-    if ($line -match '^\s*\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|\s*(⬜|⏳|🟨|⏸|✅)\s*(\||$)') {
+foreach ($line in (Get-Content -LiteralPath $progressPath -Encoding UTF8)) {
+    if ($line -match "^\s*\|\s*([\w.]+)\s*\|\s*(.+?)\s*\|\s*($GlyphNotStarted|$GlyphHourglass|$GlyphInProgress|$GlyphBlocked|$GlyphDone)\s*(\||`$)") {
         $key = "M$($Matches[1])"
         $current[$key] = [PSCustomObject]@{
             display = "M$($Matches[1]) - $($Matches[2].Trim())"
-            done    = ($Matches[3] -eq '✅')
+            done    = ($Matches[3] -eq $GlyphDone)
         }
         continue
     }
@@ -81,7 +93,7 @@ $telemetryPath = Join-Path $telemetryDir 'telemetry.jsonl'
 $previous = @{}
 if (Test-Path -LiteralPath $snapshotPath) {
     try {
-        $raw = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json
+        $raw = Get-Content -LiteralPath $snapshotPath -Raw -Encoding UTF8 | ConvertFrom-Json
         foreach ($prop in $raw.PSObject.Properties) { $previous[$prop.Name] = [bool]$prop.Value }
     } catch { $previous = @{} }
 }
