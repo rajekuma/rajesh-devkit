@@ -267,7 +267,7 @@ action.
 
 | Name | Trigger | Model / effort | What it does |
 |---|---|---|---|
-| `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. |
+| `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. Marks any requirement touching an existing invariant, a security/auth boundary, a data-model change, an external integration, or a backward-compatibility break with `🔒 SENSITIVE:` — the marker the escalation gate (see "Hooks" below) keys off of — and leads its final report with those flags if any exist. |
 | `devkit-help` | "how do I use this plugin", "devkit help", "get me started", "what's next", "getting started with rajesh-devkit" | `haiku` | Runs the same state check as the `SessionStart` hook (below) and relays it conversationally — the verified on-demand fallback for the automatic banner. Read-only. |
 | `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.ps1`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
 
@@ -283,8 +283,8 @@ action.
 
 | Event | Matcher | Script | Trigger condition | Blocking behaviour |
 |---|---|---|---|---|
-| `SessionStart` | *(none supported)* | `scripts/session-welcome.ps1` | Fires when a genuine new session starts (`source: "startup"` — skips resume/clear/compact to avoid repetitive noise mid-project). | Never blocks — always exits 0. Prints contextual guidance: the bootstrap checklist if `PROGRESS.md` doesn't exist, "let's spec this" if the next milestone has none, "implement it" if it does, or "nothing queued" if none are unstarted. Its exact on-screen behavior via the harness is unverified (see Troubleshooting) — `devkit-help` is the tested fallback. |
-| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.ps1` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — checks whether a spec exists for the milestone (kebab-case filename guess, falling back to a header scan) and writes a matching instruction to stderr: draft one with `devkit-specify` if none exists, or implement it test-first (RED-GREEN, one acceptance criterion at a time) and invoke `devkit-reviewer` on the diff if it does. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
+| `SessionStart` | *(none supported)* | `scripts/session-welcome.ps1` | Fires when a genuine new session starts (`source: "startup"` — skips resume/clear/compact to avoid repetitive noise mid-project). | Never blocks — always exits 0. Prints contextual guidance: the bootstrap checklist if `PROGRESS.md` doesn't exist, an escalation notice if the next milestone's spec is `🔒 SENSITIVE:`-flagged, "let's spec this" if it has no spec, "implement it" if it does, or "nothing queued" if none are unstarted. Its exact on-screen behavior via the harness is unverified (see Troubleshooting) — `devkit-help` is the tested fallback. |
+| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.ps1` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — three possible instructions to stderr, checked in order: (1) if the milestone's spec is `🔒 SENSITIVE:`-flagged and hasn't been escalated yet this milestone, stop and ask the user whether to implement directly at higher reasoning instead of delegating — shown once per milestone, not on every repeat nudge (see "Sensitive-milestone escalation" below); (2) if no spec exists yet, draft one with `devkit-specify` first; (3) otherwise implement test-first (RED-GREEN) and invoke `devkit-reviewer` on the diff. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
 | `PostToolUse` | `Edit\|Write` | `scripts/run-verify.ps1` | Fires after every Edit or Write tool call. | If `.claude\verify.ps1` doesn't exist in the host project, exits 0 silently (no-op). If it exists, runs it and **exits with whatever code it returned** — no remapping. `verify.ps1`'s own exit-code convention is what decides whether Claude sees the failure (see the contract below). |
 | `PostToolUse` | `Edit\|Write` | `scripts/track-milestones.ps1` | Fires after every Edit or Write tool call, alongside `run-verify.ps1` (same matcher, both run). | Never blocks — always exits 0. Re-parses `PROGRESS.md`'s milestone statuses, diffs against a stored snapshot, and appends a `milestone_shipped` telemetry event for anything that just flipped to done. No-ops silently if there's no `PROGRESS.md` or no recognisable milestone lines. |
 
@@ -299,6 +299,40 @@ exactly the pauses the skill built in. So `continue-loop.ps1` checks for
 `.claude\skills\spec-loop\SKILL.md` first and gets out of the way entirely if
 it's there, acting only as a fallback for projects that don't have an
 equivalent skill of their own.
+
+### Sensitive-milestone escalation
+
+Not every milestone deserves the same amount of automated trust. A schema
+migration and a copy-tweak used to get nudged toward implementation
+identically — nothing in the loop distinguished them. This mirrors
+`spec-loop`'s own real rule (a milestone touching money/decimal handling,
+multi-tenancy, or an existing invariant stops and asks whether to implement
+it yourself at higher reasoning instead of delegating), generalized past
+those specific categories:
+
+`devkit-specify` marks a requirement `🔒 SENSITIVE:` when it touches an
+existing invariant, a security/authorization boundary, a data-model change,
+an external integration, or a backward-compatibility break — a
+machine-checked marker, not just a stylistic flag, used consistently enough
+that `continue-loop.ps1` can grep for it. Three places check for it, on
+purpose, since none of them alone covers every path a milestone could take
+toward implementation:
+
+- **`continue-loop.ps1`** — the primary, automated gate. Escalates instead
+  of nudging toward implementation, once per milestone (tracked in the same
+  nudge-cap state file as an `escalationShown` field) — not on every repeat
+  nudge, since that would just be noise once a human has already seen it.
+- **`session-welcome.ps1` / `devkit-help`** — covers the case where a
+  session never actually stops between drafting the spec and someone asking
+  to implement it, so the `Stop` hook never gets a chance to fire.
+- **`devkit-specify`'s own final report** — leads with the flags, for the
+  same-turn case where implementation is requested immediately after the
+  spec is written, before either of the above would ever see it.
+
+None of the three *enforce* anything — they're all advisory prompts to
+whichever Claude session reads them. The actual decision (implement directly
+at higher reasoning, or standard delegation is fine) is always the user's,
+asked explicitly, every time a new sensitive milestone is encountered.
 
 ## What the host project must provide
 
@@ -447,6 +481,29 @@ agent involved, which is worth enabling regardless (Settings → Code security
 
 ## Troubleshooting
 
+- **Escalation keeps re-appearing for the same milestone.** It should only
+  show once (`escalationShown: true` in
+  `%TEMP%\rajesh-devkit-continue-loop\<hash>.json`) — if it's repeating,
+  check whether something is clearing that state file between nudges (a
+  full state reset also clears `escalationShown`, same as the nudge count).
+- **A milestone that should have escalated didn't.** Check the spec file
+  literally contains `🔒 SENSITIVE:` immediately before the flagged
+  requirement, not a paraphrase or a different flagging convention —
+  `continue-loop.ps1` does an exact substring match, not a keyword search.
+- **Contributing to this plugin: don't put a raw emoji literal directly in
+  a `.ps1` file's source.** Found the hard way: a BOM-less `.ps1` file's
+  4-byte/astral-plane UTF-8 characters (most emoji, including the lock
+  marker) get misread by Windows PowerShell 5.1's default-codepage script
+  parsing — a real syntax error (`Missing ')' in method call`), not just a
+  display glitch. Build the string from its Unicode codepoint instead:
+  `[char]::ConvertFromUtf32(0x1F512)`. The shorter 3-byte glyphs (⬜✅⏳⏸🟨)
+  happened not to break the parser this way, but they were *also* silently
+  relying on an accidental cancellation (the same misinterpretation hitting
+  both the script's own literals and `Get-Content`'s default-encoding reads
+  of `PROGRESS.md`) rather than being genuinely correct — every glyph in
+  this plugin's scripts is now built the same codepoint-safe way, and every
+  `Get-Content` call reading non-ASCII content specifies `-Encoding UTF8`
+  explicitly. Don't reintroduce either shortcut.
 - **`devkit-implementer` is using a stale test command** (the project
   switched test frameworks, moved directories, or the cached one was wrong
   to begin with). Delete or edit
@@ -544,6 +601,7 @@ agent involved, which is worth enabling regardless (Settings → Code security
 | `070a524` | 2026-09-16 | Fixed `token-report.ps1`: a dated model-snapshot ID (`claude-haiku-4-5-20251001`) wasn't matching the pricing table's bare key, silently understating a real report's total by ~10% — found running an actual report, not a scripted test |
 | `97d392e` | 2026-09-16 | Moved telemetry from `%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl` to in-project `.claude/rajesh-devkit/` (gitignored automatically, one idempotent `.gitignore` edit) — asked directly why it wasn't in-project, and the portability/discoverability tradeoffs favored moving it; verified against a `.gitignore` with no trailing newline and an already-existing one |
 | `4b457ce` | 2026-09-16 | `devkit-implementer` now caches the discovered test-runner command in `.claude/rajesh-devkit/test-runners.json` instead of re-deriving it every milestone — considered (and rejected, with reasoning) a Haiku subagent for running tests and a hook that auto-commits/pushes first; caching the test command was the one of the three that actually held up. Verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation |
+| `0b0afcc` | 2026-09-16 | Added the sensitive-milestone escalation gate (`devkit-specify` marks `🔒 SENSITIVE:`, three places check for it — `continue-loop.ps1`, `session-welcome.ps1`/`devkit-help`, `devkit-specify`'s own report — shown once per milestone) from a full-plugin gap analysis. Testing it for real surfaced a genuine bug: a raw emoji literal in a BOM-less `.ps1` file broke PowerShell 5.1's parser outright, which in turn revealed the *existing* status-glyph matching had only ever worked by an accidental cancellation of two encoding bugs. Fixed properly across all three affected scripts — every glyph built from a verified codepoint, every relevant `Get-Content` call explicit about `-Encoding UTF8` |
 
 The last six commits all came from actually running each shipped file against
 [a scratch regression fixture](../scratch-devkit-test) rather than just reading
