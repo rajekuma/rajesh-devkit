@@ -275,7 +275,7 @@ action.
 
 | Name | Model | Tools | Trigger | Verdict format |
 |---|---|---|---|---|
-| `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "implement the spec", "build the next milestone", "implement \<feature\>" | Not report-only — writes code and tests. Detects the project's test runner from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) instead of assuming one. Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
+| `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "implement the spec", "build the next milestone", "implement \<feature\>" | Not report-only — writes code and tests. Checks `.claude\rajesh-devkit\test-runners.json` for a cached test command per area first; only derives one from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) — and verifies it actually runs, not just that the marker matched — on a cache miss, writing the result back so future milestones skip re-derivation (verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation). Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
 | `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "audit dependencies", "check for vulnerable packages", "scan dependencies for CVEs", "dependency security check" | Report-only. Detects whichever package ecosystems are present (npm/yarn/pnpm, PyPI, NuGet, pub/Dart, Go, Cargo, Maven, ...) from marker files, then runs `osv-scanner --recursive` as the universal pass (covers most ecosystems in one command) plus ecosystem-native fallbacks (`dotnet list package --vulnerable`, `npm audit`, `pip-audit`) only where the universal pass can't reach (e.g. NuGet without a lock file) — all backed by the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file, unrecognised ecosystem) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
 | `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
 
@@ -326,11 +326,13 @@ runs the project's fast checks — lint, a quick test subset, a build — and
 should stay fast, since it runs after *every* edit.
 
 **What this plugin writes into the host project, unprompted.** Beyond
-reading `PROGRESS.md`/`specs/`/`CLAUDE.md`, two things get created
-automatically the first time a milestone is nudged: `.claude\rajesh-devkit\`
-(telemetry — see "Telemetry" below) and a `.gitignore` entry for it. Nothing
-else in the plugin writes to the host project unprompted — `devkit-implementer`
-only writes what you asked it to implement, and every report-only component
+reading `PROGRESS.md`/`specs/`/`CLAUDE.md`, three things live under
+`.claude\rajesh-devkit\` (created automatically, gitignored automatically —
+see "Telemetry" below): the telemetry log, `devkit-implementer`'s cached
+test-runner command (`test-runners.json` — see "Subagents" above), and the
+one `.gitignore` line covering all of it. Nothing else in the plugin writes
+to the host project unprompted — `devkit-implementer` otherwise only writes
+what you asked it to implement, and every report-only component
 (`devkit-reviewer`, `devkit-dep-audit`, `devkit-stats`) never writes anything.
 
 ## Telemetry
@@ -445,6 +447,14 @@ agent involved, which is worth enabling regardless (Settings → Code security
 
 ## Troubleshooting
 
+- **`devkit-implementer` is using a stale test command** (the project
+  switched test frameworks, moved directories, or the cached one was wrong
+  to begin with). Delete or edit
+  `.claude\rajesh-devkit\test-runners.json` — a broken cached command that
+  fails as a genuine tooling error self-heals on the next run (the agent
+  updates the entry once it finds a working equivalent), but a command
+  that's merely *wrong* now (points at a test suite that no longer exists,
+  say) won't be detected as broken and needs manual correction.
 - **Don't want the automatic `.gitignore` edit at all.** Add
   `.claude/rajesh-devkit/` to `.gitignore` yourself before the first
   milestone nudge — both scripts check for that exact line first and skip
@@ -533,6 +543,7 @@ agent involved, which is worth enabling regardless (Settings → Code security
 | `a23f59f` | 2026-09-16 | Documented the existing/downloaded-project onboarding path alongside the brand-new-project one — inventory existing `.claude` components first, review rather than regenerate an existing `CLAUDE.md`, read existing docs for product intent instead of starting fresh, and the lightweight-vs-thorough `PROGRESS.md` retrofit choice |
 | `070a524` | 2026-09-16 | Fixed `token-report.ps1`: a dated model-snapshot ID (`claude-haiku-4-5-20251001`) wasn't matching the pricing table's bare key, silently understating a real report's total by ~10% — found running an actual report, not a scripted test |
 | `97d392e` | 2026-09-16 | Moved telemetry from `%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl` to in-project `.claude/rajesh-devkit/` (gitignored automatically, one idempotent `.gitignore` edit) — asked directly why it wasn't in-project, and the portability/discoverability tradeoffs favored moving it; verified against a `.gitignore` with no trailing newline and an already-existing one |
+| `4b457ce` | 2026-09-16 | `devkit-implementer` now caches the discovered test-runner command in `.claude/rajesh-devkit/test-runners.json` instead of re-deriving it every milestone — considered (and rejected, with reasoning) a Haiku subagent for running tests and a hook that auto-commits/pushes first; caching the test command was the one of the three that actually held up. Verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation |
 
 The last six commits all came from actually running each shipped file against
 [a scratch regression fixture](../scratch-devkit-test) rather than just reading
