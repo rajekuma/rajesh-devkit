@@ -1,23 +1,46 @@
 # rajesh-devkit
 
-A personal Claude Code plugin: a full spec→implement→review→dependency-audit
-dev loop, stack-agnostic by design — it infers a project's own layout, test
-runner, and package ecosystem rather than assuming .NET/Flutter or any other
-specific stack. Two hooks turn it into a milestone-driven *unattended* loop
-against any host project's `PROGRESS.md`, if it has one.
+A personal Claude Code plugin: an
+onboard→spec→ux→implement→review→ship→document dev loop, stack-agnostic by
+design — it infers a project's own layout, test runner, package ecosystem,
+component library, and coverage thresholds rather than assuming .NET/Flutter
+or any other specific stack. Hooks turn it into a milestone-driven
+*unattended* loop against any host project's `PROGRESS.md`, if it has one.
+
+One property holds across every component: **nothing here commits, pushes,
+tags, merges, or opens a PR.** Several components produce verdicts, and the
+loop respects them, but everything that touches a remote stays your explicit
+action.
 
 ## What this plugin is
 
+- `devkit-onboard` — the entry point for a project that isn't on the loop
+  yet, new or brownfield: inventories what already exists before writing
+  anything, seeds the test-runner cache with a command it actually ran, and
+  proposes a `PROGRESS.md` and the ADRs worth backfilling.
 - `devkit-specify` — an interactive skill acting as product owner: drafts a
   feature spec into `specs/<kebab-feature>.md`, reading the host repo's own
   code and decision-record docs first, then interviewing you one question at
   a time for anything it can't confidently infer.
+- `devkit-ux` — for anything with a user interface, the stage between spec
+  and implementation: audits the existing components and tokens, enumerates
+  the states that actually break interfaces (empty, loading, error,
+  permission-denied), reads Figma when it's configured, and writes
+  accessibility criteria into the spec where they'll be enforced.
 - `devkit-implementer` — implements one spec test-first (RED-GREEN), one
   acceptance criterion at a time, detecting whatever test runner the project
   actually uses (`npm test`, `pytest`, `dotnet test`, `flutter test`, `go
   test`, `cargo test`, ...) instead of assuming one.
 - `devkit-reviewer` — a report-only subagent that diffs the current change
   against its spec and ends with a single verdict line.
+- `devkit-ship` — the preflight between "the reviewer said ship" and "mark it
+  done": CI status, coverage against the project's own threshold, dependency
+  advisories, a secrets scan of the diff, and any unaccounted acceptance
+  criteria. A gate it couldn't run reports `UNKNOWN`, never `PASS`.
+- `devkit-docs` — writes the changelog entry a shipped milestone earns, and
+  hunts down the documentation that milestone just made wrong.
+- `devkit-adr` — records an architecture decision properly, interviewing for
+  the alternatives and consequences that aren't inferable from code.
 - `devkit-dep-audit` — a report-only subagent that checks the project's
   dependencies for known-vulnerable versions, across whichever package
   ecosystems are actually present (npm, PyPI, NuGet, pub, Go, Cargo, Maven, ...).
@@ -73,15 +96,26 @@ rajesh-devkit/
 │   └── plugin.json              # name, version, description, author, license
 ├── agents/
 │   ├── devkit-dep-audit.md      # dependency CVE audit, report-only
+│   ├── devkit-docs.md           # changelog/release notes + stale-doc hunt, post-ship
 │   ├── devkit-implementer.md    # RED-GREEN implementer, stack-agnostic
-│   └── devkit-reviewer.md       # spec-compliance review, report-only
+│   ├── devkit-reviewer.md       # spec-compliance review, report-only
+│   ├── devkit-ship.md           # pre-ship preflight: CI, coverage, advisories, secrets
+│   └── devkit-ux.md             # spec -> screens/states/tokens/a11y criteria
 ├── skills/
+│   ├── devkit-adr/
+│   │   └── SKILL.md             # writes an architecture decision record
+│   ├── devkit-eval/
+│   │   └── SKILL.md             # this plugin's own regression + drift check
+│   ├── devkit-onboard/
+│   │   └── SKILL.md             # gets a new or brownfield project onto the loop
 │   ├── devkit-specify/
 │   │   └── SKILL.md             # spec-drafting, product-owner style
 │   ├── devkit-help/
 │   │   └── SKILL.md             # on-demand "what's next" (verified SessionStart fallback)
 │   └── devkit-stats/
 │       └── SKILL.md             # timing + real cost + heuristic effort report
+├── tests/
+│   └── run-tests.ps1            # regression suite for this plugin (no Pester needed)
 ├── hooks/
 │   └── hooks.json               # SessionStart -> session-welcome.ps1
 │                                 # Stop -> continue-loop.ps1
@@ -267,6 +301,9 @@ action.
 
 | Name | Trigger | Model / effort | What it does |
 |---|---|---|---|
+| `devkit-onboard` | "onboard this project", "set up devkit here", "get this repo on the loop", "bootstrap this project" | `fable`, `effort: high` | Gets a project — brand-new or with years of history — to the state the loop needs. Inventories what already exists first and never clobbers it (`CLAUDE.md`, `specs/`, a tracker under any name, other `.claude` assets, a `spec-loop`-shaped skill that would suppress the `Stop` hook), detects the stack and **seeds `test-runners.json` with a command it actually ran**, reconstructs product intent from what's already written rather than a blank page, then proposes a `PROGRESS.md` (offering the lightweight and thorough options honestly instead of choosing for you) and a shortlist of load-bearing ADRs to backfill. Ends by running the real `session-welcome.ps1` check to prove the loop can parse what it just built. |
+| `devkit-adr` | "write an ADR", "record this decision", "adr for \<decision\>", "document why we chose" | `fable`, `effort: high` | Writes `docs/adr/<NNNN>-<kebab-title>.md`, closing the gap where `devkit-specify` *reads* decision records but nothing ever wrote one. Detects the project's existing convention (folder name, numbering, section shape) from the most recent records and matches it. Refuses to write an ADR for a non-decision, and interviews for the parts that carry the value and are never inferable — the alternatives actually rejected, the forces in tension, the consequences accepted including the bad ones, and what would make you revisit it. Never invents a rationale. Links the record back into the spec and updates any ADR it supersedes. |
+| `devkit-eval` | "run the devkit tests", "eval the plugin", "check the plugin still works", "devkit regression" | `sonnet` | This plugin's own regression check, for editing *this repo* rather than a host project. Runs `tests/run-tests.ps1` (below), then checks the half no script can assert: that report-only components still declare themselves report-only, that nothing has quietly gained permission to commit, that verdict strings the orchestrator routes on are unchanged, that the handoff chain in the prompts still matches the chain in `continue-loop.ps1`'s nudge messages, and that the README hasn't drifted from the code. |
 | `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. Marks any requirement touching an existing invariant, a security/auth boundary, a data-model change, an external integration, or a backward-compatibility break with `🔒 SENSITIVE:` — the marker the escalation gate (see "Hooks" below) keys off of — and leads its final report with those flags if any exist. |
 | `devkit-help` | "how do I use this plugin", "devkit help", "get me started", "what's next", "getting started with rajesh-devkit" | `haiku` | Runs the same state check as the `SessionStart` hook (below) and relays it conversationally — the verified on-demand fallback for the automatic banner. Read-only. |
 | `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.ps1`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
@@ -275,9 +312,12 @@ action.
 
 | Name | Model | Tools | Trigger | Verdict format |
 |---|---|---|---|---|
+| `devkit-ux` | `fable` | `Read, Write, Edit, Glob, Grep, Bash` | "ux spec", "design this screen", "what states does this need", "ux pass" | Runs between `devkit-specify` and `devkit-implementer` on anything with a user interface — the stage this toolkit previously skipped entirely, leaving every interface decision to be made implicitly, mid-implementation. Audits the existing component library and design tokens **before** designing anything, so it reuses rather than reinvents. Enumerates the states that actually break interfaces (empty, loading, partial, error, permission-denied, success, destructive-confirm) rather than only the happy path everyone builds. Reads Figma via MCP when it's configured and translates frames into the project's existing tokens instead of transcribing raw hex and pixel values; works from the feature spec alone when it isn't, which is the normal case and not a degraded one. Writes `specs/<name>.ux.md` — no component code — and **appends its accessibility criteria to the feature spec's own `## Acceptance criteria`**, which is what gives them teeth: the implementer works from criteria, and `devkit-reviewer`/`devkit-ship` gate on them. |
+| `devkit-ship` | `sonnet` | `Read, Bash, Glob, Grep` | "ship check", "preflight", "is this ready to ship", "can I mark this done" | Report-only. Asks the question `devkit-reviewer` doesn't: the diff matches its spec, but is everything *around* it shippable? Five gates — unaccounted acceptance criteria and open follow-ups, CI status (detects the CI system rather than assuming GitHub; reads it via `gh` when that's actually available), test coverage **against whatever threshold the project itself already declares** rather than one invented here, dependency advisories when the diff touched a manifest, and a secrets scan of the diff. Its central rule: **a gate it couldn't run is `UNKNOWN`, never `PASS`** — an unrun check reported as green buys false confidence at precisely the moment someone decides to ship.<br>**Verdict: clear** — every gate passed or was legitimately not applicable.<br>**Verdict: blocked** — a gate failed; lists what to fix, in order.<br>**Verdict: clear-with-unknowns** — nothing failed but something couldn't be checked; never silently promoted to `clear`. |
+| `devkit-docs` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "update the docs", "changelog for this milestone", "release notes", "what docs did this break" | Runs after `devkit-ship` comes back clear. Two jobs, the second mattering more: write the changelog entry (from the user's point of view — "sessions now survive a restart", not "refactored the auth middleware"), and **hunt down the documentation the change just falsified** — the README example that no longer runs, the renamed flag still documented as current, the obsolete setup step. Stale docs beat missing docs for harm, because people follow them. Matches the project's existing changelog format and won't start one where none exists. Fixes what it can verify from the diff and *reports* what it can't, rather than writing a plausible-sounding correction it couldn't confirm. |
 | `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "implement the spec", "build the next milestone", "implement \<feature\>" | Not report-only — writes code and tests. Checks `.claude\rajesh-devkit\test-runners.json` for a cached test command per area first; only derives one from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) — and verifies it actually runs, not just that the marker matched — on a cache miss, writing the result back so future milestones skip re-derivation (verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation). Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
 | `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "audit dependencies", "check for vulnerable packages", "scan dependencies for CVEs", "dependency security check" | Report-only. Detects whichever package ecosystems are present (npm/yarn/pnpm, PyPI, NuGet, pub/Dart, Go, Cargo, Maven, ...) from marker files, then runs `osv-scanner --recursive` as the universal pass (covers most ecosystems in one command) plus ecosystem-native fallbacks (`dotnet list package --vulnerable`, `npm audit`, `pip-audit`) only where the universal pass can't reach (e.g. NuGet without a lock file) — all backed by the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file, unrecognised ecosystem) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
-| `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
+| `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met / **Deferred**, with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
 
 ## Hooks
 
@@ -318,6 +358,20 @@ that `continue-loop.ps1` can grep for it. Three places check for it, on
 purpose, since none of them alone covers every path a milestone could take
 toward implementation:
 
+**How the marker is matched.** The scripts match the ASCII keyword alone
+(`SENSITIVE\s*:`, case-sensitive) — **the lock glyph is not required.** This
+gate fails *open*: a marker that isn't recognised means a milestone that
+should have paused for a human gets auto-delegated instead, silently. Since
+the marker is written by a probabilistic model and read by an exact matcher,
+the matcher is the side that has to be forgiving. Dropping the glyph
+requirement makes every realistic near-miss still escalate — no space after
+the glyph, a variation selector (`U+FE0F`) appended to it, the glyph omitted
+entirely, or the spec file read back through the wrong codepage (which
+mangles the emoji but never the ASCII word). Requiring uppercase keeps
+ordinary prose like "not sensitive: just a note" from tripping it. False
+positives are the safe direction here — one extra question, versus losing
+the gate entirely.
+
 - **`continue-loop.ps1`** — the primary, automated gate. Escalates instead
   of nudging toward implementation, once per milestone (tracked in the same
   nudge-cap state file as an `escalationShown` field) — not on every repeat
@@ -333,6 +387,110 @@ None of the three *enforce* anything — they're all advisory prompts to
 whichever Claude session reads them. The actual decision (implement directly
 at higher reasoning, or standard delegation is fine) is always the user's,
 asked explicitly, every time a new sensitive milestone is encountered.
+
+### Tracked follow-ups — deferred work that can't vanish
+
+A criterion someone decides *not* to implement is the one thing in this loop
+that used to disappear without trace: it stayed unticked in the spec, the
+implementer's report explaining why scrolled out of the session, and nothing
+afterwards remembered it existed. The spec then sat there looking like an
+unfinished job rather than a finished one with a recorded exception.
+
+So a deliberate deferral now goes in the spec itself, in a
+`## Tracked follow-ups` section `devkit-implementer` appends to:
+
+```markdown
+## Tracked follow-ups
+
+- [ ] <the criterion, verbatim from ## Acceptance criteria>
+  - Deferred: 2026-09-17, during M4 - Password reset
+  - Why: depends on the notification service, which isn't built yet
+  - Unblocks when: notifications ship (M7)
+```
+
+Three rules keep it honest:
+
+- **The criterion stays unticked** in `## Acceptance criteria`. A deferred
+  criterion is not a met one, and ticking it to tidy up is the exact silent
+  loss this prevents.
+- **Nothing moves.** The follow-up entry points at the criterion; it never
+  relocates it out of the acceptance list.
+- **It's for deliberate decisions only** — not work someone simply didn't get
+  to, which is what an unfinished run's report is for.
+
+`devkit-reviewer` reads the section and reports every deferred criterion by
+name even when its verdict is still `ship`; it returns `needs-changes` for a
+criterion that's ticked *and* deferred, or dropped with no entry at all.
+`devkit-ship` blocks on any unchecked criterion with no follow-up entry. And
+`devkit-specify` greps these sections before writing a new spec, so a feature
+that's really an old follow-up coming due gets linked to the original instead
+of silently restated as new work.
+
+## Testing this plugin
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
+```
+
+93 assertions, no Pester and no install step — plain PowerShell 5.1, so it
+runs anywhere the plugin does. Invoke it through `devkit-eval` to also get the
+drift checks that no script can make.
+
+Most of it is **behavioral, not unit**: the hook scripts are executed as real
+processes against throwaway fixture projects in `$env:TEMP`, with stdin fed
+from a file and stdout/stderr/exit code captured separately — because exit
+code 2 plus the right stderr text *is* this plugin's contract with the
+harness. Testing the contract survives refactoring in a way that testing
+internals doesn't. Covered: the escalation matcher against every realistic
+rendering of the marker, nudge routing, all five quiet-exit conditions, the
+once-per-milestone escalation state, the 8-nudge cap, telemetry format and
+BOM-freeness, `.gitignore` idempotency, and `session-welcome.ps1` agreeing
+with `continue-loop.ps1` (which is `devkit-help`'s entire promise).
+
+On its first run this suite immediately earned itself, in both directions:
+
+- **A real latent bug** — `track-milestones.ps1` carried a raw `🟨` literal in
+  a comment. That's `U+1F7E8`: astral, 4 bytes, the same hazard class as the
+  lock emoji, even though this README previously listed it among the "3-byte"
+  glyphs that were fine. The static check now rejects any 4-byte UTF-8
+  sequence in a `.ps1` mechanically, since eyeballing is exactly how it got
+  in.
+- **A vacuous test of its own** — the BOM assertion used
+  `String.StartsWith([char]0xFEFF)`, and .NET's default culture-sensitive
+  comparison treats U+FEFF as ignorable, so it matched *every* string, just
+  like `StartsWith('')`. It's checked in raw bytes now.
+
+Both looked identical from the summary line, which is why `devkit-eval` says
+to diagnose before fixing: a test asserting the wrong thing is its own bug,
+and "fixing" the product to satisfy it makes things strictly worse.
+
+### Behavioral evals for the agents and skills
+
+The suite above can't reach the prompt-based components. `evals/` holds
+one case per component in `claude plugin eval`'s own format — a scaffolded
+fixture project, a prompt, and mostly **deterministic** graders
+(`file_exists`, `regex` on file contents, `tool_used`) so a case asserts on
+what the component actually wrote and which tools it actually ran, not on
+a judge's impression of the transcript. `evals/README.md` lists every case
+and the invariant it locks in.
+
+```bash
+claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --max-cost-usd 15
+```
+
+**On Windows, use `tests\run-evals.ps1` instead** — it runs the identical
+case files. The official runner currently passes each scaffold path to
+`bash -c` unescaped, so `C:\Dev\...` arrives as `C:Devrajesh-devkit...` and
+every scaffolded case fails before Claude starts. The bridge script also
+works around two machine-level traps found while getting it running: a
+system-profile `WindowsApps` entry on `PATH` that's access-denied (which
+makes Claude's Bash sandbox refuse to start) and `git fsmonitor--daemon`,
+which detaches on the first `git add` and hangs any runner that waits on the
+whole process tree.
+
+Every eval run is a real Claude session on your credential, separate from
+the desktop app's login. If runs come back with "Failed to authenticate",
+run `claude login` first.
 
 ## What the host project must provide
 
@@ -487,16 +645,26 @@ agent involved, which is worth enabling regardless (Settings → Code security
   check whether something is clearing that state file between nudges (a
   full state reset also clears `escalationShown`, same as the nudge count).
 - **A milestone that should have escalated didn't.** Check the spec file
-  literally contains `🔒 SENSITIVE:` immediately before the flagged
-  requirement, not a paraphrase or a different flagging convention —
-  `continue-loop.ps1` does an exact substring match, not a keyword search.
+  contains the uppercase word `SENSITIVE:` immediately before the flagged
+  requirement. The lock glyph in front of it is optional and so is the
+  spacing — what the matcher needs is the ASCII keyword and its colon (see
+  "How the marker is matched" above). If the requirement was paraphrased
+  ("this one is risky") or flagged with a different convention entirely,
+  nothing will fire; re-run `devkit-specify`, or add the marker by hand.
 - **Contributing to this plugin: don't put a raw emoji literal directly in
   a `.ps1` file's source.** Found the hard way: a BOM-less `.ps1` file's
   4-byte/astral-plane UTF-8 characters (most emoji, including the lock
   marker) get misread by Windows PowerShell 5.1's default-codepage script
   parsing — a real syntax error (`Missing ')' in method call`), not just a
   display glitch. Build the string from its Unicode codepoint instead:
-  `[char]::ConvertFromUtf32(0x1F512)`. The shorter 3-byte glyphs (⬜✅⏳⏸🟨)
+  `[char]::ConvertFromUtf32(0x1F512)`. This applies to the status glyphs too,
+  and one of them is easy to get wrong: ⬜ (`U+2B1C`), ✅ (`U+2705`), ⏳
+  (`U+23F3`) and ⏸ (`U+23F8`) really are 3-byte, but **🟨 is `U+1F7E8` —
+  astral, 4 bytes, same hazard class as the lock**, despite sitting visually
+  alongside the others. `tests\run-tests.ps1` now enforces this mechanically
+  (it rejects any 4-byte UTF-8 sequence in a `.ps1`, comments included) rather
+  than leaving it to eyeballing, which is exactly how 🟨 slipped through. The
+  genuinely 3-byte glyphs
   happened not to break the parser this way, but they were *also* silently
   relying on an accidental cancellation (the same misinterpretation hitting
   both the script's own literals and `Get-Content`'s default-encoding reads
