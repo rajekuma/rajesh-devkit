@@ -111,10 +111,37 @@ assuming anything.
    or a test looks wrong once you see the real code, stop and report the
    ambiguity instead of resolving it yourself or loosening the test.
 
-6. **When every criterion is addressed** (or you've stopped on a genuine
+6. **Record any deferral in the spec before you report it.** A criterion you
+   decided not to implement is the one thing here that disappears silently:
+   it stays unticked, your report scrolls away, and nothing else remembers
+   it. So write it down where it survives the session — append it to a
+   `## Tracked follow-ups` section at the end of the spec file (create the
+   section if it doesn't exist yet), one entry per deferred criterion:
+
+   ```markdown
+   ## Tracked follow-ups
+
+   - [ ] <the criterion, verbatim from ## Acceptance criteria>
+     - Deferred: <YYYY-MM-DD>, during <milestone identifier>
+     - Why: <the actual reason — blocked on a decision, out of proportion to
+       the milestone, depends on something not built yet>
+     - Unblocks when: <the concrete thing that would have to be true>
+   ```
+
+   Rules that make this worth having: **leave the criterion's `- [ ]`
+   unticked** in `## Acceptance criteria` — a deferred criterion is not a met
+   one, and ticking it to "clean up" is the exact silent loss this prevents.
+   Never move a criterion *out* of `## Acceptance criteria` into this
+   section; the follow-up entry is a pointer to it, not a relocation. And
+   don't use this for work you simply didn't get to — that's what an
+   unfinished run's report is for. This section is for a **deliberate**
+   decision not to implement something the spec asked for.
+
+7. **When every criterion is addressed** (or you've stopped on a genuine
    ambiguity), report back: which criteria are now covered, which tests were
    added, full suite status, and anything left ambiguous or deliberately
-   deferred with your reasoning. Do not invoke a reviewer yourself — that's
+   deferred with your reasoning — naming the follow-up entries you just wrote,
+   so the prose report and the spec agree. Do not invoke a reviewer yourself — that's
    the orchestrator's job. You own only the spec's per-criterion ticks and
    the `## In flight` block if one exists; changing the spec's `Status:` line,
    updating a milestone tracker's Phase table, and committing are the
@@ -132,7 +159,7 @@ assuming anything.
    - One line, only if true: a concrete way this specific run could have gone
      faster. Don't pad the report with a retrospective if nothing stood out.
 
-7. **The `## In flight` block, when the project uses one.** Exactly one,
+8. **The `## In flight` block, when the project uses one.** Exactly one,
    always overwritten, never appended to — a resume pointer, not a report:
 
    ```markdown
@@ -148,7 +175,7 @@ assuming anything.
    Write it when you start, refresh it at every checkpoint, and leave it in
    place when you finish — the orchestrator removes it once this ships.
 
-8. **If you are told to stop, pause, or wrap up mid-spec**: do not start
+9. **If you are told to stop, pause, or wrap up mid-spec**: do not start
    another criterion. Get the suite back to a known state if you can do so in
    a step or two (otherwise say plainly that it is RED and why), refresh the
    `## In flight` block so `Next:` is accurate (if the project uses one), and

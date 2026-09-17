@@ -26,9 +26,22 @@ Steps:
    `.claude/rules/` (or an equivalent conventions folder, if this project names it
    differently) apply to what the diff touches, for conventions the diff must follow.
 3. Map every acceptance criterion in the spec to the diff: mark each as Met / Not Met /
-   Partially Met, citing the specific file(s) and line(s) that satisfy or fail it.
+   Partially Met / Deferred, citing the specific file(s) and line(s) that satisfy or
+   fail it.
+
+   **Deferred** means the spec's `## Tracked follow-ups` section has an entry for that
+   criterion. Read that section if it exists. A deferral is a legitimate outcome, not a
+   failure — but it is never invisible: name every deferred criterion in your report
+   with its stated reason, even when you still conclude `ship`. Two things make a
+   deferral illegitimate, and both are `needs-changes`:
+   - A criterion ticked `- [x]` in `## Acceptance criteria` that also appears in
+     `## Tracked follow-ups` — it is being counted as done and deferred at once.
+   - A criterion that the diff plainly doesn't implement, with no follow-up entry and
+     no mention in the implementer's report — that's a silent drop, which is the exact
+     thing the follow-ups section exists to prevent.
 4. Report:
    - Unmet or partially met acceptance criteria, with evidence.
+   - Deferred criteria, each with the reason recorded in `## Tracked follow-ups`.
    - Correctness risks in the diff, with concrete evidence (file/line, failure
      scenario) — not vague impressions.
    - Any out-of-scope changes (diff touches things the spec doesn't call for).
