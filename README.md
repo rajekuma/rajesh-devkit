@@ -304,35 +304,60 @@ prompt already encodes.** A component whose instructions *are* a checklist
 needs a model that executes well. A component whose job is judging what it
 doesn't know needs a model that reasons well.
 
+**Skills** (`model: inherit` — they run on whatever your session runs on):
+
+| Component | Run it on | Why |
+|---|---|---|
+| `devkit-specify` | **a strong model** (Opus / Fable) | Its real job is deciding what it *doesn't* know — which gaps take a default and which must be asked, and whether a requirement touches one of the five sensitive categories when that isn't obvious. That can't be reduced to a checklist; if it could, the checklist would already be in the skill. The failure mode is the worst kind available here: a weaker model fills gaps confidently and produces a *plausible* spec with invented requirements. It looks fine, and everything downstream treats the spec as truth. It also writes the `SENSITIVE:` marker, and the escalation gate cannot catch what was never marked. |
+| `devkit-adr` | **a strong model** (Opus / Fable) | Two judgments carry it: refusing to record a non-decision, and never inventing a rationale. The second is the most damaging failure in this plugin — a fabricated "why" is indistinguishable from a real one and gets quoted back years later by someone assuming a human wrote it. |
+| `devkit-onboard` | anything from Sonnet up | The most procedural component here: inventory, detect the stack, run the test command, write `PROGRESS.md`, run `session-welcome.ps1` to confirm the loop can parse it. Its judgment calls (don't clobber, which ADRs are load-bearing) are stated very explicitly, and explicit instructions are what mid-tier models follow reliably. It also verifies its own work by executing things, so mistakes surface instead of hiding. 9/9 on its eval. |
+| `devkit-help`, `devkit-stats`, `devkit-eval` | anything | Mechanical: relay a status check, read a telemetry log, run a suite. |
+
+**Subagents** (frontmatter `model:` is honoured, and they don't follow your
+session):
+
 | Component | Model | Why |
 |---|---|---|
-| `devkit-specify` | `fable`, `effort: high` | Its real job is deciding what it *doesn't* know — which gaps take a default and which must be asked, and whether a requirement touches one of the five sensitive categories when that isn't obvious. That can't be reduced to a checklist; if it could, the checklist would already be in the skill. The failure mode is the worst kind available here: a weaker model fills gaps confidently and produces a *plausible* spec with invented requirements. It looks fine, and everything downstream treats the spec as truth. It also writes the `SENSITIVE:` marker, and the escalation gate cannot catch what was never marked. |
-| `devkit-adr` | `fable`, `effort: high` | Two judgments carry it: refusing to record a non-decision, and never inventing a rationale. The second is the most damaging failure in this plugin — a fabricated "why" is indistinguishable from a real one and gets quoted back years later by someone assuming a human wrote it. (This is also the most defensible one to downgrade if quota is tight: ADRs are written rarely, the human supplies the alternatives in the interview, and the result is reviewed immediately.) |
 | `devkit-ux` | `sonnet` | Measured, not assumed: 9/9 on its eval, enumerating all eight states, reusing only existing tokens, and deriving the forbidden-vs-not-found consequence of the spec's `SENSITIVE:` requirement unprompted. It works because this component's prompt **is** the expertise — the state list and the accessibility list are written out explicitly, so the model executes a well-specified checklist rather than inventing method. |
-| `devkit-onboard` | `sonnet` | The most procedural component here: inventory, detect the stack, run the test command, write `PROGRESS.md`, run `session-welcome.ps1` to confirm the loop can parse it. Its judgment calls (don't clobber, which ADRs are load-bearing) are stated very explicitly, and explicit instructions are what mid-tier models follow reliably. It also verifies its own work by executing things, so mistakes surface instead of hiding. 9/9 on `sonnet`. |
-| `devkit-implementer`, `devkit-ship`, `devkit-docs`, `devkit-eval` | `sonnet` | Procedure plus evidence-gathering against a spec that already exists. |
-| `devkit-reviewer`, `devkit-dep-audit`, `devkit-help`, `devkit-stats` | `haiku` | Mechanical: map criteria to a diff, run a scanner, relay a status check, read a telemetry log. |
+| `devkit-implementer`, `devkit-ship`, `devkit-docs` | `sonnet` | Procedure plus evidence-gathering against a spec that already exists. |
+| `devkit-reviewer`, `devkit-dep-audit` | `haiku` | Mechanical: map criteria to a diff, run a scanner. |
 
-### When a model hits its rate limit
+### Skills inherit your session model; subagents don't
 
-Model tiers have **separate quotas** — Opus stays available when Fable is
-exhausted, and vice versa. There is no automatic failover, and what recovery
-exists depends on a distinction worth knowing:
+This is the single most useful thing to know about running this plugin, and
+it is not what the frontmatter appears to say.
 
-- **Subagents can be model-switched at call time.** The `Agent` tool takes a
-  `model` parameter that overrides the definition, so a 429 from
-  `devkit-ux`, `devkit-implementer`, `devkit-ship`, `devkit-docs` or
-  `devkit-reviewer` is one retry away from recovering.
-- **Skills cannot.** The `Skill` tool takes only the skill name and its
-  arguments — there is no model override. When `devkit-specify` or
-  `devkit-adr` hits a limit, it fails, and the only fix is editing `model:`
-  in its frontmatter.
+**A skill runs in your session, on your session's model.** Measured, because
+the behaviour isn't documented: `devkit-help` declares `model: haiku`, and
+invoked from a session forced to Opus, all seven of its turns were served by
+`claude-opus-5`. A skill's declared `model:` had no effect on the
+Skill-tool-in-session path — which is how skills are normally invoked. The
+one documented way a skill gets its own model is `context: fork`, which turns
+it into a forked subagent; `devkit-specify` and `devkit-adr` interview you one
+question at a time, and forking would break exactly that, so they stay
+in-session by design.
 
-That asymmetry is why `devkit-onboard` moved to `sonnet` even though it ran
-fine on `fable`: putting a *skill* on your scarcest model is a reliability
-choice, not just a cost one. The two skills still on `fable` are there
-because their failure mode — confidently invented content that reads as
-real — is worse than being unavailable.
+So `devkit-specify`, `devkit-adr`, `devkit-onboard` and `devkit-help` declare
+`model: inherit` — stating plainly what actually happens rather than naming a
+model that is silently ignored.
+
+**The practical consequence: you choose the model for spec and ADR work by
+choosing your session's model.** Specification is where a weak model does the
+most damage — its failure mode is a plausible spec with invented
+requirements, which everything downstream then treats as truth — so run
+`devkit-specify` and `devkit-adr` in a session set to Opus or another strong
+model. If you hit a rate limit mid-spec, open a fresh session on an available
+model and carry on; the skill will follow it. Nothing needs editing.
+
+**Subagents are the opposite.** They honour their frontmatter `model:` and get
+their own context. A 429 from `devkit-ux`, `devkit-implementer`,
+`devkit-ship`, `devkit-docs` or `devkit-reviewer` does not follow your session
+model, and recovery is a retry with the `Agent` tool's `model` parameter,
+which overrides the definition for that one call.
+
+Model tiers have **separate quotas** — Opus stays available while Fable is
+exhausted, and vice versa — so a tier override is a real escape hatch, not
+just a downgrade. There is no automatic failover in either case.
 
 ## Skills
 

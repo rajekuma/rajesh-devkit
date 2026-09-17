@@ -2,7 +2,7 @@
 name: devkit-adr
 description: Writes an architecture decision record for a decision that's actually being made — detects the project's existing ADR convention and numbering, interviews for the alternatives and consequences that can't be inferred, and writes docs/adr/<NNNN>-<kebab-title>.md. Closes the gap where devkit-specify reads decision records but nothing ever writes one. Trigger phrases — "write an ADR", "record this decision", "adr for <decision>", "document why we chose".
 argument-hint: <decision>
-model: fable
+model: inherit
 effort: high
 ---
 

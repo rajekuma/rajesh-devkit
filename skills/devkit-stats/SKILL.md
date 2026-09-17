@@ -1,7 +1,7 @@
 ---
 name: devkit-stats
 description: Reports wall-clock duration, real USD cost (from the session transcript's own token usage), and a heuristic manual-effort comparison per milestone — using this plugin's local telemetry log (written by continue-loop.ps1 and track-milestones.ps1) plus token-report.ps1's deterministic transcript scan. Trigger phrases — "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report".
-model: haiku
+model: inherit
 ---
 
 # Dev loop stats report

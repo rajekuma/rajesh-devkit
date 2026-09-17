@@ -1,7 +1,7 @@
 ---
 name: devkit-eval
 description: Runs this plugin's own regression suite and checks its prompt-based components for drift — the deterministic script tests in tests/run-tests.ps1, plus the invariants those tests can't reach (component boundaries, defined verdict lines, README claims that no longer match the code). Run it after editing any part of this plugin, before committing. Trigger phrases — "run the devkit tests", "eval the plugin", "check the plugin still works", "devkit regression".
-model: sonnet
+model: inherit
 ---
 
 # Evaluate this plugin

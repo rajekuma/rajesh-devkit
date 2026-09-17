@@ -1,7 +1,7 @@
 ---
 name: devkit-onboard
 description: Gets a project onto this toolkit's loop — inventories what already exists (CLAUDE.md, specs/, docs/adr/, milestone trackers, other .claude assets), detects the stack and seeds the test-runner cache, then proposes a PROGRESS.md and any load-bearing ADRs to backfill. Handles both a brand-new project and one with existing code and history, without clobbering anything already there. Trigger phrases — "onboard this project", "set up devkit here", "get this repo on the loop", "bootstrap this project".
-model: sonnet
+model: inherit
 ---
 
 # Onboard a project onto the dev loop

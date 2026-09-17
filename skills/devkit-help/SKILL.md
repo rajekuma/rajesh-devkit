@@ -1,7 +1,7 @@
 ---
 name: devkit-help
 description: Explains what to do next with this plugin right now — reports setup status (whether PROGRESS.md exists, the next milestone, whether it has a spec yet) and the exact thing to say to move forward. This is the verified, on-demand fallback for the automatic SessionStart banner, which runs the identical check. Trigger phrases — "how do I use this plugin", "devkit help", "get me started", "what's next", "getting started with rajesh-devkit".
-model: haiku
+model: inherit
 ---
 
 # devkit-help
