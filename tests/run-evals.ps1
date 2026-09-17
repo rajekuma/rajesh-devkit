@@ -293,9 +293,28 @@ $subject
             $judgeOut = Join-Path $Ctx.RunDir 'judge.jsonl'
             $r = Invoke-Claude -WorkDir $Ctx.RunDir -Prompt $judgePrompt -TimeoutSec 180 -OutFile $judgeOut -Judge
             $jt = Read-Trace $judgeOut
-            $verdict = ($jt.LastMessage -split "\r?\n")[0].Trim()
             $Ctx.Cost += $jt.Cost
-            return @{ Pass = ($verdict -match '^PASS'); Detail = ($jt.LastMessage -replace "\r?\n", ' ' | ForEach-Object { if ($_.Length -gt 160) { $_.Substring(0, 160) + '...' } else { $_ } }) }
+            $answer = [string]$jt.LastMessage
+
+            # Fail closed on an ambiguous verdict. Reading only the first word
+            # is not enough: a judge really did reply
+            # "PASS: No wait, let me reconsider - actually FAIL." and the
+            # first-word check scored that as a pass, which is the worst
+            # possible failure mode for a grader - it masks a real regression
+            # behind a green line. If the response contains both words as
+            # standalone tokens, the judge did not decide, so neither do we.
+            $saysPass = $answer -cmatch '\bPASS\b'
+            $saysFail = $answer -cmatch '\bFAIL\b'
+            $flat = ($answer -replace "\r?\n", ' ')
+            if ($flat.Length -gt 160) { $flat = $flat.Substring(0, 160) + '...' }
+
+            if ($saysPass -and $saysFail) {
+                return @{ Pass = $false; Detail = "AMBIGUOUS judge verdict (said both PASS and FAIL) - treated as fail: $flat" }
+            }
+            if (-not $saysPass -and -not $saysFail) {
+                return @{ Pass = $false; Detail = "NO judge verdict found - treated as fail: $flat" }
+            }
+            return @{ Pass = $saysPass; Detail = $flat }
         }
         default { return @{ Pass = $false; Detail = "unsupported grader type '$($Grader['type'])'" } }
     }

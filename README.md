@@ -122,7 +122,10 @@ rajesh-devkit/
 │   └── devkit-stats/
 │       └── SKILL.md             # timing + real cost + heuristic effort report
 ├── tests/
-│   └── run-tests.ps1            # regression suite for this plugin (no Pester needed)
+│   ├── helpers.js              # throwaway fixtures + real-process hook runner
+│   ├── static.test.js          # well-formedness: parse, ASCII, frontmatter, hooks.json
+│   ├── hooks.test.js           # behavioural: real processes, real exit codes
+│   └── run-evals.ps1           # Windows bridge for `claude plugin eval` (see evals/)
 ├── hooks/
 │   └── hooks.json               # SessionStart -> session-welcome.js
 │                                 # Stop -> continue-loop.js
@@ -135,9 +138,8 @@ rajesh-devkit/
 │   ├── run-verify.js           # PostToolUse hook: host's verify.js/.sh/.ps1
 │   ├── track-milestones.js     # PostToolUse hook: log milestone-shipped events
 │   ├── session-welcome.js      # SessionStart hook: "what's next" banner
-│   └── token-report.ps1         # not a hook - invoked by devkit-stats on demand;
+│   └── token-report.js         # not a hook - invoked by devkit-stats on demand;
 │                                 # scans session transcripts for real cost/tokens
-│                                 # STILL POWERSHELL, so Windows-only for now
 └── README.md
 ```
 
@@ -164,16 +166,17 @@ want it in. Confirm it loaded with `claude plugin list`, then say
 do next in that specific repository.
 
 **Requirements.** Node — and you already have it, because Claude Code is a
-Node program, which is exactly why the hooks are written in it. **Everything
-except one script runs on Windows, macOS and Linux alike.**
+Node program, which is exactly why every script here is written in it.
+**The whole plugin runs on Windows, macOS and Linux alike**: the four hooks,
+the cost scanner `devkit-stats` uses, and the regression suite (`node --test`,
+built in — no Pester, no npm install).
 
-The exception is `scripts/token-report.ps1`, which is still PowerShell and so
-still Windows-only. It isn't a hook; `devkit-stats` invokes it on demand to
-read real USD cost out of session transcripts. On macOS or Linux,
-`devkit-stats` reports duration and the manual-effort comparison and says
-plainly that cost is unavailable on this platform, rather than reporting
-`$0.00` — an absent number reported as absent is fine, reported as zero is a
-wrong answer.
+One file stays PowerShell, deliberately: `tests/run-evals.ps1` exists
+*because* of a Windows-specific bug — `claude plugin eval` passes scaffold
+paths to `bash -c` unescaped there, so `C:\Dev\...` arrives mangled and every
+scaffolded case dies before Claude starts. On macOS and Linux the official
+runner works, and that's what you should use. Porting a Windows workaround to
+other platforms would be a contradiction.
 
 <details>
 <summary>Other install routes</summary>
@@ -424,7 +427,7 @@ just a downgrade. There is no automatic failover in either case.
 | `devkit-eval` | "run the devkit tests", "eval the plugin", "check the plugin still works", "devkit regression" | `sonnet` | This plugin's own regression check, for editing *this repo* rather than a host project. Runs `tests/run-tests.ps1` (below), then checks the half no script can assert: that report-only components still declare themselves report-only, that nothing has quietly gained permission to commit, that verdict strings the orchestrator routes on are unchanged, that the handoff chain in the prompts still matches the chain in `continue-loop.js`'s nudge messages, and that the README hasn't drifted from the code. |
 | `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. Marks any requirement touching an existing invariant, a security/auth boundary, a data-model change, an external integration, or a backward-compatibility break with `🔒 SENSITIVE:` — the marker the escalation gate (see "Hooks" below) keys off of — and leads its final report with those flags if any exist. |
 | `devkit-help` | "how do I use this plugin", "devkit help", "get me started", "what's next", "getting started with rajesh-devkit" | `haiku` | Runs the same state check as the `SessionStart` hook (below) and relays it conversationally — the verified on-demand fallback for the automatic banner. Read-only. |
-| `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.ps1`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
+| `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.js`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
 
 ## Subagents
 
@@ -506,6 +509,24 @@ whichever Claude session reads them. The actual decision (implement directly
 at higher reasoning, or standard delegation is fine) is always the user's,
 asked explicitly, every time a new sensitive milestone is encountered.
 
+**Measured limitation, worth knowing before you rely on this.** The gate
+holds for the *loop* case — nudge, next turn, escalate — and **does not hold
+reliably for the same-turn case.** Told *"continue with the next milestone"*,
+a session implemented a `SENSITIVE:`-flagged milestone in one turn across
+three eval runs — writing the code, adding tests, once marking `PROGRESS.md`
+done — and only then asked, or didn't ask at all. The cause is structural:
+`continue-loop.js` is a `Stop` hook and a single straight-through turn never
+stops in between, so only `SessionStart` can act first, and that is prose a
+model may not treat as binding. Rewording it more forcefully did not change
+the outcome.
+
+`evals/escalation-gate-integration` is deliberately left **failing** as the
+mechanical record of this. Real enforcement would need a `PreToolUse` hook
+that *denies* `Edit`/`Write` while the current milestone is flagged and
+unacknowledged — a design change, not a fix, and not built. Until then: if a
+milestone is genuinely sensitive, decide the approach before saying
+"continue", rather than trusting the gate to interrupt you.
+
 ### Tracked follow-ups — deferred work that can't vanish
 
 A criterion someone decides *not* to implement is the one thing in this loop
@@ -546,24 +567,32 @@ of silently restated as new work.
 
 ## Testing this plugin
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
+```bash
+node --test
 ```
 
-93 assertions, no Pester and no install step — plain PowerShell 5.1, so it
-runs anywhere the plugin does. Invoke it through `devkit-eval` to also get the
-drift checks that no script can make.
+36 test cases, `node:test` — built in, so no Pester, no npm install, nothing
+to set up, and it runs on Windows, macOS and Linux alike. Invoke it through
+`devkit-eval` to also get the drift checks that no script can make.
 
-Most of it is **behavioral, not unit**: the hook scripts are executed as real
-processes against throwaway fixture projects in `$env:TEMP`, with stdin fed
-from a file and stdout/stderr/exit code captured separately — because exit
-code 2 plus the right stderr text *is* this plugin's contract with the
-harness. Testing the contract survives refactoring in a way that testing
-internals doesn't. Covered: the escalation matcher against every realistic
-rendering of the marker, nudge routing, all five quiet-exit conditions, the
-once-per-milestone escalation state, the 8-nudge cap, telemetry format and
-BOM-freeness, `.gitignore` idempotency, and `session-welcome.js` agreeing
-with `continue-loop.js` (which is `devkit-help`'s entire promise).
+(`node --test tests/` does **not** work on Node 22 — it treats the directory
+as a module path and fails with `Cannot find module`. Bare `node --test`
+auto-discovers `*.test.js`.)
+
+Most of it is **behavioral, not unit**: the hooks are executed as real
+processes against throwaway fixture projects under the OS temp dir, with
+stdin fed a JSON payload and stdout/stderr/exit code captured separately —
+because exit code 2 plus the right stderr text *is* this plugin's contract
+with the harness. Testing the contract survives refactoring in a way that
+testing internals doesn't, and it proved that: **this suite carried over from
+the PowerShell hooks to the Node ones without a single behavioural assertion
+changing.** Covered: the escalation matcher against every realistic rendering
+of the marker, nudge routing, every quiet-exit condition, all three hooks
+deferring together to a project's own loop, the once-per-milestone escalation
+state, the 8-nudge cap, telemetry format and BOM-freeness, `.gitignore`
+idempotency, `run-verify`'s exit-code pass-through and lookup order, and
+`session-welcome.js` agreeing with `continue-loop.js` (which is
+`devkit-help`'s entire promise).
 
 On its first run this suite immediately earned itself, in both directions:
 
@@ -571,8 +600,8 @@ On its first run this suite immediately earned itself, in both directions:
   a comment. That's `U+1F7E8`: astral, 4 bytes, the same hazard class as the
   lock emoji, even though this README previously listed it among the "3-byte"
   glyphs that were fine. The static check now rejects any 4-byte UTF-8
-  sequence in a `.ps1` mechanically, since eyeballing is exactly how it got
-  in.
+  sequence mechanically, since eyeballing is exactly how it got in. (The
+  hooks are Node now, and the equivalent check keeps their sources ASCII.)
 - **A vacuous test of its own** — the BOM assertion used
   `String.StartsWith([char]0xFEFF)`, and .NET's default culture-sensitive
   comparison treats U+FEFF as ignorable, so it matched *every* string, just
@@ -710,7 +739,7 @@ hook.** A milestone implemented by hand in a session that never stopped
 won't have a `milestone_started` event and won't show a duration —
 `devkit-stats` says so rather than silently omitting it.
 
-**Real USD cost per milestone.** `scripts/token-report.ps1` scans this
+**Real USD cost per milestone.** `scripts/token-report.js` scans this
 project's own session transcripts — the main session and every delegated
 subagent run — for a given time window and sums their real `usage` fields.
 It finds the right transcript directory deterministically from
@@ -813,7 +842,7 @@ agent involved, which is worth enabling regardless (Settings → Code security
   and one of them is easy to get wrong: ⬜ (`U+2B1C`), ✅ (`U+2705`), ⏳
   (`U+23F3`) and ⏸ (`U+23F8`) really are 3-byte, but **🟨 is `U+1F7E8` —
   astral, 4 bytes, same hazard class as the lock**, despite sitting visually
-  alongside the others. `tests\run-tests.ps1` now enforces this mechanically
+  alongside the others. The suite now enforces this mechanically
   (it rejects any 4-byte UTF-8 sequence in a `.ps1`, comments included) rather
   than leaving it to eyeballing, which is exactly how 🟨 slipped through. The
   genuinely 3-byte glyphs
@@ -873,9 +902,9 @@ agent involved, which is worth enabling regardless (Settings → Code security
   when the work happened — a milestone whose telemetry got reset partway
   through (see the Telemetry section's "shipped, no started event" case)
   has no valid window to scan, and `$0`/`unavailable` is the honest answer,
-  not a bug in `token-report.ps1`.
+  not a bug in `token-report.js`.
 - **`devkit-stats` shows a cost total but `unknownModelTokens` is
-  non-zero.** A model outside `token-report.ps1`'s pricing table appeared in
+  non-zero.** A model outside `token-report.js`'s pricing table appeared in
   the window — check its `byModel` output for which one, then update the
   `$Pricing` table in the script if it's a model this plugin should know
   about now.
@@ -892,7 +921,7 @@ agent involved, which is worth enabling regardless (Settings → Code security
   you launch Claude from is the quick check; if that fails, install Node or
   add it to `PATH`.
 - **PowerShell execution policy errors.** No longer applicable to the hooks —
-  they're Node now. It can still bite `scripts/token-report.ps1` (invoked by
+  they're Node now. It can still bite `scripts/token-report.js` (invoked by
   `devkit-stats`) and this repo's own `tests/run-*.ps1`. Related and worth
   knowing if you install Claude Code via npm: the `claude.ps1` shim npm
   creates is unsigned, so a default execution policy refuses it with *"cannot
@@ -924,10 +953,10 @@ agent involved, which is worth enabling regardless (Settings → Code security
 | `7ba1949` | 2026-09-15 | Fixed `devkit-implementer`'s missing broken-tooling branch and ambiguous "minimum code" guidance — found by a real RED-GREEN run (`npm test` genuinely fails on Node 22/Windows) |
 | `8e3d28c` | 2026-09-15 | Fixed `devkit-reviewer`'s untracked-files gap and hardcoded rule filenames — found by a real review run against freshly created, unstaged files |
 | `afc0d00` | 2026-09-15 | Fixed `devkit-dep-audit` creating a `package-lock.json` to make `npm audit` runnable, violating its own report-only contract; also fixed advisory-list truncation |
-| `ae54ee7` | 2026-09-15 | Added `token-report.ps1` (real USD cost from session transcripts, pricing sourced from the `claude-api` skill, verified against a real transcript) and extended `devkit-stats` with cost + a heuristic manual-effort/speedup comparison; dogfooding this one too found and fixed a real pairing gap (a `milestone_shipped` event with no preceding `milestone_started` — a telemetry reset mid-milestone, not a bug — wasn't handled, only the reverse case was) |
+| `ae54ee7` | 2026-09-15 | Added `token-report.js` (real USD cost from session transcripts, pricing sourced from the `claude-api` skill, verified against a real transcript) and extended `devkit-stats` with cost + a heuristic manual-effort/speedup comparison; dogfooding this one too found and fixed a real pairing gap (a `milestone_shipped` event with no preceding `milestone_started` — a telemetry reset mid-milestone, not a bug — wasn't handled, only the reverse case was) |
 | `f63d6fd` | 2026-09-15 | Added a spec-existence check to `continue-loop.ps1` (it previously nudged toward implementing a milestone even with no spec yet — verified in all three cases: no spec, kebab-case filename match, header-scan fallback match); added `session-welcome.ps1` (`SessionStart` hook) and `devkit-help` (the verified on-demand fallback, since `SessionStart`'s exact on-screen behavior couldn't be tested against a live harness) |
 | `a23f59f` | 2026-09-16 | Documented the existing/downloaded-project onboarding path alongside the brand-new-project one — inventory existing `.claude` components first, review rather than regenerate an existing `CLAUDE.md`, read existing docs for product intent instead of starting fresh, and the lightweight-vs-thorough `PROGRESS.md` retrofit choice |
-| `070a524` | 2026-09-16 | Fixed `token-report.ps1`: a dated model-snapshot ID (`claude-haiku-4-5-20251001`) wasn't matching the pricing table's bare key, silently understating a real report's total by ~10% — found running an actual report, not a scripted test |
+| `070a524` | 2026-09-16 | Fixed `token-report.js`: a dated model-snapshot ID (`claude-haiku-4-5-20251001`) wasn't matching the pricing table's bare key, silently understating a real report's total by ~10% — found running an actual report, not a scripted test |
 | `97d392e` | 2026-09-16 | Moved telemetry from `%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl` to in-project `.claude/rajesh-devkit/` (gitignored automatically, one idempotent `.gitignore` edit) — asked directly why it wasn't in-project, and the portability/discoverability tradeoffs favored moving it; verified against a `.gitignore` with no trailing newline and an already-existing one |
 | `4b457ce` | 2026-09-16 | `devkit-implementer` now caches the discovered test-runner command in `.claude/rajesh-devkit/test-runners.json` instead of re-deriving it every milestone — considered (and rejected, with reasoning) a Haiku subagent for running tests and a hook that auto-commits/pushes first; caching the test command was the one of the three that actually held up. Verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation |
 | `0b0afcc` | 2026-09-16 | Added the sensitive-milestone escalation gate (`devkit-specify` marks `🔒 SENSITIVE:`, three places check for it — `continue-loop.ps1`, `session-welcome.ps1`/`devkit-help`, `devkit-specify`'s own report — shown once per milestone) from a full-plugin gap analysis. Testing it for real surfaced a genuine bug: a raw emoji literal in a BOM-less `.ps1` file broke PowerShell 5.1's parser outright, which in turn revealed the *existing* status-glyph matching had only ever worked by an accidental cancellation of two encoding bugs. Fixed properly across all three affected scripts — every glyph built from a verified codepoint, every relevant `Get-Content` call explicit about `-Encoding UTF8` |

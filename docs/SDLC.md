@@ -321,7 +321,7 @@ returns `needs-changes` for a criterion that is ticked *and* deferred.
 
 A toolkit that runs unattended fails quietly, so it carries two suites.
 
-**`tests/run-tests.ps1`** — 97 assertions against the PowerShell hooks. Mostly
+**`node --test`** — 36 cases against the hooks. Mostly
 behavioural rather than unit: the hooks run as real processes against
 throwaway fixture projects, with exit codes and stderr asserted, because
 `exit 2` plus the right message *is* the contract with the harness.

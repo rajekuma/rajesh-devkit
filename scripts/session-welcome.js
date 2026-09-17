@@ -99,10 +99,13 @@ if (d.isSensitiveSpec(specPath)) {
 rajesh-devkit: next milestone is ${milestone.display} - its spec (${specPath}) flags
 one or more requirements as SENSITIVE (an existing invariant, a
 security/authorization boundary, a data-model change, an external
-integration, or a backward-compatibility break). Before implementing:
-decide whether to implement this one yourself at higher reasoning instead
-of delegating to devkit-implementer, or whether standard delegation is
-fine here - that's your call to make, not something to skip past.
+integration, or a backward-compatibility break).
+
+Nothing should be written for this milestone until you decide the approach:
+implement it yourself at higher reasoning, or delegate to
+devkit-implementer as normal. That choice is yours to make before the work
+starts, not after - being shown finished code and asked to bless it is not
+the same decision.
 `);
 } else if (!specPath) {
   say(`

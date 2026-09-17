@@ -1,0 +1,161 @@
+'use strict';
+
+// Static checks: the plugin's own files are well-formed. These are the cheap
+// ones - they catch a syntax error in a hook (which the harness would only
+// ever see as an unexplained non-zero exit), a component the harness can't
+// trigger because its frontmatter lost its trigger phrases, or a hooks.json
+// pointing at a file that isn't in the repo.
+
+const { test } = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const { PLUGIN_ROOT } = require('./helpers');
+
+function scriptFiles() {
+  const dir = path.join(PLUGIN_ROOT, 'scripts');
+  const out = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith('.js')) out.push(full);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
+test('every script parses', () => {
+  const files = scriptFiles();
+  assert.ok(files.length >= 6, `expected at least 6 .js scripts, found ${files.length}`);
+  for (const f of files) {
+    const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, `${path.basename(f)} failed node --check: ${r.stderr}`);
+  }
+});
+
+test('script sources are pure ASCII', () => {
+  // JS has no astral-parsing bug the way a BOM-less .ps1 did, but keeping
+  // these files ASCII means no editor, codepage or transfer mishap can
+  // corrupt a glyph the matchers depend on. That is not hypothetical: a raw
+  // 4-byte emoji in a .ps1 here was a real parse error, and a second one sat
+  // undetected in a comment until a test looked for it.
+  for (const f of scriptFiles()) {
+    const bytes = fs.readFileSync(f);
+    const bad = bytes.findIndex((b) => b > 0x7f);
+    assert.strictEqual(
+      bad,
+      -1,
+      `${path.basename(f)} has a non-ASCII byte at offset ${bad} - use a \\u{...} escape`
+    );
+  }
+});
+
+test('no script hardcodes an absolute Windows path', () => {
+  for (const f of scriptFiles()) {
+    const text = fs.readFileSync(f, 'utf8');
+    const m = text.match(/'[A-Za-z]:\\\\/);
+    assert.strictEqual(m, null, `${path.basename(f)} has an absolute Windows path - use path.join`);
+  }
+});
+
+test('the PowerShell hooks are gone, not shadowed', () => {
+  // Two implementations of the same logic is the drift this plugin keeps
+  // warning about. The port deleted the originals; this makes sure a stray
+  // .ps1 hook never reappears alongside its .js replacement.
+  const strays = fs
+    .readdirSync(path.join(PLUGIN_ROOT, 'scripts'))
+    .filter((f) => f.endsWith('.ps1'));
+  assert.deepStrictEqual(strays, [], `unexpected PowerShell scripts: ${strays.join(', ')}`);
+});
+
+test('every hooks.json command is node, and points at a real file', () => {
+  // Checked structurally, against parsed `command` values - NOT by grepping
+  // for "powershell". The first version of this test did that and failed
+  // three ways at once: hooks.json's own description, a comment in
+  // lib/devkit.js, and run-verify.js, which invokes powershell.exe on purpose
+  // to run a Windows project's verify.ps1. Matching prose is not measuring
+  // behaviour.
+  const hooks = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, 'hooks', 'hooks.json'), 'utf8'));
+  const entries = [];
+  for (const event of Object.values(hooks.hooks)) {
+    for (const group of event) {
+      for (const h of group.hooks) entries.push(h);
+    }
+  }
+  assert.ok(entries.length >= 4, `expected at least 4 hooks, found ${entries.length}`);
+  for (const h of entries) {
+    assert.strictEqual(h.command, 'node', `hook command is "${h.command}" - would not run off Windows`);
+    const target = h.args.find((a) => a.includes('scripts/'));
+    assert.ok(target, 'hook has no script argument');
+    const rel = target.replace('${CLAUDE_PLUGIN_ROOT}/', '');
+    assert.ok(fs.existsSync(path.join(PLUGIN_ROOT, rel)), `hooks.json points at missing ${rel}`);
+  }
+});
+
+test('every agent and skill has valid frontmatter', () => {
+  const components = [];
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) {
+    if (f.endsWith('.md')) {
+      components.push({ file: path.join(PLUGIN_ROOT, 'agents', f), expected: f.replace(/\.md$/, ''), kind: 'agent' });
+    }
+  }
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'), { withFileTypes: true })) {
+    if (!d.isDirectory()) continue;
+    const skill = path.join(PLUGIN_ROOT, 'skills', d.name, 'SKILL.md');
+    if (fs.existsSync(skill)) components.push({ file: skill, expected: d.name, kind: 'skill' });
+  }
+  assert.ok(components.length >= 10, `expected at least 10 components, found ${components.length}`);
+
+  for (const c of components) {
+    const text = fs.readFileSync(c.file, 'utf8');
+    const fm = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    assert.ok(fm, `${c.kind} ${c.expected} has no frontmatter block`);
+
+    const name = fm[1].match(/^name:\s*(\S+)\s*$/m);
+    assert.ok(name, `${c.kind} ${c.expected} declares no name`);
+    assert.strictEqual(name[1], c.expected, `${c.kind} name does not match its file/folder`);
+
+    assert.match(
+      fm[1],
+      /^description:\s*\S/m,
+      `${c.kind} ${c.expected} has no description - the harness uses it to decide when to trigger`
+    );
+
+    // Every component is namespaced, so it can never collide with a host
+    // project's own same-named skill or agent.
+    assert.ok(
+      c.expected.startsWith('devkit-'),
+      `${c.kind} ${c.expected} is not devkit- prefixed`
+    );
+  }
+});
+
+test('skills declare model: inherit, agents pin a model', () => {
+  // Measured, not assumed: a skill's `model:` is ignored on the
+  // Skill-tool-in-session path - devkit-help declaring haiku ran all seven of
+  // its turns on opus when the session was opus. Skills therefore say
+  // `inherit` rather than naming a model that is silently discarded.
+  // Subagents genuinely honour theirs.
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'), { withFileTypes: true })) {
+    if (!d.isDirectory()) continue;
+    const file = path.join(PLUGIN_ROOT, 'skills', d.name, 'SKILL.md');
+    if (!fs.existsSync(file)) continue;
+    const model = fs.readFileSync(file, 'utf8').match(/^model:\s*(\S+)\s*$/m);
+    if (model) {
+      assert.strictEqual(
+        model[1],
+        'inherit',
+        `skill ${d.name} declares model: ${model[1]}, which is ignored - use inherit`
+      );
+    }
+  }
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) {
+    if (!f.endsWith('.md')) continue;
+    const model = fs.readFileSync(path.join(PLUGIN_ROOT, 'agents', f), 'utf8').match(/^model:\s*(\S+)\s*$/m);
+    assert.ok(model, `agent ${f} pins no model`);
+    assert.notStrictEqual(model[1], 'inherit', `agent ${f} says inherit, but subagents honour their own model`);
+  }
+});

@@ -89,12 +89,20 @@ if (showEscalation) {
     `Next milestone from PROGRESS.md: ${milestone.display}. Its spec (${specPath}) flags one ` +
     'or more requirements as SENSITIVE (an existing invariant, a security/authorization ' +
     'boundary, a data-model change, an external integration, or a backward-compatibility ' +
-    'break). STOP before delegating to devkit-implementer: ask the user one question ' +
-    '(e.g. via AskUserQuestion) - implement this milestone directly yourself at higher ' +
-    'reasoning, or standard delegation to devkit-implementer is fine for this one. Wait ' +
-    'for their answer before proceeding either way; do not decide this yourself and do ' +
-    'not auto-delegate. This is a one-time gate for this milestone - once answered, ' +
-    'proceed with strict TDD as normal and invoke devkit-reviewer when done.';
+    'break). ' +
+    // Worded to forbid BOTH routes, because the earlier version only said
+    // "STOP before delegating" and an eval caught a session reading that as
+    // permission to implement the milestone itself and ask afterwards - the
+    // code was already written by the time the question arrived, which is
+    // exactly the outcome this gate exists to prevent.
+    'WRITE NO CODE YET. Do not edit, create or delete any file for this milestone, ' +
+    'and do not invoke devkit-implementer. Ask the user one question first (e.g. via ' +
+    'AskUserQuestion): should you implement this milestone directly yourself at higher ' +
+    'reasoning, or is standard delegation to devkit-implementer fine for this one? Then ' +
+    'wait. Asking after starting the work does not satisfy this gate - the point is that ' +
+    'a human chooses the approach BEFORE anything is written, not that they are informed ' +
+    'once it exists. This is a one-time gate for this milestone: once answered, proceed ' +
+    'with strict TDD as normal and invoke devkit-reviewer when done.';
 } else if (!specPath) {
   message =
     `Next milestone from PROGRESS.md: ${milestone.display}. No spec exists for it yet - ` +

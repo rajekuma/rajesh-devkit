@@ -1,6 +1,6 @@
 ---
 name: devkit-stats
-description: Reports wall-clock duration, real USD cost (from the session transcript's own token usage), and a heuristic manual-effort comparison per milestone — using this plugin's local telemetry log (written by continue-loop.js and track-milestones.js) plus token-report.ps1's deterministic transcript scan. Trigger phrases — "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report".
+description: Reports wall-clock duration, real USD cost (from the session transcript's own token usage), and a heuristic manual-effort comparison per milestone — using this plugin's local telemetry log (written by continue-loop.js and track-milestones.js) plus token-report.js's deterministic transcript scan. Trigger phrases — "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report".
 model: inherit
 ---
 
@@ -27,7 +27,7 @@ Cost is computed from every assistant turn's own `usage` field in this
 project's session transcripts — main session and every delegated subagent
 run, both — for the window between a milestone's started/shipped
 timestamps. This is real spend, not an estimate, but it has real limits:
-pricing is a table baked into `token-report.ps1`, not fetched live, so it
+pricing is a table baked into `token-report.js`, not fetched live, so it
 goes stale if Anthropic changes prices after this plugin's last update; a
 model outside that table reports its tokens but not its cost (flagged, not
 silently dropped or guessed).
@@ -62,20 +62,12 @@ silently dropped or guessed).
      milestone if a spec exists.
 
 3. **For each *shipped* milestone, get real cost from the transcripts.** Run
-   `${CLAUDE_PLUGIN_ROOT}/scripts/token-report.ps1` with that milestone's
+   `${CLAUDE_PLUGIN_ROOT}/scripts/token-report.js` with that milestone's
    started/shipped timestamps as the window:
 
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/scripts/token-report.ps1" -ProjectDir "$env:CLAUDE_PROJECT_DIR" -StartTime "<started ts>" -EndTime "<shipped ts>"
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/token-report.js" --project-dir "$CLAUDE_PROJECT_DIR" --start-time "<started ts>" --end-time "<shipped ts>"
    ```
-
-   **This one is still PowerShell and so still Windows-only** — the hooks were
-   ported to Node so they'd run everywhere, and this script hasn't been yet.
-   On macOS or Linux, `powershell.exe` won't exist: say plainly that real cost
-   is unavailable on this platform rather than reporting `$0.00` or guessing
-   from token counts, and carry on with the duration and manual-effort parts,
-   which need no transcript scan. An absent number reported as absent is fine;
-   an absent number reported as zero is a wrong answer.
 
    It returns JSON: `totalCostUsd`, `unknownModelTokens` (tokens from a model
    not in its pricing table — surface this, don't silently exclude it from

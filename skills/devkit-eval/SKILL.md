@@ -1,6 +1,6 @@
 ---
 name: devkit-eval
-description: Runs this plugin's own regression suite and checks its prompt-based components for drift — the deterministic script tests in tests/run-tests.ps1, plus the invariants those tests can't reach (component boundaries, defined verdict lines, README claims that no longer match the code). Run it after editing any part of this plugin, before committing. Trigger phrases — "run the devkit tests", "eval the plugin", "check the plugin still works", "devkit regression".
+description: Runs this plugin's own regression suite and checks its prompt-based components for drift — the deterministic hook tests run by `node --test`, plus the invariants those tests can't reach (component boundaries, defined verdict lines, README claims that no longer match the code). Run it after editing any part of this plugin, before committing. Trigger phrases — "run the devkit tests", "eval the plugin", "check the plugin still works", "devkit regression".
 model: inherit
 ---
 
@@ -16,13 +16,18 @@ check both.
 
 ## 1. The deterministic half — run the suite
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/tests/run-tests.ps1"
+```bash
+node --test
 ```
 
-Covers the PowerShell hooks end-to-end: real processes, real exit codes, real
-stderr, against throwaway fixture projects in `$env:TEMP`. Exit 0 means all
-green; exit 1 prints each failure with its reason.
+Run from the plugin root. `node:test` is built in — no Pester, no npm
+install, nothing to set up, and it runs on Windows, macOS and Linux alike.
+(Note: `node --test tests/` fails on Node 22, which treats the directory as
+a module path; bare `node --test` auto-discovers `*.test.js`.)
+
+Covers the hooks end-to-end: real processes, real exit codes, real stderr,
+against throwaway fixture projects under the OS temp dir. Exit 0 means all
+green; a failure prints the assertion and its location.
 
 **If something fails, diagnose before you fix.** The suite has already caught
 one genuine latent bug (a 4-byte emoji literal in a `.ps1`) and one vacuous
