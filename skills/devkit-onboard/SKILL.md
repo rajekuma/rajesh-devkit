@@ -127,8 +127,9 @@ user confirms.
 
 7. **Verify the loop can actually see what you built.** Before declaring
    this done, confirm the machinery works rather than assuming it:
-   - Run `scripts/session-welcome.ps1` (the same check `devkit-help` runs)
-     and confirm it identifies the next milestone correctly. If it reports
+   - Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/session-welcome.js"` (the same
+     check `devkit-help` runs) and confirm it identifies the next milestone
+     correctly. If it reports
      nothing queued while `PROGRESS.md` plainly has unstarted rows, the
      tracker's format isn't parseable — fix that now, because every hook in
      this plugin depends on it.

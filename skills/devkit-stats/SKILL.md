@@ -1,6 +1,6 @@
 ---
 name: devkit-stats
-description: Reports wall-clock duration, real USD cost (from the session transcript's own token usage), and a heuristic manual-effort comparison per milestone — using this plugin's local telemetry log (written by continue-loop.ps1 and track-milestones.ps1) plus token-report.ps1's deterministic transcript scan. Trigger phrases — "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report".
+description: Reports wall-clock duration, real USD cost (from the session transcript's own token usage), and a heuristic manual-effort comparison per milestone — using this plugin's local telemetry log (written by continue-loop.js and track-milestones.js) plus token-report.ps1's deterministic transcript scan. Trigger phrases — "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report".
 model: inherit
 ---
 
@@ -15,10 +15,10 @@ a judgment call, and the report must never blur that distinction.
 ## What this can and can't tell you right now
 
 Only milestones actually driven through this plugin's `Stop` hook
-(`continue-loop.ps1`) get a "started" timestamp, and only a `PROGRESS.md`
+(`continue-loop.js`) get a "started" timestamp, and only a `PROGRESS.md`
 whose milestone rows this plugin recognises (`⬜/🟨/⏸/✅` table rows, or
 `- [ ]`/`- [x]` checklist items) get a matching "shipped" timestamp from
-`track-milestones.ps1`. A milestone implemented entirely by hand, in a
+`track-milestones.js`. A milestone implemented entirely by hand, in a
 session that never stopped in between, won't have a "started" event and
 won't show a duration, cost, or comparison — that's a real coverage gap, not
 a bug; say so in the report rather than pretending it doesn't exist.
@@ -68,6 +68,14 @@ silently dropped or guessed).
    ```powershell
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/scripts/token-report.ps1" -ProjectDir "$env:CLAUDE_PROJECT_DIR" -StartTime "<started ts>" -EndTime "<shipped ts>"
    ```
+
+   **This one is still PowerShell and so still Windows-only** — the hooks were
+   ported to Node so they'd run everywhere, and this script hasn't been yet.
+   On macOS or Linux, `powershell.exe` won't exist: say plainly that real cost
+   is unavailable on this platform rather than reporting `$0.00` or guessing
+   from token counts, and carry on with the duration and manual-effort parts,
+   which need no transcript scan. An absent number reported as absent is fine;
+   an absent number reported as zero is a wrong answer.
 
    It returns JSON: `totalCostUsd`, `unknownModelTokens` (tokens from a model
    not in its pricing table — surface this, don't silently exclude it from

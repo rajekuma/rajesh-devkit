@@ -84,11 +84,11 @@ a failed case. Read each component and verify:
 - **The handoff chain is unbroken.** `devkit-specify` → (`devkit-ux` if there's
   a UI) → `devkit-implementer` → `devkit-reviewer` → `devkit-ship` →
   `devkit-docs`. Each component should name what precedes and follows it.
-  Check `continue-loop.ps1`'s nudge messages name the same chain — the script
+  Check `continue-loop.js`'s nudge messages name the same chain — the script
   and the prompts drifting apart is the most likely failure here, because
   they're edited at different times.
 - **The escalation marker agrees everywhere.** `devkit-specify` writes it;
-  `continue-loop.ps1` and `session-welcome.ps1` match it. If the written form
+  `continue-loop.js` and `session-welcome.js` match it. If the written form
   and the matched form ever disagree, the gate fails open and silently. The
   suite covers the matching; you check that the skill still instructs writing
   the ASCII keyword.

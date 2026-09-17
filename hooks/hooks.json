@@ -1,18 +1,14 @@
 {
-  "description": "rajesh-devkit: nudges toward the next PROGRESS.md milestone on Stop, runs the host project's verify script after edits, and greets a new session with what's next.",
+  "description": "rajesh-devkit: nudges toward the next PROGRESS.md milestone on Stop, runs the host project's verify script after edits, and greets a new session with what's next. Node rather than PowerShell so the hooks work on macOS and Linux too - node is guaranteed present, since Claude Code itself runs on it.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
+            "command": "node",
             "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PLUGIN_ROOT}/scripts/session-welcome.ps1"
+              "${CLAUDE_PLUGIN_ROOT}/scripts/session-welcome.js"
             ]
           }
         ]
@@ -23,13 +19,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
+            "command": "node",
             "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PLUGIN_ROOT}/scripts/continue-loop.ps1"
+              "${CLAUDE_PLUGIN_ROOT}/scripts/continue-loop.js"
             ]
           }
         ]
@@ -41,24 +33,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
+            "command": "node",
             "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PLUGIN_ROOT}/scripts/run-verify.ps1"
+              "${CLAUDE_PLUGIN_ROOT}/scripts/run-verify.js"
             ]
           },
           {
             "type": "command",
-            "command": "powershell.exe",
+            "command": "node",
             "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PLUGIN_ROOT}/scripts/track-milestones.ps1"
+              "${CLAUDE_PLUGIN_ROOT}/scripts/track-milestones.js"
             ]
           }
         ]

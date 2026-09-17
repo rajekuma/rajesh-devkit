@@ -14,8 +14,8 @@ rather than as a terse dump.
 
 1. Run:
 
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "${CLAUDE_PLUGIN_ROOT}/scripts/session-welcome.ps1"
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/session-welcome.js"
    ```
 
    (No stdin is required for this direct invocation — the script only reads

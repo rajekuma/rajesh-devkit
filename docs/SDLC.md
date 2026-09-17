@@ -237,7 +237,7 @@ contradict something load-bearing, not a complete written history.
 
 ### 4. Verify the loop can see what you built
 
-`devkit-onboard` finishes by running the real `session-welcome.ps1` check and
+`devkit-onboard` finishes by running the real `session-welcome.js` check and
 confirming it identifies your next milestone. If it reports nothing queued
 while `PROGRESS.md` plainly has unstarted rows, the tracker format isn't
 parseable — and every hook depends on it, so that gets fixed before anything
@@ -355,7 +355,7 @@ Some projects already have a working, tuned process. Dropping a second one
 beside it is how you get two sources of truth.
 
 **The `Stop` hook defers automatically.** If a project has its own
-`.claude/skills/spec-loop/SKILL.md`, `continue-loop.ps1` exits silently and
+`.claude/skills/spec-loop/SKILL.md`, `continue-loop.js` exits silently and
 never nudges — that project owns its stop conditions deliberately, and an
 unconditional hook would fight them.
 

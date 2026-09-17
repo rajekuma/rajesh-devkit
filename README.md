@@ -50,17 +50,18 @@ action.
 - `devkit-dep-audit` — a report-only subagent that checks the project's
   dependencies for known-vulnerable versions, across whichever package
   ecosystems are actually present (npm, PyPI, NuGet, pub, Go, Cargo, Maven, ...).
-- `continue-loop.ps1` (Stop hook) — when a session stops, checks the host
+- `continue-loop.js` (Stop hook) — when a session stops, checks the host
   project's `PROGRESS.md` for the next not-started milestone and, if one
   exists, blocks the stop with an instruction to draft a spec first (if none
   exists yet) or implement it test-first and run the reviewer (if one does).
-- `run-verify.ps1` (PostToolUse hook) — after every `Edit`/`Write`, runs the
-  host project's own `.claude\verify.ps1` if it provides one.
-- `track-milestones.ps1` (PostToolUse hook) — after every `Edit`/`Write`,
+- `run-verify.js` (PostToolUse hook) — after every `Edit`/`Write`, runs the
+  host project's own verify script if it provides one — `.claude/verify.js`,
+  `.sh` or `.ps1`, first match wins.
+- `track-milestones.js` (PostToolUse hook) — after every `Edit`/`Write`,
   detects any milestone that just flipped to done in `PROGRESS.md` and logs
   a timestamped "shipped" event, pairing with the "started" event
-  `continue-loop.ps1` already logs.
-- `session-welcome.ps1` (`SessionStart` hook) — greets a new session with
+  `continue-loop.js` already logs.
+- `session-welcome.js` (`SessionStart` hook) — greets a new session with
   what's next: the bootstrap checklist if `PROGRESS.md` doesn't exist yet,
   or the next milestone's status otherwise.
 - `devkit-help` — the on-demand, verified version of the same check, for
@@ -123,16 +124,20 @@ rajesh-devkit/
 ├── tests/
 │   └── run-tests.ps1            # regression suite for this plugin (no Pester needed)
 ├── hooks/
-│   └── hooks.json               # SessionStart -> session-welcome.ps1
-│                                 # Stop -> continue-loop.ps1
-│                                 # PostToolUse (Edit|Write) -> run-verify.ps1, track-milestones.ps1
-├── scripts/
-│   ├── continue-loop.ps1        # Stop hook: nudge toward next milestone
-│   ├── run-verify.ps1           # PostToolUse hook: host project's verify.ps1
-│   ├── track-milestones.ps1     # PostToolUse hook: log milestone-shipped events
-│   ├── session-welcome.ps1      # SessionStart hook: "what's next" banner
+│   └── hooks.json               # SessionStart -> session-welcome.js
+│                                 # Stop -> continue-loop.js
+│                                 # PostToolUse (Edit|Write) -> run-verify.js, track-milestones.js
+├── scripts/                     # hooks are Node: they run on Windows, macOS and Linux
+│   ├── lib/
+│   │   └── devkit.js           # shared: PROGRESS.md parsing, spec lookup,
+│   │                             # the SENSITIVE matcher, deference, telemetry
+│   ├── continue-loop.js        # Stop hook: nudge toward next milestone
+│   ├── run-verify.js           # PostToolUse hook: host's verify.js/.sh/.ps1
+│   ├── track-milestones.js     # PostToolUse hook: log milestone-shipped events
+│   ├── session-welcome.js      # SessionStart hook: "what's next" banner
 │   └── token-report.ps1         # not a hook - invoked by devkit-stats on demand;
 │                                 # scans session transcripts for real cost/tokens
+│                                 # STILL POWERSHELL, so Windows-only for now
 └── README.md
 ```
 
@@ -158,12 +163,17 @@ want it in. Confirm it loaded with `claude plugin list`, then say
 *"how do I use this plugin"* to invoke `devkit-help`, which reports what to
 do next in that specific repository.
 
-**Requirements.** The four hooks are PowerShell (`powershell.exe`), so the
-automated nudge, the verify hook and the telemetry currently need Windows.
-Every skill and subagent is plain Markdown and works anywhere Claude Code
-does — on macOS or Linux you get the full component set with the hooks
-inert, which is a usable subset: you invoke the stages yourself instead of
-being nudged between them.
+**Requirements.** Node — and you already have it, because Claude Code is a
+Node program, which is exactly why the hooks are written in it. **Everything
+except one script runs on Windows, macOS and Linux alike.**
+
+The exception is `scripts/token-report.ps1`, which is still PowerShell and so
+still Windows-only. It isn't a hook; `devkit-stats` invokes it on demand to
+read real USD cost out of session transcripts. On macOS or Linux,
+`devkit-stats` reports duration and the manual-effort comparison and says
+plainly that cost is unavailable on this platform, rather than reporting
+`$0.00` — an absent number reported as absent is fine, reported as zero is a
+wrong answer.
 
 <details>
 <summary>Other install routes</summary>
@@ -252,7 +262,7 @@ pauses. The one thing worth doing deliberately first:
    infer, and writes `specs/<kebab-case-feature>.md`.
 2. **Once the spec exists, either say "implement it"** (invokes
    `devkit-implementer` directly), **or just keep working and let the
-   session pause naturally** — `continue-loop.ps1` checks for that spec
+   session pause naturally** — `continue-loop.js` checks for that spec
    before nudging, so from here on it tells you to implement with strict
    TDD and then invokes `devkit-reviewer`, rather than nudging toward a spec
    that doesn't exist yet.
@@ -285,7 +295,7 @@ duplicating it.
      above), but confirm there isn't already a `devkit-`-prefixed one from
      a previous install.
    - **A `.claude/skills/spec-loop/SKILL.md`-shaped skill already exists** —
-     `continue-loop.ps1` defers to it entirely and never fires (see "Why
+     `continue-loop.js` defers to it entirely and never fires (see "Why
      the Stop hook defers to a project's own loop skill"). Not a problem,
      just don't expect the automatic nudge if this project already has its
      own loop.
@@ -356,7 +366,7 @@ doesn't know needs a model that reasons well.
 |---|---|---|
 | `devkit-specify` | **a strong model** (Opus / Fable) | Its real job is deciding what it *doesn't* know — which gaps take a default and which must be asked, and whether a requirement touches one of the five sensitive categories when that isn't obvious. That can't be reduced to a checklist; if it could, the checklist would already be in the skill. The failure mode is the worst kind available here: a weaker model fills gaps confidently and produces a *plausible* spec with invented requirements. It looks fine, and everything downstream treats the spec as truth. It also writes the `SENSITIVE:` marker, and the escalation gate cannot catch what was never marked. |
 | `devkit-adr` | **a strong model** (Opus / Fable) | Two judgments carry it: refusing to record a non-decision, and never inventing a rationale. The second is the most damaging failure in this plugin — a fabricated "why" is indistinguishable from a real one and gets quoted back years later by someone assuming a human wrote it. |
-| `devkit-onboard` | anything from Sonnet up | The most procedural component here: inventory, detect the stack, run the test command, write `PROGRESS.md`, run `session-welcome.ps1` to confirm the loop can parse it. Its judgment calls (don't clobber, which ADRs are load-bearing) are stated very explicitly, and explicit instructions are what mid-tier models follow reliably. It also verifies its own work by executing things, so mistakes surface instead of hiding. 9/9 on its eval. |
+| `devkit-onboard` | anything from Sonnet up | The most procedural component here: inventory, detect the stack, run the test command, write `PROGRESS.md`, run `session-welcome.js` to confirm the loop can parse it. Its judgment calls (don't clobber, which ADRs are load-bearing) are stated very explicitly, and explicit instructions are what mid-tier models follow reliably. It also verifies its own work by executing things, so mistakes surface instead of hiding. 9/9 on its eval. |
 | `devkit-help`, `devkit-stats`, `devkit-eval` | anything | Mechanical: relay a status check, read a telemetry log, run a suite. |
 
 **Subagents** (frontmatter `model:` is honoured, and they don't follow your
@@ -409,9 +419,9 @@ just a downgrade. There is no automatic failover in either case.
 
 | Name | Trigger | Model / effort | What it does |
 |---|---|---|---|
-| `devkit-onboard` | "onboard this project", "set up devkit here", "get this repo on the loop", "bootstrap this project" | `fable`, `effort: high` | Gets a project — brand-new or with years of history — to the state the loop needs. Inventories what already exists first and never clobbers it (`CLAUDE.md`, `specs/`, a tracker under any name, other `.claude` assets, a `spec-loop`-shaped skill that would suppress the `Stop` hook), detects the stack and **seeds `test-runners.json` with a command it actually ran**, reconstructs product intent from what's already written rather than a blank page, then proposes a `PROGRESS.md` (offering the lightweight and thorough options honestly instead of choosing for you) and a shortlist of load-bearing ADRs to backfill. Ends by running the real `session-welcome.ps1` check to prove the loop can parse what it just built. |
+| `devkit-onboard` | "onboard this project", "set up devkit here", "get this repo on the loop", "bootstrap this project" | `fable`, `effort: high` | Gets a project — brand-new or with years of history — to the state the loop needs. Inventories what already exists first and never clobbers it (`CLAUDE.md`, `specs/`, a tracker under any name, other `.claude` assets, a `spec-loop`-shaped skill that would suppress the `Stop` hook), detects the stack and **seeds `test-runners.json` with a command it actually ran**, reconstructs product intent from what's already written rather than a blank page, then proposes a `PROGRESS.md` (offering the lightweight and thorough options honestly instead of choosing for you) and a shortlist of load-bearing ADRs to backfill. Ends by running the real `session-welcome.js` check to prove the loop can parse what it just built. |
 | `devkit-adr` | "write an ADR", "record this decision", "adr for \<decision\>", "document why we chose" | `fable`, `effort: high` | Writes `docs/adr/<NNNN>-<kebab-title>.md`, closing the gap where `devkit-specify` *reads* decision records but nothing ever wrote one. Detects the project's existing convention (folder name, numbering, section shape) from the most recent records and matches it. Refuses to write an ADR for a non-decision, and interviews for the parts that carry the value and are never inferable — the alternatives actually rejected, the forces in tension, the consequences accepted including the bad ones, and what would make you revisit it. Never invents a rationale. Links the record back into the spec and updates any ADR it supersedes. |
-| `devkit-eval` | "run the devkit tests", "eval the plugin", "check the plugin still works", "devkit regression" | `sonnet` | This plugin's own regression check, for editing *this repo* rather than a host project. Runs `tests/run-tests.ps1` (below), then checks the half no script can assert: that report-only components still declare themselves report-only, that nothing has quietly gained permission to commit, that verdict strings the orchestrator routes on are unchanged, that the handoff chain in the prompts still matches the chain in `continue-loop.ps1`'s nudge messages, and that the README hasn't drifted from the code. |
+| `devkit-eval` | "run the devkit tests", "eval the plugin", "check the plugin still works", "devkit regression" | `sonnet` | This plugin's own regression check, for editing *this repo* rather than a host project. Runs `tests/run-tests.ps1` (below), then checks the half no script can assert: that report-only components still declare themselves report-only, that nothing has quietly gained permission to commit, that verdict strings the orchestrator routes on are unchanged, that the handoff chain in the prompts still matches the chain in `continue-loop.js`'s nudge messages, and that the README hasn't drifted from the code. |
 | `devkit-specify` | "write a spec", "spec this feature", "specify \<feature\>", "draft a spec for \<feature\>", "let's spec \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. Marks any requirement touching an existing invariant, a security/auth boundary, a data-model change, an external integration, or a backward-compatibility break with `🔒 SENSITIVE:` — the marker the escalation gate (see "Hooks" below) keys off of — and leads its final report with those flags if any exist. |
 | `devkit-help` | "how do I use this plugin", "devkit help", "get me started", "what's next", "getting started with rajesh-devkit" | `haiku` | Runs the same state check as the `SessionStart` hook (below) and relays it conversationally — the verified on-demand fallback for the automatic banner. Read-only. |
 | `devkit-stats` | "show dev loop stats", "how long did each milestone take", "milestone timing report", "devkit stats", "how much did this cost", "token usage report" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.ps1`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
@@ -431,10 +441,10 @@ just a downgrade. There is no automatic failover in either case.
 
 | Event | Matcher | Script | Trigger condition | Blocking behaviour |
 |---|---|---|---|---|
-| `SessionStart` | *(none supported)* | `scripts/session-welcome.ps1` | Fires when a genuine new session starts (`source: "startup"` — skips resume/clear/compact to avoid repetitive noise mid-project). | Never blocks — always exits 0. Prints contextual guidance: the bootstrap checklist if `PROGRESS.md` doesn't exist, an escalation notice if the next milestone's spec is `🔒 SENSITIVE:`-flagged, "let's spec this" if it has no spec, "implement it" if it does, or "nothing queued" if none are unstarted. Its exact on-screen behavior via the harness is unverified (see Troubleshooting) — `devkit-help` is the tested fallback. |
-| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.ps1` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — three possible instructions to stderr, checked in order: (1) if the milestone's spec is `🔒 SENSITIVE:`-flagged and hasn't been escalated yet this milestone, stop and ask the user whether to implement directly at higher reasoning instead of delegating — shown once per milestone, not on every repeat nudge (see "Sensitive-milestone escalation" below); (2) if no spec exists yet, draft one with `devkit-specify` first; (3) otherwise implement test-first (RED-GREEN) and invoke `devkit-reviewer` on the diff. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
-| `PostToolUse` | `Edit\|Write` | `scripts/run-verify.ps1` | Fires after every Edit or Write tool call. | If `.claude\verify.ps1` doesn't exist in the host project, exits 0 silently (no-op). If it exists, runs it and **exits with whatever code it returned** — no remapping. `verify.ps1`'s own exit-code convention is what decides whether Claude sees the failure (see the contract below). |
-| `PostToolUse` | `Edit\|Write` | `scripts/track-milestones.ps1` | Fires after every Edit or Write tool call, alongside `run-verify.ps1` (same matcher, both run). | Never blocks — always exits 0. Re-parses `PROGRESS.md`'s milestone statuses, diffs against a stored snapshot, and appends a `milestone_shipped` telemetry event for anything that just flipped to done. No-ops silently if there's no `PROGRESS.md` or no recognisable milestone lines. |
+| `SessionStart` | *(none supported)* | `scripts/session-welcome.js` | Fires when a genuine new session starts (`source: "startup"` — skips resume/clear/compact to avoid repetitive noise mid-project). | Never blocks — always exits 0. Prints contextual guidance: the bootstrap checklist if `PROGRESS.md` doesn't exist, an escalation notice if the next milestone's spec is `🔒 SENSITIVE:`-flagged, "let's spec this" if it has no spec, "implement it" if it does, or "nothing queued" if none are unstarted. Its exact on-screen behavior via the harness is unverified (see Troubleshooting) — `devkit-help` is the tested fallback. |
+| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.js` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2** — three possible instructions to stderr, checked in order: (1) if the milestone's spec is `🔒 SENSITIVE:`-flagged and hasn't been escalated yet this milestone, stop and ask the user whether to implement directly at higher reasoning instead of delegating — shown once per milestone, not on every repeat nudge (see "Sensitive-milestone escalation" below); (2) if no spec exists yet, draft one with `devkit-specify` first; (3) otherwise implement test-first (RED-GREEN) and invoke `devkit-reviewer` on the diff. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
+| `PostToolUse` | `Edit\|Write` | `scripts/run-verify.js` | Fires after every Edit or Write tool call. | If no verify script (`.claude/verify.js`, `.sh` or `.ps1`) exists in the host project, exits 0 silently (no-op). If it exists, runs it and **exits with whatever code it returned** — no remapping. The verify script's own exit-code convention is what decides whether Claude sees the failure (see the contract below). |
+| `PostToolUse` | `Edit\|Write` | `scripts/track-milestones.js` | Fires after every Edit or Write tool call, alongside `run-verify.js` (same matcher, both run). | Never blocks — always exits 0. Re-parses `PROGRESS.md`'s milestone statuses, diffs against a stored snapshot, and appends a `milestone_shipped` telemetry event for anything that just flipped to done. No-ops silently if there's no `PROGRESS.md` or no recognisable milestone lines. |
 
 ### Why the Stop hook defers to a project's own loop skill
 
@@ -443,7 +453,7 @@ skill this was modeled after), that skill owns its own stop conditions
 deliberately — a reviewer `discuss` verdict, a Phase-boundary pause, a genuine
 ambiguity. An unconditional Stop hook has no way to tell "the skill chose to
 pause here on purpose" from "the session just stopped" — it would nudge past
-exactly the pauses the skill built in. So `continue-loop.ps1` checks for
+exactly the pauses the skill built in. So `continue-loop.js` checks for
 `.claude\skills\spec-loop\SKILL.md` first and gets out of the way entirely if
 it's there, acting only as a fallback for projects that don't have an
 equivalent skill of their own.
@@ -462,7 +472,7 @@ those specific categories:
 existing invariant, a security/authorization boundary, a data-model change,
 an external integration, or a backward-compatibility break — a
 machine-checked marker, not just a stylistic flag, used consistently enough
-that `continue-loop.ps1` can grep for it. Three places check for it, on
+that `continue-loop.js` can grep for it. Three places check for it, on
 purpose, since none of them alone covers every path a milestone could take
 toward implementation:
 
@@ -480,11 +490,11 @@ ordinary prose like "not sensitive: just a note" from tripping it. False
 positives are the safe direction here — one extra question, versus losing
 the gate entirely.
 
-- **`continue-loop.ps1`** — the primary, automated gate. Escalates instead
+- **`continue-loop.js`** — the primary, automated gate. Escalates instead
   of nudging toward implementation, once per milestone (tracked in the same
   nudge-cap state file as an `escalationShown` field) — not on every repeat
   nudge, since that would just be noise once a human has already seen it.
-- **`session-welcome.ps1` / `devkit-help`** — covers the case where a
+- **`session-welcome.js` / `devkit-help`** — covers the case where a
   session never actually stops between drafting the spec and someone asking
   to implement it, so the `Stop` hook never gets a chance to fire.
 - **`devkit-specify`'s own final report** — leads with the flags, for the
@@ -552,12 +562,12 @@ harness. Testing the contract survives refactoring in a way that testing
 internals doesn't. Covered: the escalation matcher against every realistic
 rendering of the marker, nudge routing, all five quiet-exit conditions, the
 once-per-milestone escalation state, the 8-nudge cap, telemetry format and
-BOM-freeness, `.gitignore` idempotency, and `session-welcome.ps1` agreeing
-with `continue-loop.ps1` (which is `devkit-help`'s entire promise).
+BOM-freeness, `.gitignore` idempotency, and `session-welcome.js` agreeing
+with `continue-loop.js` (which is `devkit-help`'s entire promise).
 
 On its first run this suite immediately earned itself, in both directions:
 
-- **A real latent bug** — `track-milestones.ps1` carried a raw `🟨` literal in
+- **A real latent bug** — `track-milestones.js` carried a raw `🟨` literal in
   a comment. That's `U+1F7E8`: astral, 4 bytes, the same hazard class as the
   lock emoji, even though this README previously listed it among the "3-byte"
   glyphs that were fine. The static check now rejects any 4-byte UTF-8
@@ -602,7 +612,7 @@ run `claude login` first.
 
 ## What the host project must provide
 
-**`PROGRESS.md` milestone format.** `continue-loop.ps1` scans top to bottom
+**`PROGRESS.md` milestone format.** `continue-loop.js` scans top to bottom
 for the first line matching either:
 
 - A markdown table row with a not-started glyph in a cell by itself:
@@ -614,16 +624,37 @@ Whichever pattern appears first, top to bottom, in the file wins. If neither
 pattern matches anywhere, the hook treats the project as having nothing left
 to do and stays silent.
 
-**`.claude\verify.ps1` contract.** Optional. If present, it's invoked with no
-arguments after every Edit/Write and its exit code is passed straight through
-by `run-verify.ps1`. Claude Code only treats **exit code 2** from a
-PostToolUse hook as "surface this to Claude" — so if you want a failing verify
-step to actually get Claude's attention, `verify.ps1` itself should exit `2`
-on failure (any output on its own stdout/stderr passes through unchanged,
-since `run-verify.ps1` doesn't redirect it). Any other non-zero code still
-propagates but isn't guaranteed the same treatment. A typical `verify.ps1`
+**Verify-script contract.** Optional. `run-verify.js` looks for one of these
+in the host project, taking the first that exists, in this fixed order on
+every platform:
+
+| File | Run with |
+|---|---|
+| `.claude/verify.js` | `node` — always available, so this is the portable choice |
+| `.claude/verify.sh` | `bash` |
+| `.claude/verify.ps1` | `pwsh`, or `powershell.exe` on Windows |
+
+The order is fixed rather than platform-dependent so the behaviour is
+predictable: you can tell which script will run by looking at the repo, not
+by knowing whose laptop it's on. A project that only has `verify.ps1` keeps
+working exactly as before.
+
+Whichever is found is invoked with no arguments after every Edit/Write and
+**its exit code is passed straight through, unmapped**. Claude Code only
+treats **exit code 2** from a PostToolUse hook as "surface this to Claude" —
+so if you want a failing verify step to actually get Claude's attention, your
+script should exit `2` on failure (its own stdout/stderr passes through
+unchanged; `run-verify.js` doesn't redirect it). Any other non-zero code still
+propagates but isn't guaranteed the same treatment. A typical verify script
 runs the project's fast checks — lint, a quick test subset, a build — and
 should stay fast, since it runs after *every* edit.
+
+If a verify script exists but no interpreter for it does — a `verify.ps1` in
+a repo cloned onto macOS with no `pwsh` — `run-verify.js` exits `0` and says
+so loudly on stderr. Exiting `2` there would block every edit over a setup
+problem, but staying silent would be worse: a verify gate that quietly never
+runs is the same "unrun check assumed green" failure `devkit-ship` exists to
+prevent.
 
 **What this plugin writes into the host project, unprompted.** Beyond
 reading `PROGRESS.md`/`specs/`/`CLAUDE.md`, three things live under
@@ -650,12 +681,12 @@ what you asked it to implement, and every report-only component
 
 ## Telemetry
 
-`continue-loop.ps1` logs a `milestone_started` event the first time it nudges
-toward a new milestone; `track-milestones.ps1` logs the matching
+`continue-loop.js` logs a `milestone_started` event the first time it nudges
+toward a new milestone; `track-milestones.js` logs the matching
 `milestone_shipped` event the moment `PROGRESS.md` marks it done. Both append
 to one JSONL file **inside the host project**:
 `.claude\rajesh-devkit\telemetry.jsonl` (plus `telemetry.snapshot.json`,
-`track-milestones.ps1`'s own bookkeeping for detecting a status flip).
+`track-milestones.js`'s own bookkeeping for detecting a status flip).
 `devkit-stats` reads that file and reports duration per milestone.
 
 **Why in-project rather than a machine-global path.** An earlier version
@@ -814,7 +845,7 @@ agent involved, which is worth enabling regardless (Settings → Code security
   hooks' exact on-screen behavior wasn't empirically verified against a
   live harness while building this (this plugin's own OAuth doesn't carry
   into a nested `claude` session, so a real end-to-end "does the banner
-  actually render" test wasn't possible — `session-welcome.ps1`'s own logic
+  actually render" test wasn't possible — `session-welcome.js`'s own logic
   *was* fully tested by direct invocation, in all five states). If nothing
   shows up automatically, ask "how do I use this plugin" or "what's next" —
   that invokes `devkit-help`, which runs the identical check and is
@@ -848,22 +879,31 @@ agent involved, which is worth enabling regardless (Settings → Code security
   the window — check its `byModel` output for which one, then update the
   `$Pricing` table in the script if it's a model this plugin should know
   about now.
-- **`run-verify.ps1` does nothing.** By design, unless
-  `.claude\verify.ps1` exists in the host project. Create it if you want the
-  edit-time check.
-- **PowerShell execution policy errors.** Both hooks are declared in exec
-  form (`"command": "powershell.exe"`, `"args": [...]`) with
-  `-NoProfile -ExecutionPolicy Bypass -File`, specifically so a locked-down
-  IT execution policy doesn't block them. If you still see a policy error,
-  confirm nothing upstream (a system-wide `AllSigned` policy via Group Policy)
-  overrides `-ExecutionPolicy Bypass` at the machine level — that one flag
-  can't override a Group-Policy-enforced restriction.
+- **`run-verify.js` does nothing.** By design, unless
+  a verify script exists in the host project (`.claude/verify.js`, `.sh` or
+  `.ps1`). Create one if you want the edit-time check. If one exists but its
+  interpreter doesn't, the hook says so on stderr rather than skipping
+  silently.
+- **`node` not found when a hook fires.** The hooks are declared in exec form
+  (`"command": "node"`, `"args": [...]`), so `node` must be resolvable on the
+  `PATH` the harness launches them with. It normally is — Claude Code is a
+  Node program — but a native-installer build can bundle its own runtime
+  without putting `node` on your `PATH`. `node --version` in the same shell
+  you launch Claude from is the quick check; if that fails, install Node or
+  add it to `PATH`.
+- **PowerShell execution policy errors.** No longer applicable to the hooks —
+  they're Node now. It can still bite `scripts/token-report.ps1` (invoked by
+  `devkit-stats`) and this repo's own `tests/run-*.ps1`. Related and worth
+  knowing if you install Claude Code via npm: the `claude.ps1` shim npm
+  creates is unsigned, so a default execution policy refuses it with *"cannot
+  be loaded... not digitally signed"* — call `claude.cmd` directly rather than
+  relaxing the policy machine-wide.
 - **`devkit-stats` says no telemetry exists yet.** Either the Stop hook has
   never fired for this project (check `PROGRESS.md` exists and has a
   recognisable milestone line), or the milestone in question was implemented
   by hand without the session ever stopping in between — that's the known
   timing-only coverage gap documented above, not a bug to chase.
-- **A milestone shows "started" but never "shipped."** `track-milestones.ps1`
+- **A milestone shows "started" but never "shipped."** `track-milestones.js`
   only logs a ship event when a milestone's *status glyph itself* changes to
   `✅` (or `- [x]`) in `PROGRESS.md` — if the milestone shipped some other way
   (a different tracker file, a manual status note instead of the glyph),

@@ -113,10 +113,21 @@ function Invoke-HookScript {
 
     $prev = $env:CLAUDE_PROJECT_DIR
     $env:CLAUDE_PROJECT_DIR = $ProjectDir
+    # The hooks are Node now (so they run on macOS/Linux too - see
+    # hooks/hooks.json). This harness is still PowerShell and still only runs
+    # on Windows; porting it is phase two. It only ever spawns the hook as a
+    # separate process and asserts on exit code and streams, so it verifies
+    # the Node implementations exactly as faithfully as it did the .ps1 ones.
+    $full = Join-Path $PluginRoot $Script
+    if ($Script -like '*.js') {
+        $exe = 'node'
+        $argList = @($full)
+    } else {
+        $exe = 'powershell.exe'
+        $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $full)
+    }
     try {
-        $p = Start-Process -FilePath 'powershell.exe' `
-            -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-                            (Join-Path $PluginRoot $Script)) `
+        $p = Start-Process -FilePath $exe -ArgumentList $argList `
             -RedirectStandardInput $inFile -RedirectStandardOutput $outFile `
             -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru
         return [pscustomobject]@{
@@ -171,6 +182,56 @@ foreach ($f in (Get-ChildItem -Path (Join-Path $PluginRoot 'scripts') -Filter '*
     Assert-True (-not $bad) "$($f.Name) has no 4-byte UTF-8 literal" `
         "found an astral-plane character - build it with [char]::ConvertFromUtf32() instead"
 }
+
+# ---------------------------------------------------------------------------
+Group "Static: hook scripts (Node)"
+# ---------------------------------------------------------------------------
+# The hooks are Node so they run on macOS and Linux too. `node --check`
+# parses without executing - the same guarantee the PowerShell parser check
+# above gives, and worth having because a syntax error in a hook is a silent
+# failure: the harness just sees a non-zero exit it can't explain.
+$jsFiles = @(Get-ChildItem -Path (Join-Path $PluginRoot 'scripts') -Filter '*.js' -File -Recurse)
+Assert-True ($jsFiles.Count -ge 5) "the Node hooks and their shared lib exist" `
+    "expected at least 5 .js files under scripts/, found $($jsFiles.Count)"
+foreach ($f in $jsFiles) {
+    $null = & node --check $f.FullName 2>&1
+    Assert-Equal 0 $LASTEXITCODE "$($f.Name) parses (node --check)"
+
+    # ASCII-only source. JS has no parsing bug around astral characters the
+    # way a BOM-less .ps1 did, but keeping these files pure ASCII means no
+    # editor, codepage or transfer mishap can corrupt a glyph the matchers
+    # depend on - the escapes in lib/devkit.js are there for that reason.
+    $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
+    $nonAscii = $false
+    foreach ($b in $bytes) { if ($b -gt 0x7F) { $nonAscii = $true; break } }
+    Assert-True (-not $nonAscii) "$($f.Name) is pure ASCII" `
+        "found a non-ASCII byte - use a \u{...} escape instead of a literal"
+}
+
+# No absolute Windows paths baked into a hook.
+foreach ($f in $jsFiles) {
+    $text = Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8
+    Assert-True ($text -notmatch "'[A-Za-z]:\\\\") "$($f.Name) has no absolute Windows path literal" `
+        "use path.join so the hook works on macOS and Linux"
+}
+
+# Every hook must be launched with node. Checked structurally, against the
+# parsed `command` values - NOT by grepping the file for "powershell", which
+# was the first version of this test and failed three ways at once: it hit
+# the word in hooks.json's own description, in a comment in lib/devkit.js,
+# and in run-verify.js, which invokes powershell.exe on purpose to run a
+# Windows project's verify.ps1. Matching prose is not measuring behaviour.
+$hooks = Get-Content -LiteralPath (Join-Path $PluginRoot 'hooks\hooks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+$commands = @()
+foreach ($event in $hooks.hooks.PSObject.Properties) {
+    foreach ($entry in $event.Value) {
+        foreach ($h in $entry.hooks) { $commands += $h.command }
+    }
+}
+Assert-True ($commands.Count -ge 4) "hooks.json declares at least 4 hooks" "found $($commands.Count)"
+$nonNode = @($commands | Where-Object { $_ -ne 'node' })
+Assert-True ($nonNode.Count -eq 0) "every hooks.json command is node" `
+    "these would not run on macOS or Linux: $($nonNode -join ', ')"
 
 # ---------------------------------------------------------------------------
 Group "Static: agent and skill frontmatter"
@@ -256,7 +317,7 @@ foreach ($case in $markerCases) {
     $spec = "# Spec: User login`n`nMilestone: 1`n`n## Behaviour / requirements`n`n$($case.body)`n"
     $dir = New-FixtureProject -ProgressContent $SampleProgress -Specs @{ 'user-login.md' = $spec }
     try {
-        $r = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+        $r = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
         $escalated = $r.Stderr -and $r.Stderr.Contains('STOP before delegating')
         Assert-Equal $case.want $escalated "escalates: $($case.n)"
     } finally { Remove-Fixture $dir }
@@ -268,7 +329,7 @@ Group "Behavioral: continue-loop nudge routing"
 # No spec yet -> should nudge toward devkit-specify.
 $dir = New-FixtureProject -ProgressContent $SampleProgress
 try {
-    $r = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $r = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     Assert-Equal 2 $r.ExitCode "blocks the stop (exit 2) when a milestone is unstarted"
     Assert-True ($r.Stderr -like '*devkit-specify*') "nudges toward devkit-specify when no spec exists" `
         "stderr was: $($r.Stderr)"
@@ -280,7 +341,7 @@ try {
 $plainSpec = "# Spec: User login`n`nMilestone: 1`n`n## Acceptance criteria`n`n- [ ] It works`n"
 $dir = New-FixtureProject -ProgressContent $SampleProgress -Specs @{ 'user-login.md' = $plainSpec }
 try {
-    $r = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $r = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     Assert-Equal 2 $r.ExitCode "blocks the stop when a spec is ready to implement"
     Assert-True ($r.Stderr -like '*devkit-reviewer*') "nudge names devkit-reviewer" "stderr: $($r.Stderr)"
     Assert-True ($r.Stderr -like '*devkit-ship*') "nudge names devkit-ship preflight" "stderr: $($r.Stderr)"
@@ -292,14 +353,14 @@ Group "Behavioral: continue-loop exits quietly when it should"
 # The harness's own recursion guard.
 $dir = New-FixtureProject -ProgressContent $SampleProgress
 try {
-    $r = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{"stop_hook_active":true}'
+    $r = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{"stop_hook_active":true}'
     Assert-Equal 0 $r.ExitCode "allows the stop when stop_hook_active is true"
 } finally { Remove-Fixture $dir }
 
 # No PROGRESS.md at all.
 $dir = New-FixtureProject
 try {
-    $r = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $r = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     Assert-Equal 0 $r.ExitCode "allows the stop when there is no PROGRESS.md"
 } finally { Remove-Fixture $dir }
 
@@ -307,7 +368,7 @@ try {
 $doneProgress = "# Progress`n`n| # | Milestone | Status |`n|---|---|---|`n| 1 | User login | done |`n"
 $dir = New-FixtureProject -ProgressContent $doneProgress
 try {
-    $r = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $r = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     Assert-Equal 0 $r.ExitCode "allows the stop when nothing is unstarted"
 } finally { Remove-Fixture $dir }
 
@@ -317,7 +378,7 @@ try {
     $own = Join-Path $dir '.claude\skills\spec-loop'
     New-Item -ItemType Directory -Force -Path $own | Out-Null
     Set-Content -LiteralPath (Join-Path $own 'SKILL.md') -Value '# own loop' -Encoding UTF8
-    $r = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $r = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     Assert-Equal 0 $r.ExitCode "defers entirely to a project's own spec-loop skill"
 } finally { Remove-Fixture $dir }
 
@@ -337,7 +398,7 @@ try {
     New-Item -ItemType Directory -Force -Path $own | Out-Null
     Set-Content -LiteralPath (Join-Path $own 'SKILL.md') -Value '# own loop' -Encoding UTF8
 
-    $w = Invoke-HookScript -Script 'scripts\session-welcome.ps1' -ProjectDir $dir -StdinJson '{"source":"startup"}'
+    $w = Invoke-HookScript -Script 'scripts\session-welcome.js' -ProjectDir $dir -StdinJson '{"source":"startup"}'
     Assert-Equal 0 $w.ExitCode "session-welcome exits 0 when the project owns its loop"
     Assert-True ($w.Stdout -like '*defers to it*') "session-welcome says the Stop hook defers" `
         "stdout: $($w.Stdout)"
@@ -346,7 +407,7 @@ try {
     Assert-True ($w.Stdout -notlike '*spec this feature*') "session-welcome stops steering toward devkit-specify" `
         "stdout: $($w.Stdout)"
 
-    $t = Invoke-HookScript -Script 'scripts\track-milestones.ps1' -ProjectDir $dir -StdinJson '{}'
+    $t = Invoke-HookScript -Script 'scripts\track-milestones.js' -ProjectDir $dir -StdinJson '{}'
     Assert-Equal 0 $t.ExitCode "track-milestones exits 0 when the project owns its loop"
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $dir '.claude\rajesh-devkit'))) `
         "track-milestones writes no telemetry folder" "it created .claude/rajesh-devkit/ anyway"
@@ -360,8 +421,8 @@ Group "Behavioral: escalation shows once per milestone, not every nudge"
 $sensSpec = "# Spec: User login`n`nMilestone: 1`n`n## Behaviour / requirements`n`n1. $LOCK SENSITIVE: touches auth`n"
 $dir = New-FixtureProject -ProgressContent $SampleProgress -Specs @{ 'user-login.md' = $sensSpec }
 try {
-    $first  = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
-    $second = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $first  = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
+    $second = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     Assert-True ($first.Stderr -like '*STOP before delegating*') "first nudge escalates" "stderr: $($first.Stderr)"
     Assert-True ($second.Stderr -notlike '*STOP before delegating*') "second nudge does not re-escalate" `
         "escalation repeated on the same milestone - escalationShown state is not sticking"
@@ -375,7 +436,7 @@ $dir = New-FixtureProject -ProgressContent $SampleProgress
 try {
     $last = $null
     for ($i = 1; $i -le 9; $i++) {
-        $last = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+        $last = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     }
     Assert-Equal 0 $last.ExitCode "stops nudging after the 8-nudge cap"
     Assert-True ($last.Stdout -like '*8-nudge cap*') "explains why it stopped" "stdout: $($last.Stdout)"
@@ -386,7 +447,7 @@ Group "Behavioral: telemetry and gitignore side effects"
 # ---------------------------------------------------------------------------
 $dir = New-FixtureProject -ProgressContent $SampleProgress
 try {
-    $null = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $null = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     $tel = Join-Path $dir '.claude\rajesh-devkit\telemetry.jsonl'
     Assert-True (Test-Path -LiteralPath $tel) "writes a milestone_started telemetry event" "no telemetry.jsonl created"
     if (Test-Path -LiteralPath $tel) {
@@ -418,11 +479,11 @@ try {
 # Idempotency: the gitignore entry must not be appended twice.
 $dir = New-FixtureProject -ProgressContent $SampleProgress
 try {
-    $null = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $null = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     Remove-Item -LiteralPath (Join-Path $env:TEMP ("rajesh-devkit-continue-loop\" + (
         [System.BitConverter]::ToString([System.Security.Cryptography.MD5]::Create().ComputeHash(
             [Text.Encoding]::UTF8.GetBytes($dir))) -replace '-', '') + '.json')) -ErrorAction SilentlyContinue
-    $null = Invoke-HookScript -Script 'scripts\continue-loop.ps1' -ProjectDir $dir -StdinJson '{}'
+    $null = Invoke-HookScript -Script 'scripts\continue-loop.js' -ProjectDir $dir -StdinJson '{}'
     $giText = Get-Content -LiteralPath (Join-Path $dir '.gitignore') -Raw -Encoding UTF8
     $count = ([regex]::Matches($giText, [regex]::Escape('.claude/rajesh-devkit/'))).Count
     Assert-Equal 1 $count "gitignore entry is written exactly once across runs"
@@ -436,7 +497,7 @@ Group "Behavioral: session-welcome agrees with continue-loop"
 # milestone is sensitive, that promise is broken.
 $dir = New-FixtureProject -ProgressContent $SampleProgress -Specs @{ 'user-login.md' = $sensSpec }
 try {
-    $w = Invoke-HookScript -Script 'scripts\session-welcome.ps1' -ProjectDir $dir -StdinJson '{"source":"startup"}'
+    $w = Invoke-HookScript -Script 'scripts\session-welcome.js' -ProjectDir $dir -StdinJson '{"source":"startup"}'
     Assert-Equal 0 $w.ExitCode "session-welcome never blocks"
     Assert-True ($w.Stdout -like '*SENSITIVE*') "session-welcome flags the same sensitive spec" `
         "stdout: $($w.Stdout)"
@@ -444,7 +505,7 @@ try {
 
 $dir = New-FixtureProject -ProgressContent $SampleProgress
 try {
-    $w = Invoke-HookScript -Script 'scripts\session-welcome.ps1' -ProjectDir $dir -StdinJson '{"source":"startup"}'
+    $w = Invoke-HookScript -Script 'scripts\session-welcome.js' -ProjectDir $dir -StdinJson '{"source":"startup"}'
     Assert-True ($w.Stdout -like '*User login*') "session-welcome names the next milestone" "stdout: $($w.Stdout)"
 } finally { Remove-Fixture $dir }
 
@@ -453,10 +514,52 @@ Group "Behavioral: run-verify is a silent no-op without a host verify script"
 # ---------------------------------------------------------------------------
 $dir = New-FixtureProject
 try {
-    $r = Invoke-HookScript -Script 'scripts\run-verify.ps1' -ProjectDir $dir -StdinJson '{}'
-    Assert-Equal 0 $r.ExitCode "run-verify exits 0 when the project has no .claude\verify.ps1"
+    $r = Invoke-HookScript -Script 'scripts\run-verify.js' -ProjectDir $dir -StdinJson '{}'
+    Assert-Equal 0 $r.ExitCode "run-verify exits 0 when the project has no verify script"
     Assert-True ([string]::IsNullOrWhiteSpace($r.Stdout)) "run-verify stays silent when absent" `
         "unexpected output: $($r.Stdout)"
+} finally { Remove-Fixture $dir }
+
+# ---------------------------------------------------------------------------
+Group "Behavioral: run-verify passes a host verify script's exit code through"
+# ---------------------------------------------------------------------------
+# The whole contract of this hook is that it does NOT remap the exit code -
+# the host project's own convention decides whether Claude sees the failure.
+# The lookup is multi-language now (verify.js, verify.sh, verify.ps1) because
+# the old .ps1-only contract was Windows-only; verify.js is checked here
+# because node is the one interpreter guaranteed to exist.
+foreach ($case in @(
+    @{ code = 0; name = 'success' },
+    @{ code = 2; name = 'failure (2 = surface it to Claude)' },
+    @{ code = 1; name = 'failure (1)' }
+)) {
+    $dir = New-FixtureProject
+    try {
+        $claudeDir = Join-Path $dir '.claude'
+        New-Item -ItemType Directory -Force -Path $claudeDir | Out-Null
+        [System.IO.File]::WriteAllText(
+            (Join-Path $claudeDir 'verify.js'),
+            "process.stdout.write('verify ran');" + [Environment]::NewLine +
+            "process.exit($($case.code));" + [Environment]::NewLine,
+            (New-Object System.Text.UTF8Encoding($false)))
+        $r = Invoke-HookScript -Script 'scripts\run-verify.js' -ProjectDir $dir -StdinJson '{}'
+        Assert-Equal $case.code $r.ExitCode "run-verify passes through exit $($case.code) - $($case.name)"
+        Assert-True ($r.Stdout -like '*verify ran*') "run-verify runs the host script (exit $($case.code))" `
+            "stdout was: $($r.Stdout)"
+    } finally { Remove-Fixture $dir }
+}
+
+# A verify script it cannot execute must not be silently skipped: exit 0 so a
+# setup problem doesn't block every edit, but say so on stderr, because a
+# verify gate that quietly never runs is the "unrun check assumed green"
+# failure devkit-ship exists to prevent.
+$dir = New-FixtureProject
+try {
+    $claudeDir = Join-Path $dir '.claude'
+    New-Item -ItemType Directory -Force -Path $claudeDir | Out-Null
+    Set-Content -LiteralPath (Join-Path $claudeDir 'verify.ps1') -Value 'exit 0' -Encoding UTF8
+    $r = Invoke-HookScript -Script 'scripts\run-verify.js' -ProjectDir $dir -StdinJson '{}'
+    Assert-Equal 0 $r.ExitCode "run-verify still exits 0 for a .ps1 verify script"
 } finally { Remove-Fixture $dir }
 
 # ---------------------------------------------------------------------------
