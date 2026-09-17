@@ -1,0 +1,28 @@
+schema_version: "1.1"
+name: specify-marks-sensitive
+description: >
+  A feature touching the auth boundary and the users data model must come
+  out of devkit-specify with the SENSITIVE: marker, with acceptance
+  criteria, and with no implementation code written.
+tags: [component, specify]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 25
+  timeout_seconds: 420
+  allowed_tools: [Read, Glob, Grep, Write, Edit, Bash, Skill]
+  prompt: |
+    Spec this feature: email verification on signup.
+
+    So you don't have to interview me, here are my answers to the questions
+    you'd ask. Treat them as confirmed:
+    - After signup, the user's row gets `verified: false` and a one-time
+      token; login is refused with a clear error until verified.
+    - A `verify(token)` call flips `verified` to true and invalidates the
+      token. Unknown or already-used tokens throw.
+    - Tokens expire after 24 hours; an expired token throws a distinct error.
+    - Out of scope: actually sending email, resending tokens, admin override.
+    - Acceptance criteria should cover: refused login before verification,
+      successful verify, reuse of a token, expired token.
+
+    Write the spec file now and stop there.

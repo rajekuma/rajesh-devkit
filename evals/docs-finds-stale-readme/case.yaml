@@ -1,0 +1,18 @@
+schema_version: "1.1"
+name: docs-finds-stale-readme
+description: >
+  After a flag rename, devkit-docs must add a changelog entry under
+  [Unreleased] that calls out the breaking change, and must find and fix the
+  README that still documents the old flag - and report what it changed
+  versus what it left for a human.
+tags: [component, docs]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 500
+  allowed_tools: [Read, Glob, Grep, Write, Edit, Bash, Agent]
+  prompt: |
+    Milestone 4 (specs/rename-port-flag.md) just shipped - the change is in
+    the working tree, reviewed and preflighted. Use the devkit-docs subagent
+    to update the documentation for it, and relay its report.

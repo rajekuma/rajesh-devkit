@@ -1,0 +1,30 @@
+schema_version: "1.1"
+name: adr-writes-decision
+description: >
+  Given a real, consequential decision with alternatives and consequences
+  supplied, devkit-adr must write docs/adr/0001-*.md containing the
+  alternatives considered, the consequences (including downsides), and a
+  revisit condition - and write no code.
+tags: [component, adr]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 400
+  allowed_tools: [Read, Glob, Grep, Write, Edit, Bash, Skill]
+  prompt: |
+    Write an ADR: we are keeping the task store in-memory rather than
+    adding SQLite persistence for the first release.
+
+    Answers to what you'd ask, treat as confirmed:
+    - Alternatives considered: SQLite (rejected: adds a native dependency
+      and a migration story before we have a single user); a JSON file on
+      disk (rejected: concurrent writes corrupt it, and it becomes a de
+      facto schema we'd have to migrate later anyway).
+    - Forces: ship a usable first release this month; no second engineer
+      to own a persistence layer yet.
+    - Consequences accepted: data is lost on process exit; every consumer
+      must treat the store as ephemeral; adding persistence later means
+      touching every call site that assumes synchronous access.
+    - Revisit when: the first user asks for their tasks to survive a
+      restart, or when a second process needs to read the store.

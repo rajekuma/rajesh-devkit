@@ -1,0 +1,24 @@
+schema_version: "1.1"
+name: onboard-brownfield
+description: >
+  On an existing project, devkit-onboard must not clobber CLAUDE.md, must run
+  the test command before caching it, must create a parseable PROGRESS.md
+  from the roadmap already in the README, and must verify the loop can see
+  it by running the real session-welcome check.
+tags: [component, onboard]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 40
+  timeout_seconds: 700
+  allowed_tools: [Read, Glob, Grep, Write, Edit, Bash, Skill]
+  prompt: |
+    Onboard this project onto the devkit loop.
+
+    Answers to what you'd ask, treat as confirmed:
+    - Product intent: what the README says is right; no changes.
+    - Keep the existing CLAUDE.md as-is.
+    - PROGRESS.md: lightweight option. Existing functionality isn't
+      itemized. The two upcoming milestones are exactly the ones the README
+      roadmap names, in that order.
+    - No ADRs are worth backfilling for a library this small.

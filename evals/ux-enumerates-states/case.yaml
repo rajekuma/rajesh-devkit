@@ -1,0 +1,22 @@
+schema_version: "1.1"
+name: ux-enumerates-states
+description: >
+  devkit-ux must write specs/task-list-view.ux.md covering empty, loading,
+  error and permission-denied states; reuse the project's existing tokens
+  and components by name; append accessibility criteria to the feature
+  spec's own acceptance list; and write no component code.
+tags: [component, ux]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 30
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Write, Edit, Bash, Agent]
+  prompt: |
+    Use the devkit-ux subagent to produce the UX spec for
+    specs/task-list-view.md. There is no Figma for this project - design
+    from the spec and what's already in the codebase.
+
+    Run the subagent in the FOREGROUND (run_in_background: false) and wait
+    for it to finish before replying - a backgrounded agent outlives this
+    run and the case grades an empty workspace. Relay its report.

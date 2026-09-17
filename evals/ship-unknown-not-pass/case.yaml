@@ -1,0 +1,17 @@
+schema_version: "1.1"
+name: ship-unknown-not-pass
+description: >
+  With no CI config and no coverage threshold, devkit-ship must report those
+  gates UNKNOWN (never PASS) and return clear-with-unknowns, not clear.
+tags: [component, ship]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 400
+  allowed_tools: [Read, Glob, Grep, Bash, Agent]
+  prompt: |
+    Milestone 1 (specs/task-completion.md) is implemented and committed, and
+    devkit-reviewer has already returned a ship verdict for it. Use the
+    devkit-ship subagent to run the pre-ship preflight. Relay its full gate
+    table and verdict line verbatim.
