@@ -297,6 +297,43 @@ leaves its work uncommitted unless told otherwise (the working tree is its
 own checkpoint) — everything that touches the remote stays your explicit
 action.
 
+## Which model each component runs on, and why
+
+The rule: **model need is inversely proportional to how much expertise the
+prompt already encodes.** A component whose instructions *are* a checklist
+needs a model that executes well. A component whose job is judging what it
+doesn't know needs a model that reasons well.
+
+| Component | Model | Why |
+|---|---|---|
+| `devkit-specify` | `fable`, `effort: high` | Its real job is deciding what it *doesn't* know — which gaps take a default and which must be asked, and whether a requirement touches one of the five sensitive categories when that isn't obvious. That can't be reduced to a checklist; if it could, the checklist would already be in the skill. The failure mode is the worst kind available here: a weaker model fills gaps confidently and produces a *plausible* spec with invented requirements. It looks fine, and everything downstream treats the spec as truth. It also writes the `SENSITIVE:` marker, and the escalation gate cannot catch what was never marked. |
+| `devkit-adr` | `fable`, `effort: high` | Two judgments carry it: refusing to record a non-decision, and never inventing a rationale. The second is the most damaging failure in this plugin — a fabricated "why" is indistinguishable from a real one and gets quoted back years later by someone assuming a human wrote it. (This is also the most defensible one to downgrade if quota is tight: ADRs are written rarely, the human supplies the alternatives in the interview, and the result is reviewed immediately.) |
+| `devkit-ux` | `sonnet` | Measured, not assumed: 9/9 on its eval, enumerating all eight states, reusing only existing tokens, and deriving the forbidden-vs-not-found consequence of the spec's `SENSITIVE:` requirement unprompted. It works because this component's prompt **is** the expertise — the state list and the accessibility list are written out explicitly, so the model executes a well-specified checklist rather than inventing method. |
+| `devkit-onboard` | `sonnet` | The most procedural component here: inventory, detect the stack, run the test command, write `PROGRESS.md`, run `session-welcome.ps1` to confirm the loop can parse it. Its judgment calls (don't clobber, which ADRs are load-bearing) are stated very explicitly, and explicit instructions are what mid-tier models follow reliably. It also verifies its own work by executing things, so mistakes surface instead of hiding. 9/9 on `sonnet`. |
+| `devkit-implementer`, `devkit-ship`, `devkit-docs`, `devkit-eval` | `sonnet` | Procedure plus evidence-gathering against a spec that already exists. |
+| `devkit-reviewer`, `devkit-dep-audit`, `devkit-help`, `devkit-stats` | `haiku` | Mechanical: map criteria to a diff, run a scanner, relay a status check, read a telemetry log. |
+
+### When a model hits its rate limit
+
+Model tiers have **separate quotas** — Opus stays available when Fable is
+exhausted, and vice versa. There is no automatic failover, and what recovery
+exists depends on a distinction worth knowing:
+
+- **Subagents can be model-switched at call time.** The `Agent` tool takes a
+  `model` parameter that overrides the definition, so a 429 from
+  `devkit-ux`, `devkit-implementer`, `devkit-ship`, `devkit-docs` or
+  `devkit-reviewer` is one retry away from recovering.
+- **Skills cannot.** The `Skill` tool takes only the skill name and its
+  arguments — there is no model override. When `devkit-specify` or
+  `devkit-adr` hits a limit, it fails, and the only fix is editing `model:`
+  in its frontmatter.
+
+That asymmetry is why `devkit-onboard` moved to `sonnet` even though it ran
+fine on `fable`: putting a *skill* on your scarcest model is a reliability
+choice, not just a cost one. The two skills still on `fable` are there
+because their failure mode — confidently invented content that reads as
+real — is worse than being unavailable.
+
 ## Skills
 
 | Name | Trigger | Model / effort | What it does |
