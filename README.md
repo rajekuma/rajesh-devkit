@@ -520,9 +520,22 @@ should stay fast, since it runs after *every* edit.
 **What this plugin writes into the host project, unprompted.** Beyond
 reading `PROGRESS.md`/`specs/`/`CLAUDE.md`, three things live under
 `.claude\rajesh-devkit\` (created automatically, gitignored automatically —
-see "Telemetry" below): the telemetry log, `devkit-implementer`'s cached
-test-runner command (`test-runners.json` — see "Subagents" above), and the
-one `.gitignore` line covering all of it. Nothing else in the plugin writes
+see "Telemetry" below): the telemetry log, the cached test-runner command
+(`test-runners.json` — see "Subagents" above), and the
+one `.gitignore` line covering all of it.
+
+`test-runners.json` is an array of
+`{area, command, workingDirectory, detectedFrom}`, written by
+`devkit-implementer` on a cache miss and seeded by `devkit-onboard`. **`area`
+is derived, never invented**: the stack's directory relative to the repo root,
+or the literal `root` when the stack is the repo root — `root`, `frontend`,
+`services/api`. That rule exists because two components write this file. When
+`area` was "a short name you choose consistently", onboard seeded `"root"`
+and the implementer derived `"tasklist"` for the same single-stack project
+(caught by the evals); the implementer's lookup would then miss a stack that
+was already cached and append a second entry for the same directory, leaving
+two answers for one question. There is one entry per `workingDirectory` —
+writers replace a matching entry rather than appending. Nothing else in the plugin writes
 to the host project unprompted — `devkit-implementer` otherwise only writes
 what you asked it to implement, and every report-only component
 (`devkit-reviewer`, `devkit-dep-audit`, `devkit-stats`) never writes anything.

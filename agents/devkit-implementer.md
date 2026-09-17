@@ -30,6 +30,17 @@ assuming anything.
    this criterion touches, **use its `command` verbatim** — skip straight to
    step 4.
 
+   **`area` is derived, never invented.** It is the stack's own directory,
+   relative to the repo root, with the literal string `root` when the stack
+   lives at the repo root itself — so `root`, `frontend`, `services/api`,
+   using forward slashes. Deriving it from the filesystem is the whole
+   point: a name someone picks ("tasklist", "backend", "the API") is a name
+   a *different* component, or you three milestones later, will pick
+   differently, and the lookup above then misses and appends a duplicate
+   entry for a stack that was already cached. `devkit-onboard` seeds this
+   same file with this same rule; the two must agree or seeding is
+   pointless.
+
    **Only if no cache file exists, or none of its entries match this
    criterion's area**, work out the test runner from what's actually in the
    repo (don't assume one):
@@ -44,21 +55,27 @@ assuming anything.
    - If more than one of these is present (a monorepo with, say, a Python
      backend and a React frontend), work out from the spec's own content
      which side this criterion belongs to — don't run every test suite for
-     every criterion. Each side gets its own cache entry (see below), keyed
-     by a short `area` name (e.g. `"frontend"`, `"backend"`) you choose
-     consistently — reuse the same `area` string next time the same side
-     comes up, so the cache lookup above actually matches.
+     every criterion. Each side gets its own cache entry, keyed by the
+     `area` rule above: the directory that side lives in, relative to the
+     repo root.
    - If nothing matches, say so and ask rather than guessing a command that
      might not exist. Don't cache a guess.
 
    **Once you've worked out a real, working command this way, write it to
    the cache** before running anything else, so every future milestone in
-   this project skips this step for the same area: append
+   this project skips this step for the same area: write
    `{area, command, workingDirectory, detectedFrom}` to
    `.claude\rajesh-devkit\test-runners.json` (create the file — a JSON
    array — and the `.claude\rajesh-devkit\` folder if either doesn't exist
    yet; this folder is meant to be gitignored, matching the plugin's own
    telemetry files there — don't fight that).
+
+   **One entry per `workingDirectory`.** If the file already has an entry
+   for the same directory, *replace* it rather than appending a second one,
+   even when its `area` string differs from the one you derived — a
+   duplicate means the next lookup's result depends on which entry it reads
+   first, which is exactly the bug the derived-`area` rule above is there to
+   prevent.
 
    **If a command you're using — cached or freshly derived — doesn't
    actually run correctly on this machine/runtime** (a CLI-parsing quirk, a

@@ -59,6 +59,17 @@ user confirms.
    means the first milestone doesn't spend its opening moves rediscovering
    this. Create the folder if needed; it's gitignored per-machine data.
 
+   **`area` is derived, never invented** — it is the stack's own directory
+   relative to the repo root, with the literal string `root` when the stack
+   lives at the repo root, using forward slashes: `root`, `frontend`,
+   `services/api`. This rule is stated identically in `devkit-implementer`
+   and the two must stay in agreement. Seeding the cache under a name you
+   chose ("the API", the package's name) rather than the derived one is
+   worse than not seeding at all: the implementer derives its own key, misses
+   your entry, and appends a duplicate for a stack that was already cached —
+   so the first milestone re-derives the runner anyway and the file now has
+   two answers for one directory.
+
    If the command fails for an environmental reason (missing dependencies,
    no runtime installed), say so and don't cache it — that's a real setup
    problem the user needs to see now, not a fact to record.
