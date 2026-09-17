@@ -12,6 +12,12 @@ tags, merges, or opens a PR.** Several components produce verdicts, and the
 loop respects them, but everything that touches a remote stays your explicit
 action.
 
+> **New here?** [**docs/SDLC.md**](docs/SDLC.md) is the end-to-end
+> walkthrough — how to take a product from nothing, or from an existing
+> codebase, to shipped features one milestone at a time, with the reasoning
+> behind each stage. This README is the reference: what each component does,
+> how the hooks behave, and what gets written where.
+
 ## What this plugin is
 
 - `devkit-onboard` — the entry point for a project that isn't on the loop
