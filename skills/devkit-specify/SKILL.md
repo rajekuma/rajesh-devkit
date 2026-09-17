@@ -32,6 +32,13 @@ repo's own files and the user's answers.
    discipline, layering rules, or approval gates, and the spec should respect
    them without restating them.
 
+   Also grep `specs/` for any `## Tracked follow-ups` sections — that's where a
+   previous milestone recorded a criterion it deliberately deferred (see
+   `devkit-implementer`). If an open follow-up covers what you're about to spec,
+   say so before writing anything: this feature may be that follow-up coming due,
+   in which case the new spec should reference the original rather than silently
+   restate it as new work.
+
 2. **Read reality.** Search the codebase for whatever the feature actually
    touches — related endpoints/routes, data models, services, and existing
    tests — using the layout you just learned. Don't skip this because the
@@ -67,10 +74,12 @@ repo's own files and the user's answers.
    numbered "given X, the system does Y" statements over prose. If a requirement touches
    an existing invariant, a security or authorization boundary, a data-model change, an
    external integration, or backward compatibility with something already shipped,
-   prefix that requirement with "🔒 SENSITIVE:" exactly — this is a machine-checked
-   marker other parts of this toolkit key off of (the Stop hook's escalation gate), not
-   just a stylistic flag, so use it only for these five categories and use it every time
-   one applies, even if it feels obvious in context.
+   prefix that requirement with "🔒 SENSITIVE:" — this is a machine-checked marker other
+   parts of this toolkit key off of (the Stop hook's escalation gate), not just a
+   stylistic flag, so use it only for these five categories and use it every time one
+   applies, even if it feels obvious in context. The uppercase word `SENSITIVE:` is the
+   part that is actually matched; the lock glyph is presentation. Never drop the keyword
+   to work around an environment that won't render the emoji — drop the emoji instead.
 
    ## Edge cases
 

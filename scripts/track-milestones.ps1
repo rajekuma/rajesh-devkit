@@ -21,7 +21,8 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # PROGRESS.md content, not typed from memory.
 $GlyphNotStarted = [char]::ConvertFromUtf32(0x2B1C)  # ⬜ WHITE LARGE SQUARE
 $GlyphHourglass  = [char]::ConvertFromUtf32(0x23F3)  # ⏳ HOURGLASS FLOWING SAND
-$GlyphInProgress = [char]::ConvertFromUtf32(0x1F7E8) # 🟨 LARGE YELLOW SQUARE
+$GlyphInProgress = [char]::ConvertFromUtf32(0x1F7E8) # LARGE YELLOW SQUARE (astral - glyph
+                                                     # deliberately not written out here)
 $GlyphBlocked    = [char]::ConvertFromUtf32(0x23F8)  # ⏸ DOUBLE VERTICAL BAR
 $GlyphDone       = [char]::ConvertFromUtf32(0x2705)  # ✅ WHITE HEAVY CHECK MARK
 

@@ -29,7 +29,13 @@ param()
 # PROGRESS.md content, not typed from memory.
 $GlyphNotStarted = [char]::ConvertFromUtf32(0x2B1C)  # ⬜ WHITE LARGE SQUARE
 $GlyphHourglass  = [char]::ConvertFromUtf32(0x23F3)  # ⏳ HOURGLASS FLOWING SAND
-$GlyphSensitive  = [char]::ConvertFromUtf32(0x1F512) # 🔒 LOCK
+
+# Matched on the ASCII keyword alone, glyph not required - see
+# continue-loop.ps1's comment on this pattern for why. Both scripts must stay
+# identical here: they implement the same gate for the two cases (this one
+# covers a same-turn request, which a Stop hook can't see), so a marker that
+# escalates in one and not the other would be worse than neither.
+$SensitiveMarkerPattern = 'SENSITIVE\s*:'
 
 $raw = [Console]::In.ReadToEnd()
 $hookInput = $null
@@ -129,7 +135,7 @@ $specPath = Find-SpecForMilestone -ProjectDir $projectDir -MilestoneNumber $mile
 $isSensitive = $false
 if ($specPath) {
     $specContent = Get-Content -LiteralPath $specPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
-    if ($specContent -and $specContent.Contains("$GlyphSensitive SENSITIVE:")) {
+    if ($specContent -and $specContent -cmatch $SensitiveMarkerPattern) {
         $isSensitive = $true
     }
 }

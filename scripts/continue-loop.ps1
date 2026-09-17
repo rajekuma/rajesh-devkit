@@ -26,7 +26,19 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # plugin's own real PROGRESS.md content, not typed from memory.
 $GlyphNotStarted = [char]::ConvertFromUtf32(0x2B1C)  # ⬜ WHITE LARGE SQUARE
 $GlyphHourglass  = [char]::ConvertFromUtf32(0x23F3)  # ⏳ HOURGLASS FLOWING SAND
-$GlyphSensitive  = [char]::ConvertFromUtf32(0x1F512) # 🔒 LOCK
+
+# The sensitive-requirement marker, matched on its ASCII keyword alone - the
+# lock glyph devkit-specify writes in front of it is deliberately NOT required
+# here. This gate fails OPEN (a missed marker means a milestone that should
+# have paused for a human gets auto-delegated instead), so it has to tolerate
+# every way a probabilistic writer might render the prefix: no space after the
+# glyph, a variation selector (U+FE0F) appended to it, the glyph dropped
+# entirely, or the whole file read back through the wrong codepage. All of
+# those mangle the emoji; none of them touch the ASCII word. Case stays
+# significant so ordinary prose ("sensitive: no") can't trip the gate, and
+# over-matching is the safe direction anyway - a false positive costs one
+# extra question, a false negative costs the entire gate.
+$SensitiveMarkerPattern = 'SENSITIVE\s*:'
 
 # Idempotently ensures one line exists in the host project's .gitignore -
 # used for the local telemetry/cache folder this plugin writes into, so it
@@ -136,8 +148,9 @@ $milestone = if ($milestoneNumber) { "M$milestoneNumber - $milestoneName" } else
 $specPath = Find-SpecForMilestone -ProjectDir $projectDir -MilestoneNumber $milestoneNumber -MilestoneName $milestoneName
 
 # Sensitive-milestone escalation gate: devkit-specify marks a requirement
-# "🔒 SENSITIVE:" when it touches an existing invariant, a security/auth
-# boundary, a data-model change, an external integration, or a
+# "SENSITIVE:" (glyph-prefixed when it renders cleanly) when it touches an
+# existing invariant, a security/auth boundary, a data-model change, an
+# external integration, or a
 # backward-compatibility break (see its own SKILL.md). If the spec has one,
 # this milestone shouldn't get automatically nudged toward standard
 # delegation the same way an ordinary one would - the escalation message
@@ -148,7 +161,7 @@ $specPath = Find-SpecForMilestone -ProjectDir $projectDir -MilestoneNumber $mile
 $isSensitive = $false
 if ($specPath) {
     $specContent = Get-Content -LiteralPath $specPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
-    if ($specContent -and $specContent.Contains("$GlyphSensitive SENSITIVE:")) {
+    if ($specContent -and $specContent -cmatch $SensitiveMarkerPattern) {
         $isSensitive = $true
     }
 }
@@ -229,12 +242,16 @@ if ($showEscalation) {
         "draft one first: say `"spec this feature: $milestoneName`" to invoke devkit-specify " +
         "and write specs/<kebab-case-feature>.md. Once the spec exists, implement it with " +
         "strict TDD (red-green, one acceptance criterion at a time), then invoke the " +
-        "devkit-reviewer subagent against the diff before treating it as done."
+        "devkit-reviewer subagent against the diff. Once it returns a ship verdict, run " +
+        "the devkit-ship subagent as a preflight (CI, coverage, advisories, secrets, open " +
+        "follow-ups) before treating the milestone as done."
 } else {
     $message = "Next milestone from PROGRESS.md: $milestone. Its spec already exists at " +
         "$specPath - implement it with strict TDD (red-green, one acceptance criterion at a " +
         "time per this project's own testing conventions), then invoke the devkit-reviewer " +
-        "subagent against the diff before treating it as done."
+        "subagent against the diff. Once it returns a ship verdict, run the devkit-ship " +
+        "subagent as a preflight (CI, coverage, advisories, secrets, open follow-ups) " +
+        "before treating the milestone as done."
 }
 [Console]::Error.WriteLine($message)
 exit 2
