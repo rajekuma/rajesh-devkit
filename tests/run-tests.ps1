@@ -322,6 +322,39 @@ try {
 } finally { Remove-Fixture $dir }
 
 # ---------------------------------------------------------------------------
+Group "Behavioral: ALL hooks defer to a project's own loop skill"
+# ---------------------------------------------------------------------------
+# continue-loop deferring on its own is not enough, and that gap was a real
+# bug. session-welcome kept advertising the devkit chain and signing off with
+# "the Stop hook will nudge automatically" - false precisely BECAUSE
+# continue-loop had deferred. track-milestones kept creating
+# .claude/rajesh-devkit/ and appending a .gitignore line on every Edit, to log
+# "shipped" events whose matching "started" events continue-loop would never
+# write, so the data could never be read back. Both must stand down together.
+$dir = New-FixtureProject -ProgressContent $SampleProgress
+try {
+    $own = Join-Path $dir '.claude\skills\spec-loop'
+    New-Item -ItemType Directory -Force -Path $own | Out-Null
+    Set-Content -LiteralPath (Join-Path $own 'SKILL.md') -Value '# own loop' -Encoding UTF8
+
+    $w = Invoke-HookScript -Script 'scripts\session-welcome.ps1' -ProjectDir $dir -StdinJson '{"source":"startup"}'
+    Assert-Equal 0 $w.ExitCode "session-welcome exits 0 when the project owns its loop"
+    Assert-True ($w.Stdout -like '*defers to it*') "session-welcome says the Stop hook defers" `
+        "stdout: $($w.Stdout)"
+    Assert-True ($w.Stdout -notlike '*nudge automatically*') "session-welcome drops the false nudge promise" `
+        "it still claims the Stop hook will nudge, which cannot happen here"
+    Assert-True ($w.Stdout -notlike '*spec this feature*') "session-welcome stops steering toward devkit-specify" `
+        "stdout: $($w.Stdout)"
+
+    $t = Invoke-HookScript -Script 'scripts\track-milestones.ps1' -ProjectDir $dir -StdinJson '{}'
+    Assert-Equal 0 $t.ExitCode "track-milestones exits 0 when the project owns its loop"
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $dir '.claude\rajesh-devkit'))) `
+        "track-milestones writes no telemetry folder" "it created .claude/rajesh-devkit/ anyway"
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $dir '.gitignore'))) `
+        "track-milestones touches no .gitignore" "it appended to the host project's .gitignore anyway"
+} finally { Remove-Fixture $dir }
+
+# ---------------------------------------------------------------------------
 Group "Behavioral: escalation shows once per milestone, not every nudge"
 # ---------------------------------------------------------------------------
 $sensSpec = "# Spec: User login`n`nMilestone: 1`n`n## Behaviour / requirements`n`n1. $LOCK SENSITIVE: touches auth`n"

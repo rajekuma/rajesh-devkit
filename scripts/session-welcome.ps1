@@ -82,6 +82,28 @@ if (-not $projectDir -or -not (Test-Path -LiteralPath $projectDir)) {
     exit 0
 }
 
+# A project with its own loop skill owns its stop conditions deliberately, and
+# continue-loop.ps1 defers to it entirely (see its own comment). This banner
+# has to defer for the same reason: without it, every session in such a
+# project opens with advice pointing at devkit-* components it doesn't use,
+# ending "the Stop hook will nudge automatically" - which is false precisely
+# BECAUSE continue-loop deferred. Say something short and true instead of
+# nothing, since devkit-help calls this script directly and silence there
+# would look broken.
+$ownLoopSkill = Join-Path $projectDir '.claude\skills\spec-loop\SKILL.md'
+if (Test-Path -LiteralPath $ownLoopSkill) {
+    Write-Output @'
+rajesh-devkit: this project has its own spec-loop skill, so the Stop hook
+defers to it and will not nudge between milestones - that project's loop owns
+its own stop conditions. Use it as you normally would.
+
+The report-only components still work on demand if you want them:
+devkit-reviewer (review the diff), devkit-ship (pre-ship preflight),
+devkit-dep-audit (dependency advisories), devkit-stats (timing and cost).
+'@
+    exit 0
+}
+
 $progressPath = Join-Path $projectDir 'PROGRESS.md'
 if (-not (Test-Path -LiteralPath $progressPath)) {
     Write-Output @'

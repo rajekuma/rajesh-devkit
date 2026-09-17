@@ -50,6 +50,20 @@ if (-not $projectDir -or -not (Test-Path -LiteralPath $projectDir)) {
     exit 0
 }
 
+# Defer to a project's own loop skill, same as continue-loop.ps1 does - and
+# here the reason is functional, not just tidiness. This script logs the
+# "shipped" half of a pair; continue-loop.ps1 logs the "started" half, and
+# devkit-stats reports a milestone only when it can match the two. In a
+# project with its own loop, continue-loop has already deferred and no
+# "started" event is ever written, so every "shipped" event this script wrote
+# would be permanently unpairable - it would create a .claude/rajesh-devkit/
+# folder and append a .gitignore line to someone's repo, on every Edit, to
+# accumulate data nothing can ever read. Exit before writing anything.
+$ownLoopSkill = Join-Path $projectDir '.claude\skills\spec-loop\SKILL.md'
+if (Test-Path -LiteralPath $ownLoopSkill) {
+    exit 0
+}
+
 $progressPath = Join-Path $projectDir 'PROGRESS.md'
 if (-not (Test-Path -LiteralPath $progressPath)) {
     exit 0
