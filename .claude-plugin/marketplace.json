@@ -1,0 +1,14 @@
+{
+  "name": "rajesh-devkit",
+  "owner": {
+    "name": "Rajesh",
+    "email": "satheeshrajesh@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "rajesh-devkit",
+      "source": ".",
+      "description": "A full SDLC loop as Claude Code components: onboard a new or existing project, draft a spec, design the UX, implement test-first, review against the spec, gate before shipping, and document what changed - one milestone at a time, with every artifact a file in the repo."
+    }
+  ]
+}

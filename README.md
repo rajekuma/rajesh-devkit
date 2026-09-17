@@ -136,22 +136,62 @@ rajesh-devkit/
 └── README.md
 ```
 
-Installed elsewhere as a git submodule at `dev-marketplace/plugins/rajesh-devkit`
-(see "Install" below) — a real git checkout of this same repo pinned to one
-commit, not a duplicated copy of the files. It needs an explicit sync after
-changes here (see Troubleshooting), it doesn't track this repo live.
+`.claude-plugin/` holds both a `plugin.json` and a `marketplace.json`, which
+is what makes this repo **self-hosting**: it is simultaneously the plugin and
+a one-plugin marketplace listing itself at `"source": "."`. That's why
+installing needs no clone and no separate marketplace repo — see "Install"
+below.
 
 ## Install
 
+This repository is its own marketplace, so installing it takes two commands
+and no clone. Run both **from inside the project you want the loop in**:
+
 ```bash
-claude plugin marketplace add /c/Dev/dev-marketplace
-claude plugin install rajesh-devkit@dev-marketplace --scope project
+claude plugin marketplace add rajekuma/rajesh-devkit
+claude plugin install rajesh-devkit@rajesh-devkit --scope project
 ```
 
-Run both from inside the host project's repo root (e.g. `MyHomeMaintenance`).
 `--scope project` records the install in that repo's own Claude Code config,
-so it only applies there — repeat the two commands in any other project you
-want it in.
+so it applies only there — repeat the two commands in any other project you
+want it in. Confirm it loaded with `claude plugin list`, then say
+*"how do I use this plugin"* to invoke `devkit-help`, which reports what to
+do next in that specific repository.
+
+**Requirements.** The four hooks are PowerShell (`powershell.exe`), so the
+automated nudge, the verify hook and the telemetry currently need Windows.
+Every skill and subagent is plain Markdown and works anywhere Claude Code
+does — on macOS or Linux you get the full component set with the hooks
+inert, which is a usable subset: you invoke the stages yourself instead of
+being nudged between them.
+
+<details>
+<summary>Other install routes</summary>
+
+**From a local checkout** — for developing the plugin itself, or pinning to
+a working copy:
+
+```bash
+git clone https://github.com/rajekuma/rajesh-devkit
+claude plugin marketplace add ./rajesh-devkit
+claude plugin install rajesh-devkit@rajesh-devkit --scope project
+```
+
+**For one session only**, without installing anything:
+
+```bash
+claude --plugin-dir /path/to/rajesh-devkit
+```
+
+Useful for trying it against a project before committing to it, and the way
+`tests/run-evals.ps1` loads the plugin under test.
+
+**Updating.** `claude plugin marketplace update rajesh-devkit` refreshes the
+catalog; `claude plugin install` again picks up the new version. The version
+in `.claude-plugin/plugin.json` moves whenever behaviour changes, so
+`claude plugin list` tells you what you actually have.
+
+</details>
 
 ## Getting started in a brand-new project
 
@@ -288,8 +328,8 @@ duplicating it.
 6. **Install** (same two commands as the brand-new-project case):
 
    ```bash
-   claude plugin marketplace add /c/Dev/dev-marketplace
-   claude plugin install rajesh-devkit@dev-marketplace --scope project
+   claude plugin marketplace add rajekuma/rajesh-devkit
+   claude plugin install rajesh-devkit@rajesh-devkit --scope project
    ```
 
 7. From here, it's the same as any project: the `SessionStart` banner (or
@@ -853,7 +893,7 @@ agent involved, which is worth enabling regardless (Settings → Code security
 | `0b0afcc` | 2026-09-16 | Added the sensitive-milestone escalation gate (`devkit-specify` marks `🔒 SENSITIVE:`, three places check for it — `continue-loop.ps1`, `session-welcome.ps1`/`devkit-help`, `devkit-specify`'s own report — shown once per milestone) from a full-plugin gap analysis. Testing it for real surfaced a genuine bug: a raw emoji literal in a BOM-less `.ps1` file broke PowerShell 5.1's parser outright, which in turn revealed the *existing* status-glyph matching had only ever worked by an accidental cancellation of two encoding bugs. Fixed properly across all three affected scripts — every glyph built from a verified codepoint, every relevant `Get-Content` call explicit about `-Encoding UTF8` |
 
 The last six commits all came from actually running each shipped file against
-[a scratch regression fixture](../scratch-devkit-test) rather than just reading
+a scratch regression fixture (a local sibling repo, not published) rather than just reading
 them — see that project's `CLAUDE.md` for what's real there versus deliberately
 broken/vulnerable on purpose.
 - **Marketplace install fails with "source: Invalid input" or "source type
@@ -864,13 +904,19 @@ broken/vulnerable on purpose.
   own tree (`"../rajesh-devkit"` fails validation) and rejects object-form
   sources (`{"source": "directory", ...}`, `{"source": "git", ...}`) as
   unsupported, regardless of CLI version (checked on 2.1.269 and 2.1.272).
-  That's why this plugin is installed as a **git submodule** at
-  `dev-marketplace/plugins/rajesh-devkit` rather than a true sibling folder —
-  if you're setting this up fresh, see `dev-marketplace`'s own README/commit
-  history for the exact `git submodule add` command, and don't revert to a
-  sibling-folder layout, it won't install.
-- **Changed something in `rajesh-devkit` but the installed plugin doesn't
-  reflect it.** The submodule under `dev-marketplace/plugins/rajesh-devkit`
-  is a pinned commit, not a live link — after committing here, sync it:
-  `cd dev-marketplace/plugins/rajesh-devkit && git fetch <path-to-rajesh-devkit> master && git checkout FETCH_HEAD`,
-  then commit the updated submodule pointer in `dev-marketplace` itself.
+  The fix that follows from that constraint is the one this repo now uses:
+  **`"source": "."`** — the marketplace lists the plugin at its own root, so
+  the path never leaves the marketplace tree. Verified end to end: adding this
+  directory as a marketplace and installing from it resolves `0.2.0` and
+  reports `enabled`. A separate marketplace repo with the plugin vendored in
+  as a submodule also works and is what this used before, but it is strictly
+  more moving parts for a single-plugin marketplace.
+- **Changed something here but the installed plugin doesn't reflect it.**
+  An install is a *copy* under `~/.claude/plugins/cache/`, not a live link.
+  Refresh the catalog and reinstall:
+  `claude plugin marketplace update rajesh-devkit` then
+  `claude plugin install rajesh-devkit@rajesh-devkit --scope project`.
+  `claude plugin list` shows the version actually installed, which is the
+  quickest way to tell whether a change reached it. While iterating on the
+  plugin itself, `claude --plugin-dir <path>` skips the cache entirely and
+  loads the working tree.

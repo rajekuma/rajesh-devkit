@@ -70,14 +70,18 @@ what it cost).
 
 ## Install
 
+Run both from inside the project you want the loop in — the repository is its
+own marketplace, so there's nothing to clone:
+
 ```bash
-claude plugin marketplace add /c/Dev/dev-marketplace
-claude plugin install rajesh-devkit@dev-marketplace --scope project
+claude plugin marketplace add rajekuma/rajesh-devkit
+claude plugin install rajesh-devkit@rajesh-devkit --scope project
 ```
 
 `--scope project` keeps the install scoped to the repo you're in rather than
 your user profile, which matters if you work on several projects with
-different conventions.
+different conventions. See the [README](../README.md#install) for local-checkout
+and single-session alternatives, and for the Windows requirement on the hooks.
 
 Verify it loaded:
 
