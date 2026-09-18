@@ -18,6 +18,20 @@ gated" leaves the last mile manual forever.
 
 Do not start unless **all** hold. If any fails, say which and stop:
 
+0. **The `deliver` stage is enabled — check the file yourself, first.** The
+   Stop hook honours stage config and will never nudge toward you when the
+   stage is off, but a person can invoke you by name regardless, and "the
+   hook wouldn't have sent me here" is not a check. Read
+   `.claude/rajesh-devkit/devkit.local.json`, then `.claude/devkit.json`
+   (the first that exists and parses wins, same precedence as the hooks).
+   `deliver` must appear in its `stages` array. **No file at all means the
+   stage is off** — it is the one stage excluded by default — and a
+   malformed file means off too. When it's off: say so, say which file to
+   add `"deliver"` to, and stop **before running any git command that
+   writes**. Do not offer to do it anyway. Being asked directly is not the
+   same as the project having opted in; that opt-in is a committed,
+   reviewable decision, and the whole reason this component is safe to
+   install is that it cannot be granted by a sentence in a conversation.
 1. **The milestone passed review.** `devkit-reviewer` returned `ship`, not
    `needs-changes` or `discuss`.
 2. **The preflight is clear.** `devkit-ship` returned `clear`, or

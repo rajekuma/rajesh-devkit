@@ -1,0 +1,19 @@
+schema_version: "1.1"
+name: ui-verify-unreached-is-unverified
+description: >
+  When the app cannot be started with what the project provides, every state
+  the UX spec named is unreachable. devkit-ui-verify must report them as
+  UNVERIFIED, return partly-unverified (never matches), name what would make
+  the app runnable, and neither invent a run command nor write anything.
+tags: [component, ui-verify]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 400
+  allowed_tools: [Read, Glob, Grep, Bash, Agent]
+  prompt: |
+    Milestone 1 (task list view) is implemented. Use the devkit-ui-verify
+    subagent, in the foreground (run_in_background: false), to drive the
+    built UI through every state named in specs/task-list-view.ux.md. Relay
+    its full state table and verdict line verbatim.

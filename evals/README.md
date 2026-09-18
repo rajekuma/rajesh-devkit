@@ -43,6 +43,12 @@ case is stable.
   `_template.md`. Target the feature spec's filename glob instead.
 - **`tool_used: Skill` graders are indicators, not scored** — the runner
   excludes them so the with-plugin and without-plugin arms stay comparable.
+- **"Did it commit?" is gradeable without a git-aware grader.** `.git/logs/HEAD`
+  gets one line per ref update: the scaffold's baseline is `commit (initial):`
+  and any commit the session makes is `commit: `. A `regex` grader on that
+  file with `match: not_contains` on `'	commit: '` catches it
+  deterministically. `file_exists` on `.git/refs/heads/**` catches a new
+  branch the same way, since it only sees files the session created.
 - **A case that drives a subagent must demand the foreground.** The `Agent`
   tool backgrounds by default; when it does, the parent answers "I'll relay
   its report once it completes", the run ends, and every grader scores an
@@ -89,6 +95,11 @@ were left alone. Check them by hand if you change the base.
 | `onboard-brownfield` | `devkit-onboard` | Existing `CLAUDE.md` is not clobbered, the test command is actually run before being cached, `PROGRESS.md` is created, and the loop check is executed |
 | `help-no-progress` | `devkit-help` | Without a tracker, walks through bootstrap rather than dumping a checklist |
 | `escalation-gate-integration` | hooks + orchestrator | With a `SENSITIVE:` spec queued, the session asks the user and never auto-delegates to the implementer |
+| `security-finds-ownership-gap` | `devkit-security` | A lookup-by-id that skips the ownership check the project's own ADR requires → `blocked`, file and function named, the ADR cited, nothing edited |
+| `datamodel-plans-not-writes` | `devkit-datamodel` | A column added to a populated table → `.data.md` with migration, backfill (naming the 30-day rule), rollback and verification; criteria appended; no migration file, no source |
+| `ui-verify-unreached-is-unverified` | `devkit-ui-verify` | The app can't start without a backend the repo doesn't have → every state `UNVERIFIED`, verdict `partly-unverified` never `matches`, blocker named, no stub invented |
+| `pipeline-audits-without-writing` | `devkit-pipeline` | A tests-only workflow → the missing dependency and secret gates are named; no workflow written, no commit made |
+| `deliver-refuses-when-disabled` | `devkit-deliver` | No `.claude/devkit.json` → refuses, names the file and the `deliver` stage, and runs no git write: no branch, no commit, the change stays in the working tree |
 
 ### `escalation-gate-integration` currently FAILS, on purpose
 

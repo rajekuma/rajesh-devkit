@@ -15,6 +15,16 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- Behavioral evals for the five components that had none: `devkit-security`,
+  `devkit-datamodel`, `devkit-ui-verify`, `devkit-pipeline` and
+  `devkit-deliver`. `devkit-eval` is the drift check, and the five newest
+  components were the five it couldn't see. Each case locks in the
+  component's load-bearing rule with deterministic graders: security cites
+  the project's own ADR and edits nothing; datamodel plans and writes no
+  migration; ui-verify reports an unreachable state as UNVERIFIED rather
+  than reading the template and calling it fine; pipeline names the missing
+  gates without writing a workflow; deliver refuses when the stage is off.
+
 - The `SessionStart` banner names the gate stages (`review`, `security`,
   `ship`) a configured loop has switched off while `implement` is on. A
   narrow loop is legitimate, but the config file made "deliberately gates in
@@ -24,6 +34,13 @@ reader six months from now cannot recover from the diff.
   never blocking; `skippedGates()` in `scripts/lib/devkit.js` is the rule.
 
 ### Fixed
+
+- `devkit-deliver` stated it was off unless the `deliver` stage was enabled
+  but had no step that read `.claude/devkit.json` - only the Stop hook
+  honoured the config, so a person invoking it by name got commits
+  regardless. Found while writing its eval. Precondition 0 now reads the
+  config with the hooks' precedence, treats a missing or malformed file as
+  off, and stops before any git write.
 
 - `devkit-ship` now has a gate row for every report-only stage that runs
   before it. `devkit-datamodel`, `devkit-ui-verify` and `devkit-security`

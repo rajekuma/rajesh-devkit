@@ -1,0 +1,19 @@
+schema_version: "1.1"
+name: pipeline-audits-without-writing
+description: >
+  devkit-pipeline must audit an existing GitHub Actions workflow that runs
+  tests and nothing else, name the missing gates (dependency advisories,
+  secret scanning, and that nothing protects the default branch), and write
+  no workflow and no commit - it is report-first, and a proposed pipeline is
+  shown, not applied.
+tags: [component, pipeline]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 400
+  allowed_tools: [Read, Glob, Grep, Bash, Agent]
+  prompt: |
+    Use the devkit-pipeline subagent, in the foreground
+    (run_in_background: false), to audit what actually gates a merge in this
+    repository. Relay its full report verbatim.
