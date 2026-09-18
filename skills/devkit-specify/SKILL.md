@@ -99,15 +99,35 @@ repo's own files and the user's answers.
    today. Cover the happy path *and* at least one denial/negative case per boundary
    touched.
 
-   Prefix a criterion with `[integration]` when it **cannot honestly be proven in
-   isolation** — anything whose truth depends on a real database, a real migration, a
-   real HTTP boundary, or a second process. Leave it unmarked when a unit test genuinely
-   proves it. This is not ceremony: a criterion proven only against an in-memory
-   substitute is proven against something production does not run, and that gap ships
-   silently. Mark it and the implementer writes the test where it means something.
+   Prefix a criterion with the **test layer that honestly proves it** when that
+   layer is anything other than a unit test. Leave it unmarked when a unit test
+   genuinely proves it. Three markers, and they are not interchangeable:
+
+   - `[integration]` — truth depends on a real dependency this codebase owns:
+     a real database, a real migration, a real queue, a second process of
+     this system. "The migration applies cleanly to a populated table."
+   - `[contract]` — truth is an agreement with a **separately deployed**
+     consumer or provider: the mobile app that parses this response, the
+     partner API this calls, the webhook shape a customer integrates
+     against. The test is the recorded contract (an OpenAPI schema, a Pact
+     file, a golden response) and both sides run it. "The /tasks response
+     still carries every field the mobile client reads."
+   - `[e2e]` — truth is only visible from the outside, through the full
+     path a user takes: browser or device to API to database and back.
+     Reserve it for the few criteria that are genuinely about the whole
+     path; an `[e2e]` criterion that a unit test could prove is a slow,
+     flaky way of saying nothing.
+
+   This is not ceremony: a criterion proven only against an in-memory
+   substitute is proven against something production does not run, and that
+   gap ships silently. A criterion marked `[integration]` when it is really
+   a `[contract]` gets a Postgres-backed test that never leaves the process
+   and never sees the client that will break. Mark the layer and the
+   implementer writes the test where it means something.
 
    - [ ] ...
    - [ ] [integration] ...
+   - [ ] [contract] ...
    - [ ] ...
    ```
 

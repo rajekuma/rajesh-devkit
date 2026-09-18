@@ -15,6 +15,16 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- Two more test-layer markers, `[contract]` and `[e2e]`, beside
+  `[integration]`. The spec vocabulary had one marker, so a criterion that
+  is really an agreement with a separately deployed client - the mobile app
+  parsing this response - got marked `[integration]` and satisfied by a
+  database-backed test that never left the process and never saw the client
+  that will break. `devkit-specify` marks, `devkit-implementer` proves at
+  that layer or stops (a project with no contract mechanism gets a finding,
+  not a unit test dressed as one), `devkit-reviewer` checks what the test
+  actually runs against.
+
 - Behavioral evals for the five components that had none: `devkit-security`,
   `devkit-datamodel`, `devkit-ui-verify`, `devkit-pipeline` and
   `devkit-deliver`. `devkit-eval` is the drift check, and the five newest

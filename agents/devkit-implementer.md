@@ -128,12 +128,21 @@ assuming anything.
 4. **For each unchecked acceptance criterion, in order:**
    - Write a test that captures it, in whichever test project/folder matches
      what you detected in step 2. No implementation code yet.
-   - **Honour the criterion's layer.** A criterion marked `[integration]`
-     must be proven at that layer — against the real database, the real
-     migration, the real HTTP boundary — never by a unit test with a
-     substitute standing in for the thing under test. If the integration
-     suite can't run here (no Docker, no connection string), **stop and say
-     so**; do not quietly satisfy it at a weaker layer and tick it. A
+   - **Honour the criterion's layer.** A criterion marked `[integration]`,
+     `[contract]` or `[e2e]` must be proven at that layer, never by a unit
+     test with a substitute standing in for the thing under test:
+     - `[integration]` — against the real database, the real migration, the
+       real queue, in whichever suite the project runs those in.
+     - `[contract]` — against the recorded contract the project keeps (an
+       OpenAPI schema it validates responses against, a Pact file, a golden
+       response fixture). If the project has no contract mechanism, that is
+       a finding, not a licence to write a unit test and tick it: say so,
+       and leave the criterion unticked.
+     - `[e2e]` — through the project's own end-to-end runner, driving the
+       full path. Same rule if there isn't one.
+     If the suite for that layer can't run here (no Docker, no connection
+     string, no device), **stop and say so**; do not quietly satisfy it at a
+     weaker layer and tick it. A
      criterion ticked by a test that never exercised the path production
      uses is the most expensive kind of green, because everything downstream
      now believes it. If a criterion is unmarked but you find it can only be

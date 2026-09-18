@@ -620,13 +620,24 @@ no matter how many tests it has. A real project shipped a table with no
 migration for exactly that reason, and CI would have caught it if CI had ever
 run the migration path.
 
-So a criterion that **cannot honestly be proven in isolation** is marked in
-the spec:
+So a criterion that **cannot honestly be proven by a unit test** is marked
+with the layer that proves it:
 
 ```markdown
 - [ ] complete(store, id) sets done = true on that task
 - [ ] [integration] the migration applies cleanly to a populated database
+- [ ] [contract] the /tasks response still carries every field the mobile client reads
+- [ ] [e2e] a user can archive a task from the list and it is gone after reload
 ```
+
+`[integration]` is a real dependency this codebase owns (database,
+migration, queue). `[contract]` is an agreement with something deployed
+separately — a mobile client, a partner API, a webhook consumer — proven by
+the recorded contract both sides run. `[e2e]` is the full user path, and is
+reserved for criteria genuinely about the whole path. They are not
+interchangeable: an `[integration]` mark on what is really a `[contract]`
+criterion buys a Postgres-backed test that never sees the client that will
+break.
 
 `devkit-specify` marks it. `devkit-implementer` must prove it at that layer,
 and **stops rather than quietly satisfying it with a substitute** if the
@@ -635,9 +646,10 @@ the test actually lives and what it runs against, not merely that a test
 exists. The implementer also reports which layer each criterion was proven
 at, so a downgrade is visible rather than inferred.
 
-Unmarked means a unit test genuinely proves it. The marker is not ceremony —
-it is for things whose truth depends on a real database, a real migration, a
-real HTTP boundary, or a second process.
+Unmarked means a unit test genuinely proves it. The markers are not
+ceremony — they are for things whose truth depends on something the unit
+test cannot see. A project with no contract or end-to-end mechanism gets a
+finding from the implementer, not a unit test dressed as one.
 
 ### Tracked follow-ups — deferred work that can't vanish
 

@@ -197,10 +197,10 @@ minimum code, run the full suite. It reads both companion specs (`.ux.md`,
 modifies a test to make it pass — if a criterion is ambiguous it stops and
 reports rather than resolving the ambiguity itself.
 
-A criterion the spec marked `[integration]` has to be proven at that layer.
-A unit test with a substitute standing in for the real dependency does not
-tick it, and the implementer stops rather than quietly downgrading what the
-spec asked for.
+A criterion the spec marked `[integration]`, `[contract]` or `[e2e]` has to
+be proven at that layer. A unit test with a substitute standing in for the
+real dependency does not tick it, and the implementer stops rather than
+quietly downgrading what the spec asked for.
 
 ### 7. Check the screens (only if there is a UI)
 
