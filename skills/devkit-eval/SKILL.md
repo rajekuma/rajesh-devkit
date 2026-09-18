@@ -98,12 +98,24 @@ a failed case. Read each component and verify:
   strings.** `devkit-reviewer` (ship / needs-changes / discuss) and
   `devkit-ship` (clear / blocked / clear-with-unknowns). The orchestrator
   routes on these; a reworded verdict silently breaks the routing.
-- **The handoff chain is unbroken.** `devkit-specify` → (`devkit-ux` if there's
-  a UI) → `devkit-implementer` → `devkit-reviewer` → `devkit-ship` →
-  `devkit-docs`. Each component should name what precedes and follows it.
-  Check `continue-loop.js`'s nudge messages name the same chain — the script
-  and the prompts drifting apart is the most likely failure here, because
-  they're edited at different times.
+- **The handoff chain is unbroken.** `devkit-specify` → (`devkit-ux` if
+  there's a UI) → (`devkit-datamodel` if stored data changes) →
+  `devkit-implementer` → (`devkit-ui-verify` if there's a UI) →
+  `devkit-reviewer` → `devkit-security` → `devkit-ship` → `devkit-docs` →
+  (`devkit-pipeline`) → (`devkit-deliver`, opt-in). Each component should
+  name what precedes and follows it. Check `continue-loop.js`'s `downstream()`
+  names the same chain in the same order, and that `ALL_STAGES` in
+  `scripts/lib/devkit.js` has one entry per stage — the script and the
+  prompts drifting apart is the most likely failure here, because they're
+  edited at different times.
+- **`devkit-ship` consumes every verdict the chain produces.** Its gate
+  table must have a row for each report-only stage that runs before it
+  (`security`, `ui-verify`, `datamodel`), each following the same rule: a
+  verdict in the conversation is used, a stage that hasn't run is `UNKNOWN`,
+  a stage that doesn't apply is `PASS (not applicable)` with the reason.
+  A new verdict-producing component that ship doesn't know about is a
+  report somebody has to remember to read, which is the failure ship exists
+  to prevent.
 - **The escalation marker agrees everywhere.** `devkit-specify` writes it;
   `continue-loop.js` and `session-welcome.js` match it. If the written form
   and the matched form ever disagree, the gate fails open and silently. The
@@ -114,14 +126,25 @@ a failed case. Read each component and verify:
   improves the prose while dropping the triggers makes a component
   unreachable without changing a line of its body.
 
-## 4. Check the README hasn't drifted from the code
+## 4. Check the README and docs/SDLC.md haven't drifted from the code
 
 The README is long and documents real behavior — exit codes, state file
 paths, hook conditions, matcher semantics. After any change to a script,
 confirm the README still describes what the code does. A README that
 confidently documents the previous behavior is worse than one that says
-nothing, and this is the single most likely thing to be stale, because it's
-the file furthest from the change.
+nothing.
+
+`docs/SDLC.md` is worse-placed still: it is the file newcomers are pointed
+at, and the file furthest from any change. It once stated "nothing commits,
+pushes, tags" as a property of the whole toolkit for a full day after
+`devkit-deliver` existed, and drew a six-stage loop while the code had
+eleven. The static suite now fails when a component or stage name is absent
+from either document, but it cannot check a *claim* — read the "What is
+deliberately not automated" and "The loop at a glance" sections against the
+code every time a component is added or a boundary moves. `CHANGELOG.md`
+at the plugin root lists what changed and why; if the entry you are about to
+write there contradicts a sentence in either document, that sentence is the
+bug.
 
 ## 5. Report
 

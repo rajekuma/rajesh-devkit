@@ -237,3 +237,37 @@ test('the integration-layer convention is stated in every component that acts on
     );
   }
 });
+
+test('README and docs/SDLC.md name every component and every stage', () => {
+  // docs/SDLC.md is the file newcomers are pointed at, and it is the file
+  // furthest from any change: five components landed in one morning and it
+  // mentioned two of them, while still stating a property (nothing commits)
+  // that one of the five had just made false. The README got updated because
+  // it sits next to the code; the walkthrough did not. So the walkthrough is
+  // now checked the same way the README is - a component or stage that
+  // exists in the code but not in both documents fails here.
+  const docs = {
+    'README.md': fs.readFileSync(path.join(PLUGIN_ROOT, 'README.md'), 'utf8'),
+    'docs/SDLC.md': fs.readFileSync(path.join(PLUGIN_ROOT, 'docs', 'SDLC.md'), 'utf8'),
+  };
+  const names = [];
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) {
+    if (f.endsWith('.md')) names.push(f.replace(/\.md$/, ''));
+  }
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'), { withFileTypes: true })) {
+    if (d.isDirectory()) names.push(d.name);
+  }
+  const { ALL_STAGES } = require(path.join(PLUGIN_ROOT, 'scripts', 'lib', 'devkit.js'));
+
+  for (const [doc, text] of Object.entries(docs)) {
+    for (const name of names) {
+      assert.ok(text.includes(name), `${doc} never mentions ${name}`);
+    }
+    for (const stage of ALL_STAGES) {
+      assert.ok(
+        new RegExp(`\`${stage}\``).test(text),
+        `${doc} never names the \`${stage}\` stage - a project cannot enable what the docs do not list`
+      );
+    }
+  }
+});
