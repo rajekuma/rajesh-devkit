@@ -592,6 +592,18 @@ enabled, because its entire question is whether to delegate to
 `devkit-implementer`. With implementation out of scope, there's nothing to
 ask.
 
+**One combination gets named, not blocked.** A loop with `implement` on and
+`review`, `security` or `ship` off calls code done without that check.
+That's legitimate — a backend engineer whose team reviews in the PR may want
+exactly that — but the config file makes it look identical to a loop nobody
+thought about, and the "`UNKNOWN`, never `PASS`" rule lives inside
+`devkit-ship`, so switching `ship` off removes the one place an unrun
+check would have been reported. The `SessionStart` banner therefore adds
+one sentence naming the gate stages that are off whenever `implement` is
+on, once per session. `skippedGates()` in `scripts/lib/devkit.js` is the
+whole rule; a loop that doesn't implement gets no note, because there's no
+code to gate.
+
 **What stage config does not fix: trigger-phrase collisions.** Stages control
 what the loop *nudges toward*. Every installed component is still loaded by
 the harness, so if a host project already has a skill triggered by "write a

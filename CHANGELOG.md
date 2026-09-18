@@ -13,6 +13,16 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Added
+
+- The `SessionStart` banner names the gate stages (`review`, `security`,
+  `ship`) a configured loop has switched off while `implement` is on. A
+  narrow loop is legitimate, but the config file made "deliberately gates in
+  the PR" and "forgot" look identical, and because the UNKNOWN-never-PASS
+  rule lives inside `devkit-ship`, switching ship off removed the one place
+  an unrun check would have been reported. One sentence, once per session,
+  never blocking; `skippedGates()` in `scripts/lib/devkit.js` is the rule.
+
 ### Fixed
 
 - `devkit-ship` now has a gate row for every report-only stage that runs

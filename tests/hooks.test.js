@@ -474,3 +474,41 @@ test('the security stage is nudged when enabled, absent when not', () => {
     }
   );
 });
+
+// ---------------------------------------------------------------------------
+// A narrow loop is legitimate; a narrow loop nobody noticed was narrow is
+// not. The "UNKNOWN, never PASS" rule lives inside devkit-ship, so switching
+// ship off removes the one place an unrun check would have been reported.
+// The banner names what was switched off - once, at session start, without
+// blocking - so the omission is a choice rather than an oversight.
+// ---------------------------------------------------------------------------
+test('the banner names gate stages a loop switched off while implementing', () => {
+  withStages(['specify', 'implement'], { progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.strictEqual(r.exitCode, 0, 'the banner never blocks');
+    assert.match(r.stdout, /implement is on but review, security, ship are off/);
+    assert.match(r.stdout, /\.claude\/devkit\.json/, 'should say where to change it');
+  });
+});
+
+test('the banner stays quiet about gates when the loop does not implement', () => {
+  // A product owner's specify-and-docs loop skips every gate by design;
+  // there is no code to gate, so there is nothing to warn about.
+  withStages(['specify', 'docs'], { progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.doesNotMatch(r.stdout, /is on but/);
+  });
+  // And the full default chain has every gate on.
+  withFixture({ progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.doesNotMatch(r.stdout, /is on but/);
+  });
+});
+
+test('the banner names only the gates that are actually off', () => {
+  withStages(['implement', 'review', 'ship'], { progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.match(r.stdout, /implement is on but security is off/);
+    assert.doesNotMatch(r.stdout, /review, security/);
+  });
+});

@@ -493,6 +493,12 @@ Two behaviours make a narrow loop a real loop rather than a crippled one:
   milestone with no spec says nothing rather than telling someone to go
   write one.
 
+One consequence is worth stating plainly, because the config makes it easy
+to do by accident: a loop with `implement` on and `review`, `security` or
+`ship` off ships code no gate has looked at. The `SessionStart` banner says
+so, once, whenever that combination is configured — it doesn't stop you, but
+it makes sure the omission was a choice rather than an oversight.
+
 ---
 
 ## Adopting this into a project that already has its own loop

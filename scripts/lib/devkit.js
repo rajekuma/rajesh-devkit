@@ -100,6 +100,21 @@ function stageEnabled(config, stage) {
   return config.stages.includes(stage);
 }
 
+// The stages that look at code before it is called done. A loop can switch
+// any of them off - that is the point of stage config - but a loop that
+// implements and gates nothing is a different thing from a loop that only
+// writes specs, and the config file makes the two look identical. Worse, the
+// "UNKNOWN, never PASS" discipline lives inside devkit-ship, so switching
+// ship off removes the one place an unrun check would have been reported.
+// This names what was switched off so the omission is a choice, not an
+// oversight. It never blocks anything.
+const GATE_STAGES = ['review', 'security', 'ship'];
+
+function skippedGates(config) {
+  if (!stageEnabled(config, 'implement')) return [];
+  return GATE_STAGES.filter((s) => !stageEnabled(config, s));
+}
+
 function readStdin() {
   try {
     return fs.readFileSync(0, 'utf8');
@@ -320,6 +335,8 @@ module.exports = {
   CONFIG_LOCAL,
   readStageConfig,
   stageEnabled,
+  GATE_STAGES,
+  skippedGates,
   readStdin,
   readStdinJson,
   projectDir,

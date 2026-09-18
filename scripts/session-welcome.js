@@ -85,10 +85,20 @@ next instead of this.
 
 const config = d.readStageConfig(dir);
 const on = (stage) => d.stageEnabled(config, stage);
+// Named, not blocked: a loop that implements without review, security or
+// ship is legitimate, but the config file makes it look identical to one
+// that simply has not been thought about. See skippedGates in lib/devkit.js.
+const skipped = d.skippedGates(config);
+const gateNote =
+  skipped.length === 0
+    ? ''
+    : ` Note: implement is on but ${skipped.join(', ')} ${skipped.length === 1 ? 'is' : 'are'} off, ` +
+      'so code this loop writes is called done without that check. If that is deliberate, ' +
+      'ignore this; if not, add the stage to .claude/devkit.json.';
 const stageLine =
   config.source === 'default'
     ? ''
-    : `\nLoop stages enabled here (${config.source}): ${config.stages.join(', ')}.`;
+    : `\nLoop stages enabled here (${config.source}): ${config.stages.join(', ')}.` + gateNote;
 
 const milestone = d.findNextMilestone(progressPath);
 if (!milestone) {
