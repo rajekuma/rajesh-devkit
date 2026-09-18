@@ -76,6 +76,7 @@ Some invariants decay silently when a file gets edited and don't show up as
 a failed case. Read each component and verify:
 
 - **Report-only components still say so.** `devkit-reviewer`,
+  `devkit-quality`, `devkit-security`, `devkit-ui-verify`,
   `devkit-dep-audit`, `devkit-ship` and `devkit-help` must each still state
   that they don't modify files. That sentence disappearing is a real
   behavioral change.
@@ -95,13 +96,17 @@ a failed case. Read each component and verify:
   branch, merging, deleting a branch, or rewriting history. Those prohibitions
   disappearing from its body is the highest-severity drift in this plugin.
 - **Every component that ends in a verdict still defines its exact verdict
-  strings.** `devkit-reviewer` (ship / needs-changes / discuss) and
-  `devkit-ship` (clear / blocked / clear-with-unknowns). The orchestrator
-  routes on these; a reworded verdict silently breaks the routing.
+  strings.** `devkit-reviewer` (ship / needs-changes / discuss),
+  `devkit-quality` (clean / needs-changes / discuss), `devkit-security`
+  (clear / blocked / clear-with-unknowns), `devkit-ui-verify` (matches /
+  mismatches / partly-unverified) and `devkit-ship` (clear / blocked /
+  clear-with-unknowns). The orchestrator and `devkit-ship` route on these;
+  a reworded verdict silently breaks the routing.
 - **The handoff chain is unbroken.** `devkit-specify` → (`devkit-ux` if
   there's a UI) → (`devkit-datamodel` if stored data changes) →
   `devkit-implementer` → (`devkit-ui-verify` if there's a UI) →
-  `devkit-reviewer` → `devkit-security` → `devkit-ship` → `devkit-docs` →
+  `devkit-reviewer` → `devkit-quality` → `devkit-security` → `devkit-ship` →
+  `devkit-docs` →
   (`devkit-pipeline`) → (`devkit-deliver`, opt-in). Each component should
   name what precedes and follows it. Check `continue-loop.js`'s `downstream()`
   names the same chain in the same order, and that `ALL_STAGES` in
@@ -110,7 +115,7 @@ a failed case. Read each component and verify:
   edited at different times.
 - **`devkit-ship` consumes every verdict the chain produces.** Its gate
   table must have a row for each report-only stage that runs before it
-  (`security`, `ui-verify`, `datamodel`), each following the same rule: a
+  (`security`, `quality`, `ui-verify`, `datamodel`), each following the same rule: a
   verdict in the conversation is used, a stage that hasn't run is `UNKNOWN`,
   a stage that doesn't apply is `PASS (not applicable)` with the reason.
   A new verdict-producing component that ship doesn't know about is a

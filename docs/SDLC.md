@@ -49,9 +49,10 @@ lives in a conversation.
    │                                                     │                 │
    │            ┌────────────────────────────────────────┘                 │
    │            ▼                                                          │
-   │  security ─► ship ─► docs ─► [pipeline] ─► [deliver]                  │
-   │  (verdict)  (gate)  (changelog) (CI audit)  (branch, commit, PR -     │
-   │                                              OFF unless enabled)      │
+   │  quality ─► security ─► ship ─► docs ─► [pipeline] ─► [deliver]       │
+   │  (verdict)  (verdict)   (gate)  (changelog) (CI audit) (branch, commit,│
+   │                                                        PR - OFF unless │
+   │                                                        enabled)        │
    │                                                                       │
    │  adr ◄── written whenever a real decision gets made                   │
    └───────────────────────────────────────────────────────────────────────┘
@@ -71,6 +72,7 @@ those are done. No file means every stage except `deliver` is on. See
 | `implement` | `devkit-implementer` | code + tests, ticked criteria | the spec and both companion specs |
 | `ui-verify` | `devkit-ui-verify` | a verdict per UI state | the `.ux.md` spec, the running app |
 | `review` | `devkit-reviewer` | a verdict | the spec + the diff |
+| `quality` | `devkit-quality` | findings + verdict | the diff, the project's own architecture rules and budgets |
 | `security` | `devkit-security` | findings + verdict | the diff, the project's own invariants |
 | `ship` | `devkit-ship` | a verdict | criteria, CI, coverage, advisories, secrets, the other verdicts |
 | `docs` | `devkit-docs` | changelog entry, fixed docs | the spec + the diff |
@@ -220,6 +222,9 @@ state it could not reach is `UNVERIFIED`, never "fine".
 devkit review the diff
 ```
 ```
+devkit quality review
+```
+```
 devkit security review
 ```
 ```
@@ -229,12 +234,21 @@ devkit ship check
 devkit docs
 ```
 
-Four separate questions, deliberately: does the change match its spec
-(`reviewer`), is the code you wrote safe (`security`), is everything *around*
-it shippable (`ship`), and what documentation did it just make wrong
-(`docs`). `ship` is where the other verdicts converge: a `security`,
-`ui-verify` or `datamodel` result it hasn't seen is an `UNKNOWN` row in its
-table, not a pass.
+Five separate questions, deliberately: does the change match its spec
+(`reviewer`), is it built well and will it hold at the spec's volume
+(`quality`), is the code you wrote safe (`security`), is everything
+*around* it shippable (`ship`), and what documentation did it just make
+wrong (`docs`). `ship` is where the other verdicts converge: a `security`,
+`quality`, `ui-verify` or `datamodel` result it hasn't seen is an
+`UNKNOWN` row in its table, not a pass.
+
+`quality` is the one the spec cannot ask for. Spec compliance is
+per-milestone; design decay is cumulative, and no acceptance criterion says
+"the service class must not gain its fifteenth dependency". It reads the
+project's own architecture rules and any stated performance budget first,
+so a finding cites something the project decided rather than a principle it
+didn't. Findings that are matters of taste are marked advisory and never
+change its verdict.
 
 ### 9. Audit the pipeline, then deliver (both optional)
 

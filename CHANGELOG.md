@@ -15,6 +15,17 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- `devkit-quality`, a report-only agent for the review the spec cannot ask
+  for: design and performance. `devkit-reviewer` checks the change against
+  its spec and `devkit-security` checks it for vulnerabilities; nothing
+  checked whether it was built well enough to stay changeable or would hold
+  at the volume the spec describes. It reads the project's own architecture
+  rules and performance budgets first so a finding cites a rule the project
+  wrote, works layering drift, duplication of logic, a class becoming the
+  place everything goes, N+1 and unbounded reads, and marks matters of
+  taste advisory so they never change the verdict. Wired as the `quality`
+  stage (after `review`, before `security`) and as a `devkit-ship` row.
+
 - Two more test-layer markers, `[contract]` and `[e2e]`, beside
   `[integration]`. The spec vocabulary had one marker, so a criterion that
   is really an agreement with a separately deployed client - the mobile app

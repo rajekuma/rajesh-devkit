@@ -126,6 +126,13 @@ function downstream() {
   if (on('review')) {
     steps.push('invoke the devkit-reviewer subagent against the diff;');
   }
+  if (on('quality')) {
+    steps.push(
+      'invoke the devkit-quality subagent against the diff (design and performance - ' +
+        'layering drift, duplication, N+1 and unbounded reads, checked against this ' +
+        "project's own architecture rules; the reviewer checks the spec, not the shape);"
+    );
+  }
   if (on('security')) {
     steps.push(
       'invoke the devkit-security subagent against the diff (it checks code you wrote for ' +

@@ -46,11 +46,18 @@ Those aren't a confirmation question; they're an irreversibility one.
   test`, `cargo test`, ...) instead of assuming one.
 - `devkit-reviewer` — a report-only subagent that diffs the current change
   against its spec and ends with a single verdict line.
+- `devkit-quality` — the review the spec can't ask for: is the change built
+  well enough to still be changeable, and will it hold at the volume the
+  spec describes? Layering drift, duplication, a class becoming the place
+  everything goes, N+1 and unbounded reads — checked against the project's
+  own architecture rules and performance budgets, so a finding cites a rule
+  the project wrote rather than a principle it didn't. Report-only.
 - `devkit-ship` — the preflight between "the reviewer said ship" and "mark it
   done": CI status, coverage against the project's own threshold, dependency
   advisories, a secrets scan of the diff, any unaccounted acceptance
   criteria, and a row for every other gate that runs before it — the
-  `devkit-security` verdict, the `devkit-ui-verify` verdict, and whether
+  `devkit-security` and `devkit-quality` verdicts, the `devkit-ui-verify`
+  verdict, and whether
   the migration `devkit-datamodel` planned is actually in the diff. A gate
   it couldn't run reports `UNKNOWN`, never `PASS`.
 - `devkit-docs` — writes the changelog entry a shipped milestone earns, and
@@ -119,6 +126,7 @@ rajesh-devkit/
 │   ├── devkit-docs.md           # changelog/release notes + stale-doc hunt, post-ship
 │   ├── devkit-implementer.md    # RED-GREEN implementer, stack-agnostic
 │   ├── devkit-pipeline.md       # CI/CD audit or scaffold, gates not files
+│   ├── devkit-quality.md        # design + performance review vs the project own rules
 │   ├── devkit-reviewer.md       # spec-compliance review, report-only
 │   ├── devkit-security.md       # code-level vulns vs the project own invariants
 │   ├── devkit-ui-verify.md      # drives the built UI through every specified state
@@ -566,7 +574,7 @@ configurable, in one committed file:
 ```
 
 Valid stages: `specify`, `ux`, `datamodel`, `implement`, `ui-verify`,
-`review`, `security`, `ship`, `docs`, `pipeline`, `deliver`. Every one except `deliver` is
+`review`, `quality`, `security`, `ship`, `docs`, `pipeline`, `deliver`. Every one except `deliver` is
 on by default. `role` is a label for humans; only `stages` changes
 behaviour. `devkit-onboard` asks the question during setup and writes the
 file.

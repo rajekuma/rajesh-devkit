@@ -405,7 +405,7 @@ test('a nudge never names a component whose stage is disabled', () => {
   // Not just the instructions - the explanatory asides too. A backend loop's
   // datamodel step once described itself as "the data-side counterpart to
   // devkit-ux", naming a stage that loop had switched off.
-  const ALL = ['specify', 'ux', 'datamodel', 'implementer', 'reviewer', 'ship', 'docs', 'pipeline'];
+  const ALL = ['specify', 'ux', 'datamodel', 'implementer', 'reviewer', 'quality', 'security', 'ship', 'docs', 'pipeline'];
   const stages = ['specify', 'datamodel', 'implement', 'review'];
   withStages(stages, { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } }, (dir) => {
     const r = runHook('continue-loop.js', dir);
@@ -511,4 +511,18 @@ test('the banner names only the gates that are actually off', () => {
     assert.match(r.stdout, /implement is on but security is off/);
     assert.doesNotMatch(r.stdout, /review, security/);
   });
+});
+
+test('the quality stage is nudged after review and before security', () => {
+  withStages(
+    ['implement', 'review', 'quality', 'security'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } },
+    (dir) => {
+      const r = runHook('continue-loop.js', dir);
+      const i = (s) => r.stderr.indexOf(s);
+      assert.ok(i('devkit-quality') > 0, 'quality not nudged');
+      assert.ok(i('devkit-reviewer') < i('devkit-quality'), 'quality before review');
+      assert.ok(i('devkit-quality') < i('devkit-security'), 'security before quality');
+    }
+  );
 });

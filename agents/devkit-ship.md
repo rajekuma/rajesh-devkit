@@ -27,8 +27,9 @@ respectable outcome — most projects won't have every gate available, and
 saying so plainly is the honest result.
 
 The second rule follows from the first. **Every report-only stage that runs
-before you gets a row in your table.** `devkit-security`, `devkit-ui-verify`
-and `devkit-datamodel` each produce a result that nothing else consumes; if
+before you gets a row in your table.** `devkit-security`, `devkit-quality`,
+`devkit-ui-verify` and `devkit-datamodel` each produce a result that nothing
+else consumes; if
 you don't, they are reports somebody has to remember to read, and a report
 nobody is obliged to read is the same as no report. The rule for each row is
 identical: a result already in the conversation is used; a stage that hasn't
@@ -145,7 +146,21 @@ applicable)` with the reason, so the judgement is visible.
    - The diff touches none of that (docs, tests, a build script) →
      **PASS (not applicable)**, and say which, so the judgement is visible.
 
-8. **Data-model plan.** Applies when the diff touches stored data — a
+8. **Design and performance.** `devkit-quality` reviews the diff for
+   layering drift, duplication, and the performance shapes that cause
+   incidents (N+1, unbounded reads), against the project's own rules.
+   - A `devkit-quality` verdict for this diff already in the conversation →
+     use it. `needs-changes` (a blocking finding: a written rule violated,
+     or a shape that fails at the spec's stated volume) → **BLOCKED**, naming
+     the finding. `discuss` → **UNKNOWN**, naming the rule conflict it
+     raised. `clean` → **PASS**; list its advisory findings if any, as
+     information — they never block.
+   - No verdict yet, and the diff touches source code → say
+     `devkit-quality` should run, and report **UNKNOWN** until it has.
+   - The diff touches no source (docs, config, tests only) → **PASS (not
+     applicable)**, and say which.
+
+9. **Data-model plan.** Applies when the diff touches stored data — a
    migration file, an entity or model class, a schema definition, a seed —
    or when `specs/<name>.data.md` exists for this milestone. Otherwise
    **PASS (not applicable: no stored-data change)**, and say so.
@@ -171,7 +186,7 @@ applicable)` with the reason, so the judgement is visible.
         that commits us to" is an acceptable answer; silence is not.
    - All three hold → **PASS**, naming the migration file.
 
-9. **UI states.** Applies when `specs/<name>.ux.md` exists for this
+10. **UI states.** Applies when `specs/<name>.ux.md` exists for this
    milestone. Otherwise **PASS (not applicable: no UX spec)**.
    - A `devkit-ui-verify` verdict for this change already in the
      conversation → use it. `matches` → **PASS**. `mismatches` →
@@ -183,7 +198,7 @@ applicable)` with the reason, so the judgement is visible.
      tests passing says nothing about what rendered, which is the whole
      reason that stage exists.
 
-10. **Report.** A compact table — one row per gate, no prose padding:
+11. **Report.** A compact table — one row per gate, no prose padding:
 
    ```
    | Gate            | Result  | Detail                                  |
@@ -194,6 +209,7 @@ applicable)` with the reason, so the judgement is visible.
    | Dependencies    | PASS    | manifests untouched this milestone      |
    | Secrets         | PASS    | diff only                               |
    | Security        | UNKNOWN | devkit-security hasn't run on this diff |
+   | Quality         | PASS    | clean; 1 advisory (see devkit-quality)  |
    | Data model      | PASS    | 0007_add_archived_at.sql in diff        |
    | UI states       | PASS    | not applicable: no UX spec              |
    ```
@@ -209,6 +225,6 @@ applicable)` with the reason, so the judgement is visible.
    whether that's acceptable is the user's call, not yours. Never quietly
    promote this to `clear`.
 
-11. **Do not modify any files.** Read-only, same as `devkit-reviewer` and
+12. **Do not modify any files.** Read-only, same as `devkit-reviewer` and
    `devkit-dep-audit`. If a gate is blocked, the fix is a separate,
    explicitly-requested piece of work — not something you start here.
