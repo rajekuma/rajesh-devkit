@@ -117,6 +117,12 @@ function downstream() {
         "this project's own testing conventions);"
     );
   }
+  if (on('ui-verify')) {
+    steps.push(
+      'invoke the devkit-ui-verify subagent to run the built UI through every state the ' +
+        'UX spec named - a passing suite and a broken screen coexist comfortably;'
+    );
+  }
   if (on('review')) {
     steps.push('invoke the devkit-reviewer subagent against the diff;');
   }
@@ -136,6 +142,12 @@ function downstream() {
     steps.push(
       'and check the delivery pipeline with the devkit-pipeline subagent if this ' +
         "milestone changed how the project builds, deploys or is scanned;"
+    );
+  }
+  if (on('deliver')) {
+    steps.push(
+      'and hand it to the devkit-deliver subagent to branch, commit, push and - at a Phase ' +
+        'boundary only - open the PR;'
     );
   }
   if (steps.length > 0) {

@@ -79,9 +79,21 @@ a failed case. Read each component and verify:
   `devkit-dep-audit`, `devkit-ship` and `devkit-help` must each still state
   that they don't modify files. That sentence disappearing is a real
   behavioral change.
-- **Nothing has quietly acquired permission to commit.** No component in this
-  plugin commits, pushes, tags, merges, or opens a PR — that's a deliberate
-  property of the whole toolkit, stated in the README. Grep for it.
+- **Nothing has quietly acquired permission to commit.** `devkit-deliver` is
+  the **only** component allowed to touch git, and only when the `deliver`
+  stage is enabled. Every other component is read-only or writes solely to
+  the working tree. Grep for `git commit`, `git push`, `gh pr create` outside
+  `devkit-deliver`; a second component gaining them is a real regression, and
+  a silent one.
+- **`deliver` is still off by default.** `DEFAULT_STAGES` in
+  `scripts/lib/devkit.js` must continue to exclude it. Installing this plugin
+  must never be sufficient to grant commit-and-push in someone's repository —
+  that has to be an explicit choice, per project.
+- **`devkit-deliver` still refuses the irreversible operations.** Enabling
+  the stage is standing permission for the normal flow (branch, commit, push
+  a feature branch, open a PR) and never for force-push, pushing to a default
+  branch, merging, deleting a branch, or rewriting history. Those prohibitions
+  disappearing from its body is the highest-severity drift in this plugin.
 - **Every component that ends in a verdict still defines its exact verdict
   strings.** `devkit-reviewer` (ship / needs-changes / discuss) and
   `devkit-ship` (clear / blocked / clear-with-unknowns). The orchestrator

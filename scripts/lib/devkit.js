@@ -54,7 +54,16 @@ const GITIGNORE_ENTRY = '.claude/rajesh-devkit/';
 // parts it lacks. A stage that isn't listed is never nudged toward - and when
 // no enabled stage applies, the loop stops rather than pushing on, which is
 // what makes a two-stage loop a real loop instead of a crippled one.
-const ALL_STAGES = ['specify', 'ux', 'datamodel', 'implement', 'review', 'ship', 'docs', 'pipeline'];
+const ALL_STAGES = [
+  'specify', 'ux', 'datamodel', 'implement', 'ui-verify',
+  'review', 'ship', 'docs', 'pipeline', 'deliver',
+];
+
+// 'deliver' is the one stage that is NOT on by default. Every other component
+// here is read-only or writes only to the working tree; deliver commits,
+// pushes and opens PRs, so a project has to ask for it explicitly rather than
+// inheriting it by installing the plugin.
+const DEFAULT_STAGES = ALL_STAGES.filter((s) => s !== 'deliver');
 
 // Committed, so a project's declared process is visible and reviewable; the
 // local file is gitignored, so one person can run a narrower loop than the
@@ -84,7 +93,7 @@ function readStageConfig(dir) {
     if (stages.length === 0) continue;
     return { stages, source, role: typeof cfg.role === 'string' ? cfg.role : null };
   }
-  return { stages: [...ALL_STAGES], source: 'default', role: null };
+  return { stages: [...DEFAULT_STAGES], source: 'default', role: null };
 }
 
 function stageEnabled(config, stage) {
@@ -306,6 +315,7 @@ module.exports = {
   SENSITIVE_MARKER,
   GITIGNORE_ENTRY,
   ALL_STAGES,
+  DEFAULT_STAGES,
   CONFIG_PROJECT,
   CONFIG_LOCAL,
   readStageConfig,

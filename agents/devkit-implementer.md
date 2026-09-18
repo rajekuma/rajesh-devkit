@@ -19,6 +19,24 @@ assuming anything.
    layering rules, naming conventions. Follow what's documented; don't invent
    a convention the project hasn't stated.
 
+   **Then read its companion design specs, if they exist** — these are
+   upstream stages' output and they are not optional context:
+   - `specs/<same-name>.ux.md` from `devkit-ux`: the screens, the
+     empty/loading/error/permission-denied states, which existing components
+     and design tokens to reuse, and where focus moves. The accessibility
+     criteria from that document were appended to this spec's own acceptance
+     list, so you'd satisfy those anyway — but the states and the reuse
+     decisions live only in the `.ux.md`. Building the happy path and
+     inventing the rest is exactly what that stage exists to prevent, and it
+     is wasted if you never open the file.
+   - `specs/<same-name>.data.md` from `devkit-datamodel`: the schema change,
+     the migration sequence, the backfill and the rollback. Follow its
+     migration plan rather than generating your own; a destructive step
+     reordered is not a refactor.
+
+   If a companion spec exists and you disagree with it, stop and say so —
+   don't quietly implement something else. Those documents were reviewed.
+
 2. **Check for a cached test command before working anything out from
    scratch.** This project's test runner is a stable fact, not something
    worth re-deriving every milestone — read

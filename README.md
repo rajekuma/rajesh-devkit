@@ -7,10 +7,17 @@ component library, and coverage thresholds rather than assuming .NET/Flutter
 or any other specific stack. Hooks turn it into a milestone-driven
 *unattended* loop against any host project's `PROGRESS.md`, if it has one.
 
-One property holds across every component: **nothing here commits, pushes,
-tags, merges, or opens a PR.** Several components produce verdicts, and the
-loop respects them, but everything that touches a remote stays your explicit
-action.
+One property holds across every component with a single, opt-in exception:
+**nothing here commits, pushes, tags, merges, or opens a PR.** Several
+components produce verdicts, and the loop respects them, but the working tree
+is as far as they go.
+
+The exception is `devkit-deliver`, and it is **off unless you enable the
+`deliver` stage** — installing this plugin is never enough to grant it. Even
+enabled, it is standing permission for the recoverable flow only (branch,
+commit, push a feature branch, open a PR) and never for force-pushing,
+pushing to a default branch, merging, deleting branches or rewriting history.
+Those aren't a confirmation question; they're an irreversibility one.
 
 > **New here?** [**docs/SDLC.md**](docs/SDLC.md) is the end-to-end
 > walkthrough — how to take a product from nothing, or from an existing
@@ -103,11 +110,13 @@ rajesh-devkit/
 │   └── plugin.json              # name, version, description, author, license
 ├── agents/
 │   ├── devkit-datamodel.md      # schema + migration + backfill + rollback plan
+│   ├── devkit-deliver.md        # branch, commit, push, PR - OPT-IN, off by default
 │   ├── devkit-dep-audit.md      # dependency CVE audit, report-only
 │   ├── devkit-docs.md           # changelog/release notes + stale-doc hunt, post-ship
 │   ├── devkit-implementer.md    # RED-GREEN implementer, stack-agnostic
 │   ├── devkit-pipeline.md       # CI/CD audit or scaffold, gates not files
 │   ├── devkit-reviewer.md       # spec-compliance review, report-only
+│   ├── devkit-ui-verify.md      # drives the built UI through every specified state
 │   ├── devkit-ship.md           # pre-ship preflight: CI, coverage, advisories, secrets
 │   └── devkit-ux.md             # spec -> screens/states/tokens/a11y criteria
 ├── skills/
@@ -440,6 +449,8 @@ just a downgrade. There is no automatic failover in either case.
 | `devkit-docs` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "update the docs", "changelog for this milestone", "release notes", "what docs did this break" | Runs after `devkit-ship` comes back clear. Two jobs, the second mattering more: write the changelog entry (from the user's point of view — "sessions now survive a restart", not "refactored the auth middleware"), and **hunt down the documentation the change just falsified** — the README example that no longer runs, the renamed flag still documented as current, the obsolete setup step. Stale docs beat missing docs for harm, because people follow them. Matches the project's existing changelog format and won't start one where none exists. Fixes what it can verify from the diff and *reports* what it can't, rather than writing a plausible-sounding correction it couldn't confirm. |
 | `devkit-datamodel` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "datamodel", "schema design", "design the migration", "what does this do to existing rows" | The data-side counterpart to `devkit-ux`, and the stage this plugin used to lack entirely: a `SENSITIVE:` data-model flag stopped the loop and then offered no help. Detects the project's own ORM and migration convention, then plans the change as a *sequence* rather than an event — additive versus destructive, the backfill and what it costs at production scale, what happens to writes landing mid-migration during a rolling deploy, and the rollback path or an explicit statement that there isn't one. Writes `specs/<name>.data.md` and appends criteria to the feature spec; writes no migration and no entity class. Leads its report with anything irreversible, because that is the part a human must actually agree to. |
 | `devkit-pipeline` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "pipeline", "set up CI", "audit the pipeline", "what gates our merges", "add security scanning to CI" | Audits or scaffolds delivery. `devkit-ship` *reads* CI status and assumes a meaningful pipeline exists; this is the component that makes that true. Its framing is deliberate: not "does a workflow exist" but **"what would actually stop a bad change?"** — reporting each gate as **GATED** (failure blocks a merge), **RUNS** (executes, blocks nothing) or **MISSING**, plus **UNKNOWN** where it could not check, because the gap between GATED and RUNS is invisible from a list of green checkmarks. Never enables branch protection, never commits a workflow, and never adds a scanner nobody will read — a permanently ignored job trains a team that red means nothing. |
+| `devkit-ui-verify` | `sonnet` | `Read, Glob, Grep, Bash` | "verify the ui", "check the screens", "does it actually look right", "ui verification" | Report-only, and the only component that checks what a person actually sees. Every other gate reads code: the reviewer maps criteria to a diff, ship reads CI and coverage, the suite asserts through an API — none can tell you the empty state renders a blank screen or the loading spinner never clears. A passing suite and a broken screen coexist comfortably. Runs the app the project's own way, drives each state the `.ux.md` named, and captures the copy that actually rendered rather than a paraphrase. Its rule mirrors `devkit-ship`: **a state it could not reach is UNVERIFIED, never fine** — inducing an error state often needs a failure you have to cause, and an unchecked state reported as working is worse than no check.<br>**Verdict: matches / mismatches / partly-unverified.** |
+| `devkit-deliver` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "deliver this milestone", "commit and push this", "open the PR", "ship the phase" | **The one component that touches git, and off unless the `deliver` stage is enabled.** Branches per Phase (`feat/phase<N>-<slug>`), commits with a message explaining *why*, pushes, and opens a PR **only at a Phase boundary** — a PR per milestone fragments review. Tracks `Branch:` in `PROGRESS.md`'s `## In flight` so an interrupted run resumes instead of redoing. Refuses to start unless review said `ship` and preflight said `clear`; **never delivers on `blocked`**. Enabling it is standing permission for the recoverable flow only — never force-push, never push to a default branch, never merge or enable auto-merge, never delete a branch or rewrite history, never `git add -A` blind, never `--no-verify`. If the situation seems to call for one of those, something is wrong that a human should look at. |
 | `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "implement the spec", "build the next milestone", "implement \<feature\>" | Not report-only — writes code and tests. Checks `.claude\rajesh-devkit\test-runners.json` for a cached test command per area first; only derives one from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) — and verifies it actually runs, not just that the marker matched — on a cache miss, writing the result back so future milestones skip re-derivation (verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation). Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
 | `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "audit dependencies", "check for vulnerable packages", "scan dependencies for CVEs", "dependency security check" | Report-only. Detects whichever package ecosystems are present (npm/yarn/pnpm, PyPI, NuGet, pub/Dart, Go, Cargo, Maven, ...) from marker files, then runs `osv-scanner --recursive` as the universal pass (covers most ecosystems in one command) plus ecosystem-native fallbacks (`dotnet list package --vulnerable`, `npm audit`, `pip-audit`) only where the universal pass can't reach (e.g. NuGet without a lock file) — all backed by the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file, unrecognised ecosystem) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
 | `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met / **Deferred**, with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
@@ -548,8 +559,9 @@ configurable, in one committed file:
 { "role": "product-owner", "stages": ["specify", "docs"] }
 ```
 
-Valid stages: `specify`, `ux`, `datamodel`, `implement`, `review`, `ship`,
-`docs`, `pipeline`. `role` is a label for humans; only `stages` changes
+Valid stages: `specify`, `ux`, `datamodel`, `implement`, `ui-verify`,
+`review`, `ship`, `docs`, `pipeline`, `deliver`. Every one except `deliver` is
+on by default. `role` is a label for humans; only `stages` changes
 behaviour. `devkit-onboard` asks the question during setup and writes the
 file.
 

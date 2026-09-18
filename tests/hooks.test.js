@@ -421,3 +421,39 @@ test('a nudge never names a component whose stage is disabled', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// The deliver stage is the single exception to "nothing here commits". It is
+// therefore the one stage that must be OFF unless a project asks for it -
+// installing the plugin must never be enough to grant it.
+// ---------------------------------------------------------------------------
+test('deliver is NOT enabled by default', () => {
+  withFixture({ progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    assert.doesNotMatch(
+      r.stderr,
+      /devkit-deliver/,
+      'a project that never opted in was nudged toward committing and pushing'
+    );
+  });
+});
+
+test('deliver appears only when explicitly enabled', () => {
+  withStages(
+    ['implement', 'review', 'ship', 'deliver'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } },
+    (dir) => {
+      assert.match(runHook('continue-loop.js', dir).stderr, /devkit-deliver/);
+    }
+  );
+});
+
+test('ui-verify is nudged for a UI loop', () => {
+  withStages(
+    ['implement', 'ui-verify'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } },
+    (dir) => {
+      assert.match(runHook('continue-loop.js', dir).stderr, /devkit-ui-verify/);
+    }
+  );
+});

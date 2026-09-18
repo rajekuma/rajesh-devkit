@@ -150,8 +150,10 @@ user confirms.
    { "role": "product-owner", "stages": ["specify", "docs"] }
    ```
 
-   Valid stages: `specify`, `ux`, `datamodel`, `implement`, `review`, `ship`,
-   `docs`, `pipeline`. `role` is a label for humans; only `stages` changes
+   Valid stages: `specify`, `ux`, `datamodel`, `implement`, `ui-verify`,
+   `review`, `ship`, `docs`, `pipeline`, `deliver`. **`deliver` is off unless
+   asked for** - it is the only component that commits and pushes, so never
+   enable it without the user explicitly choosing it. `role` is a label for humans; only `stages` changes
    behaviour. **No file means every stage is enabled** — so a project that
    never answers this question behaves exactly as it did before the setting
    existed.
