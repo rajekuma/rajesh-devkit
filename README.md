@@ -77,7 +77,12 @@ and prints the tag command; nothing here runs it.
   the alternatives and consequences that aren't inferable from code.
 - `devkit-dep-audit` — a report-only subagent that checks the project's
   dependencies for known-vulnerable versions, across whichever package
-  ecosystems are actually present (npm, PyPI, NuGet, pub, Go, Cargo, Maven, ...).
+  ecosystems are actually present (npm, PyPI, NuGet, pub, Go, Cargo, Maven, ...),
+  and for licences that conflict with the project's own posture — its
+  licence, how it ships, any stated policy — rather than a generic rule. A
+  GPL dependency is a finding in a proprietary product and not in an MIT
+  library; an AGPL one in a hosted service is the case people miss; an
+  undeclared licence is all-rights-reserved and gets named.
 - `continue-loop.js` (Stop hook) — when a session stops, checks the host
   project's `PROGRESS.md` for the next not-started milestone and, if one
   exists, blocks the stop with an instruction to draft a spec first (if none

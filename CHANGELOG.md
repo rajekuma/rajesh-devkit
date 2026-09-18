@@ -15,6 +15,15 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- A licence pass in `devkit-dep-audit`. It found CVEs and nothing else, so
+  a GPL dependency in a proprietary product passed clean. It now establishes
+  the project's own posture first - its licence, whether it ships as a
+  library or an application or a hosted service, any stated policy - then
+  lists dependency licences with the ecosystem's own tooling (installing
+  nothing, generating nothing) and flags Conflict, Needs a decision, and
+  Unknown against that posture. A Conflict is a `needs-changes` verdict and
+  a BLOCKED row in `devkit-ship`.
+
 - Localisation in `devkit-ux`. It specified literal copy strings, which in a
   project whose rules say every user-visible string goes through `intl`
   meant the design stage was actively working against the project's own
@@ -85,6 +94,10 @@ reader six months from now cannot recover from the diff.
   never blocking; `skippedGates()` in `scripts/lib/devkit.js` is the rule.
 
 ### Fixed
+
+- `devkit-dep-audit` still described itself as complementing
+  `claude-security` for code-level review; that role has been
+  `devkit-security`'s since it was added.
 
 - `devkit-deliver` stated it was off unless the `deliver` stage was enabled
   but had no step that read `.claude/devkit.json` - only the Stop hook

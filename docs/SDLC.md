@@ -83,8 +83,8 @@ those are done. No file means every stage except `deliver` is on. See
 | Decide | `devkit-adr` | `docs/adr/NNNN-*.md` | the decision, the code |
 
 Two more run on demand rather than as a stage: `devkit-dep-audit`
-(dependency advisories) and `devkit-stats` (how long each milestone took and
-what it cost).
+(dependency advisories, and licences against the project's own posture) and
+`devkit-stats` (how long each milestone took and what it cost).
 
 ---
 

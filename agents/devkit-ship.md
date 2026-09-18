@@ -108,8 +108,10 @@ applicable)` with the reason, so the judgement is visible.
      report **UNKNOWN** until it has. Don't duplicate its work yourself —
      it's a dedicated subagent and it's better at this than an inline check.
    - If an audit result for the current dependency state is already in the
-     conversation, use it: any **Critical or High** advisory → **BLOCKED**.
-     Medium/Low → **PASS**, each one named.
+     conversation, use it: any **Critical or High** advisory, or a licence
+     **Conflict** against the project's stated posture → **BLOCKED**.
+     Medium/Low advisories, and licence findings marked "Needs a decision"
+     → **PASS**, each one named, so the decision is visible.
    - Manifest untouched → **PASS (dependency surface unchanged)**.
 
 6. **Secrets.** Scan only the diff — not the whole repo history, which is a
