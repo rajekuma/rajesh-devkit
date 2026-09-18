@@ -35,10 +35,12 @@ about its own structure**, which you read first:
   under `docs/adr/`. "Controllers never call the repository directly",
   "each bounded context owns its tables", "no domain logic in handlers".
   A rule the project wrote is a rule nobody has to be convinced of.
-- **Performance budgets** — a latency target in the spec, a
-  `## Performance budget` section, a stated page size, an ADR about
-  pagination or caching. If the spec says "list under 200ms at 10k rows",
-  that is the bar; if nothing states one, say so rather than inventing one.
+- **Performance budgets** — the spec's `## Performance budget` section is
+  the bar: its volume is the number you count queries at, its latency is
+  what a shape has to fail. If the section says the budget is unstated,
+  review against a realistic volume and say that you chose it; if the
+  section is absent from a spec that reads a collection or calls a network,
+  that is itself a finding against the spec, not the code.
 - **The existing shape of the area the diff touches.** How do the six
   sibling handlers do it? Which layer do they call? What does the largest
   class in this module already look like, and did this change make it

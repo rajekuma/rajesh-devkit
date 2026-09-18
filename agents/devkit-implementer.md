@@ -140,6 +140,17 @@ assuming anything.
        and leave the criterion unticked.
      - `[e2e]` — through the project's own end-to-end runner, driving the
        full path. Same rule if there isn't one.
+     - `[observability]` — the test asserts the event or metric the spec's
+       `## Observability` section named, with the fields it named, through
+       the project's existing logging or metrics mechanism (a captured
+       logger, a metrics registry, a test sink). Emit through what the
+       project already uses; if the spec says the project has no mechanism,
+       **stop** — choosing one is an ADR, and an ad-hoc `console.log` is not
+       observability, it is noise the next person deletes.
+     - `[perf]` — the test measures against the budget's number at the
+       budget's volume, in the suite the project runs such tests in. If no
+       such suite exists, say so and leave it unticked; a `[perf]` criterion
+       ticked by a test over ten rows proves nothing about ten thousand.
      If the suite for that layer can't run here (no Docker, no connection
      string, no device), **stop and say so**; do not quietly satisfy it at a
      weaker layer and tick it. A

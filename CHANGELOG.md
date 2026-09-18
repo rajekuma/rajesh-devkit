@@ -15,6 +15,17 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- `## Observability` and `## Performance budget` sections in the spec
+  template, and `[observability]` / `[perf]` criterion markers that make them
+  gated rather than read once. Nothing in the loop put a log line, a metric
+  or a latency target into what shipped; a feature could pass every
+  criterion and be undebuggable at 3am. `devkit-specify` asks the on-call
+  question and the volume question explicitly, `devkit-implementer` emits
+  through the project's existing mechanism and stops if there is none (that
+  is an ADR, not a `console.log`), `devkit-reviewer` checks the named fields
+  and the stated volume, and `devkit-quality` reviews against the budget
+  instead of a number it invented.
+
 - `devkit-release`, the `release` stage. `devkit-deliver` stopped at the
   PR and `devkit-docs` wrote one changelog entry per milestone; nothing
   decided a semver bump, rolled the entries into a version or wrote release

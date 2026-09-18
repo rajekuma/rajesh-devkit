@@ -160,6 +160,15 @@ a security/authorization boundary, a data-model change, an external
 integration, or a backward-compatibility break with `SENSITIVE:`. That marker
 is machine-checked — see [The four gates](#the-four-gates).
 
+It also asks two questions that are almost never volunteered: what the
+person on call sees when this fails, and how many of these there will be.
+The answers become `## Observability` and `## Performance budget`, and
+from those, `[observability]` and `[perf]` acceptance criteria that the
+implementer must prove through the project's own logging and metrics, the
+reviewer checks field by field, and `devkit-quality` uses as the bar for
+its performance pass. A project with no logging or metrics mechanism gets a
+stop and an ADR question, not an ad-hoc print statement.
+
 ### 4. Design the interface (only if there is one)
 
 ```

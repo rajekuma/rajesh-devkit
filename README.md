@@ -672,6 +672,29 @@ ceremony — they are for things whose truth depends on something the unit
 test cannot see. A project with no contract or end-to-end mechanism gets a
 finding from the implementer, not a unit test dressed as one.
 
+### Observability and performance — decided in the spec, not discovered in production
+
+A feature that works and cannot be debugged when it doesn't is half-built,
+and nothing in a spec's acceptance criteria said otherwise. Two sections in
+the spec template close that: `## Observability` says what the person on
+call sees - which events, with which fields, through the project's own
+logging or metrics mechanism, never a secret or a request body - and
+`## Performance budget` says the volume the feature must hold at and the
+latency it must meet there, as a number someone can measure.
+
+Both become criteria the loop gates on: `[observability]` marks one
+asserting the event or metric exists with the named fields, `[perf]` one
+asserting the budget at the budget's volume. `devkit-implementer` emits
+through what the project already uses and **stops if there is nothing** -
+picking a logging or metrics stack is an ADR, and an ad-hoc print statement
+is noise, not observability. `devkit-reviewer` checks the fields and the
+volume. `devkit-quality` reviews the diff's queries and loops against the
+budget's number, and says so when it had to pick one because the spec
+didn't.
+
+The plugin still ships no telemetry into your product. What it does is
+refuse to let "how will we know this works in production" go unasked.
+
 ### Tracked follow-ups — deferred work that can't vanish
 
 A criterion someone decides *not* to implement is the one thing in this loop

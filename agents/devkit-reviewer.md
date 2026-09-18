@@ -52,6 +52,11 @@ Steps:
      that enters below the user-facing surface does not satisfy `[e2e]`. Ticking it
      anyway is a silent downgrade of what the spec asked for. Check where the test
      lives and what it runs against, not just that a test exists.
+   - Any `[observability]` criterion whose event or metric is missing a field the
+     spec's `## Observability` section named, is emitted outside the project's own
+     logging/metrics mechanism, or carries something the section said never to log
+     (a secret, a full request body). Any `[perf]` criterion whose test runs at a
+     volume smaller than the budget states.
    - Correctness risks in the diff, with concrete evidence (file/line, failure
      scenario) — not vague impressions.
    - Any out-of-scope changes (diff touches things the spec doesn't call for).
