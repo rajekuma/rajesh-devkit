@@ -107,6 +107,15 @@ reader six months from now cannot recover from the diff.
 
 ### Fixed
 
+- `devkit-ui-verify` could satisfy "get the app running" by writing its own
+  backend. Its eval caught a run that stood up a stub API to reach the
+  empty, success and permission-denied states, reported them PASS, and
+  returned `mismatches` over a leak in the 403 body its own stub produced.
+  The rule now states the line: you may take a dependency away to induce a
+  failure; you may never supply one. Reached through a stand-in is not
+  reached, and "confirmed in markup" is a prediction, not an observation. A
+  deterministic grader backs the llm judge, which had passed the run.
+
 - `devkit-dep-audit` still described itself as complementing
   `claude-security` for code-level review; that role has been
   `devkit-security`'s since it was added.
