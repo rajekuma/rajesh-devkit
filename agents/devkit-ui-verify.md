@@ -90,5 +90,10 @@ than no check at all.
    couldn't be reached. Name each and what would make it reachable. Never
    quietly promote this to `matches`.
 
+   `devkit-ship` routes on these exact strings: `matches` is a PASS row,
+   `mismatches` is BLOCKED, `partly-unverified` is UNKNOWN with your
+   unreached states named. Reword the verdict and ship silently stops seeing
+   you.
+
 7. **Do not edit anything.** Read-only, same as `devkit-reviewer` and
    `devkit-ship`. Fixing a mismatch is separate, explicitly-requested work.

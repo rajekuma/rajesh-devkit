@@ -15,6 +15,19 @@ reader six months from now cannot recover from the diff.
 
 ### Fixed
 
+- `devkit-ship` now has a gate row for every report-only stage that runs
+  before it. `devkit-datamodel`, `devkit-ui-verify` and `devkit-security`
+  each produced a result, and only security's reached ship's table - the
+  other two were reports somebody had to remember to read. The **Data model**
+  row checks the plan against the diff: the migration the plan names must be
+  in the change (the exact shape of the M13 failure, where an entity changed
+  and no migration ever existed) and `## Rollback` must say something. The
+  **UI states** row routes on `devkit-ui-verify`'s verdict strings. Both
+  follow the existing rule - a stage that hasn't run is `UNKNOWN`, a stage
+  that doesn't apply is `PASS (not applicable)` with the reason stated.
+  `devkit-ui-verify` and `devkit-datamodel` now say what consumes their
+  output, and the Stop hook's ship nudge says ship reads the other verdicts.
+
 - `docs/SDLC.md` described a six-stage loop and stated that nothing in the
   plugin commits, pushes or tags, a full day after `devkit-deliver`,
   `devkit-datamodel`, `devkit-security`, `devkit-ui-verify` and

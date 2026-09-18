@@ -48,8 +48,11 @@ Those aren't a confirmation question; they're an irreversibility one.
   against its spec and ends with a single verdict line.
 - `devkit-ship` — the preflight between "the reviewer said ship" and "mark it
   done": CI status, coverage against the project's own threshold, dependency
-  advisories, a secrets scan of the diff, and any unaccounted acceptance
-  criteria. A gate it couldn't run reports `UNKNOWN`, never `PASS`.
+  advisories, a secrets scan of the diff, any unaccounted acceptance
+  criteria, and a row for every other gate that runs before it — the
+  `devkit-security` verdict, the `devkit-ui-verify` verdict, and whether
+  the migration `devkit-datamodel` planned is actually in the diff. A gate
+  it couldn't run reports `UNKNOWN`, never `PASS`.
 - `devkit-docs` — writes the changelog entry a shipped milestone earns, and
   hunts down the documentation that milestone just made wrong.
 - `devkit-adr` — records an architecture decision properly, interviewing for

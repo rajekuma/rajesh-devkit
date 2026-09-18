@@ -136,7 +136,8 @@ function downstream() {
   if (on('ship')) {
     steps.push(
       'once review returns a ship verdict, run the devkit-ship subagent as a preflight ' +
-        '(CI, coverage, advisories, secrets, open follow-ups);'
+        '(CI, coverage, advisories, secrets, open follow-ups, and a row for every other ' +
+        "gate's verdict - one it has not seen is UNKNOWN, not a pass);"
     );
   }
   if (on('docs')) {
