@@ -1,6 +1,6 @@
 ---
 name: devkit-specify
-description: Drafts a feature spec for the current repo, acting as product owner — reads the relevant code and any decision-record docs first, then interviews the user for anything that can't be confidently inferred, and writes the result to specs/<kebab-feature>.md for review before any implementation. Stack-agnostic — infers the repo's own layout and conventions instead of assuming one. Trigger phrases — "write a spec", "spec this feature", "specify <feature>", "draft a spec for <feature>", "let's spec <feature>".
+description: Drafts a feature spec for the current repo, acting as product owner — reads the relevant code and any decision-record docs first, then interviews the user for anything that can't be confidently inferred, and writes the result to specs/<kebab-feature>.md for review before any implementation. Stack-agnostic — infers the repo's own layout and conventions instead of assuming one. Trigger phrases — "devkit spec this feature", "devkit specify <feature>", "draft a devkit spec for <feature>".
 argument-hint: <feature>
 model: inherit
 effort: high

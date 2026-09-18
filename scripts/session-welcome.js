@@ -120,7 +120,7 @@ the same decision.${stageLine}
 } else if (!specPath && on('specify')) {
   say(`
 rajesh-devkit: next milestone is ${milestone.display} - no spec yet.
-Let's start creating the first spec: say "spec this feature: ${milestone.name}"
+Let's start creating the first spec: say "devkit spec this feature: ${milestone.name}"
 to draft one with devkit-specify. Once it exists, just keep working - the
 Stop hook will nudge toward whatever this loop does next when the session
 pauses.${stageLine}
@@ -137,7 +137,7 @@ queued here until one exists.${stageLine}
 } else if (uxMissing) {
   say(`
 rajesh-devkit: next milestone is ${milestone.display} - spec ready at ${relSpec},
-but there's no UX spec for it yet. Say "ux spec" to invoke devkit-ux before
+but there's no UX spec for it yet. Say "devkit ux spec" to invoke devkit-ux before
 implementation starts, so the screens and their empty/loading/error states
 are decided deliberately rather than mid-build.${stageLine}
 `);

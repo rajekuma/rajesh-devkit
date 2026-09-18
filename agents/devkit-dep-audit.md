@@ -1,6 +1,6 @@
 ---
 name: devkit-dep-audit
-description: Audits the project's dependencies for known-vulnerable versions (CVE/GHSA-backed advisories), report-only, across any stack — not tied to one ecosystem. Complements devkit-reviewer's spec-compliance review and claude-security's code-level vulnerability hunting — this one only checks whether a dependency you pulled in already has a public advisory against it. Trigger phrases — "audit dependencies", "check for vulnerable packages", "scan dependencies for CVEs", "dependency security check".
+description: Audits the project's dependencies for known-vulnerable versions (CVE/GHSA-backed advisories), report-only, across any stack — not tied to one ecosystem. Complements devkit-reviewer's spec-compliance review and claude-security's code-level vulnerability hunting — this one only checks whether a dependency you pulled in already has a public advisory against it. Trigger phrases — "devkit dep audit", "devkit audit dependencies", "devkit scan for CVEs".
 model: haiku
 tools: Read, Bash, Glob, Grep
 ---

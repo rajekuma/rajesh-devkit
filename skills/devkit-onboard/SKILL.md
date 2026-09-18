@@ -1,6 +1,6 @@
 ---
 name: devkit-onboard
-description: Gets a project onto this toolkit's loop — inventories what already exists (CLAUDE.md, specs/, docs/adr/, milestone trackers, other .claude assets), detects the stack and seeds the test-runner cache, then proposes a PROGRESS.md and any load-bearing ADRs to backfill. Handles both a brand-new project and one with existing code and history, without clobbering anything already there. Trigger phrases — "onboard this project", "set up devkit here", "get this repo on the loop", "bootstrap this project".
+description: Gets a project onto this toolkit's loop — inventories what already exists (CLAUDE.md, specs/, docs/adr/, milestone trackers, other .claude assets), detects the stack and seeds the test-runner cache, then proposes a PROGRESS.md and any load-bearing ADRs to backfill. Handles both a brand-new project and one with existing code and history, without clobbering anything already there. Trigger phrases — "devkit onboard this project", "set up devkit here", "get this repo on the devkit loop".
 model: inherit
 ---
 
@@ -175,7 +175,7 @@ user confirms.
 
 9. **Hand off with one concrete next step, then stop.** Name the actual first
    milestone and the exact thing to say to start it
-   (`"spec this feature: <name>"`). Don't end on a summary of what you did —
+   (`"devkit spec this feature: <name>"`). Don't end on a summary of what you did —
    end on what happens next.
 
    **Do not start that milestone.** Onboarding ends at the handoff: do not

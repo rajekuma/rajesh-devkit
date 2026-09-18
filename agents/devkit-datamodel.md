@@ -1,6 +1,6 @@
 ---
 name: devkit-datamodel
-description: Turns a spec's data requirements into an implementation-ready schema and migration plan — entities and constraints, the migration itself, a backfill strategy for existing rows, a rollback path, and what happens to in-flight writes during deploy. Detects whatever ORM and migration tooling the project already uses. Runs between the spec and devkit-implementer on any milestone that changes stored data. Trigger phrases — "datamodel", "schema design", "design the migration", "what does this do to existing rows".
+description: Turns a spec's data requirements into an implementation-ready schema and migration plan — entities and constraints, the migration itself, a backfill strategy for existing rows, a rollback path, and what happens to in-flight writes during deploy. Detects whatever ORM and migration tooling the project already uses. Runs between the spec and devkit-implementer on any milestone that changes stored data. Trigger phrases — "devkit datamodel", "devkit schema design", "devkit migration plan".
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---

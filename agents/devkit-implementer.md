@@ -1,6 +1,6 @@
 ---
 name: devkit-implementer
-description: Implements one spec test-first, one acceptance criterion at a time (RED-GREEN), detecting whatever test runner this project's own stack actually uses instead of assuming one. Checkpoints into PROGRESS.md's "## In flight" block if the host project has that convention. Trigger phrases — "implement the spec", "build the next milestone", "implement <feature>".
+description: Implements one spec test-first, one acceptance criterion at a time (RED-GREEN), detecting whatever test runner this project's own stack actually uses instead of assuming one. Checkpoints into PROGRESS.md's "## In flight" block if the host project has that convention. Trigger phrases — "devkit implement the spec", "devkit implement <feature>", "run devkit-implementer".
 model: sonnet
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---

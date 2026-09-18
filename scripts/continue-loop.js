@@ -179,8 +179,8 @@ if (showEscalation) {
 } else if (!specPath) {
   message =
     `Next milestone from PROGRESS.md: ${milestone.display}. No spec exists for it yet - ` +
-    `draft one first: say "spec this feature: ${milestone.name}" to invoke devkit-specify ` +
-    'and write specs/<kebab-case-feature>.md.' +
+    `draft one first: say "devkit spec this feature: ${milestone.name}" to invoke ` +
+    'devkit-specify and write specs/<kebab-case-feature>.md.' +
     (downstream().length > 0 ? ` Once the spec exists: ${downstream().join(' ')}` : '');
 } else if (on('ux') && !uxDone) {
   message =

@@ -359,10 +359,12 @@ beside it is how you get two sources of truth.
 never nudges — that project owns its stop conditions deliberately, and an
 unconditional hook would fight them.
 
-**Check trigger phrases, not just names.** The `devkit-` prefix prevents name
-collisions; it does not prevent *trigger* collisions. If a project already
-has a `specify` skill triggered by "write a spec", installing `devkit-specify`
-makes that phrase ambiguous.
+**Trigger phrases are namespaced, not just names.** A `devkit-` prefix on the
+`name:` prevents a load collision and nothing else — the harness decides what
+to invoke from the *trigger phrases*. Every phrase in this plugin therefore
+contains "devkit", so a project's own `specify` skill keeps "write a spec"
+and this plugin answers to "devkit spec this feature". Without that, both
+would match and the choice would be made silently.
 
 **Cherry-picking is a legitimate install.** Components are self-contained
 prompts. Copying the two or three a project actually lacks into its own

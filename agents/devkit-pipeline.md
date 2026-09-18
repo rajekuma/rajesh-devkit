@@ -1,6 +1,6 @@
 ---
 name: devkit-pipeline
-description: Audits or scaffolds the project's delivery pipeline — build, test, dependency and secret scanning, and what actually gates a merge — matching whatever CI system the repo already uses, or proposing one for a project with none. Report-first: it never enables a branch protection, never pushes, and never commits a workflow on its own. Trigger phrases — "pipeline", "set up CI", "audit the pipeline", "what gates our merges", "add security scanning to CI".
+description: Audits or scaffolds the project's delivery pipeline — build, test, dependency and secret scanning, and what actually gates a merge — matching whatever CI system the repo already uses, or proposing one for a project with none. Report-first: it never enables a branch protection, never pushes, and never commits a workflow on its own. Trigger phrases — "devkit pipeline", "devkit ci audit", "devkit what gates our merges".
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---

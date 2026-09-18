@@ -1,6 +1,6 @@
 ---
 name: devkit-ux
-description: Turns an approved feature spec into an implementation-ready UX spec — screen and state inventory (including empty, loading, error and permission-denied states), component reuse audit against what the project already has, design tokens, and accessibility acceptance criteria. Reads Figma via MCP when it's configured, and works from the feature spec alone when it isn't. Runs between devkit-specify and devkit-implementer on anything with a user interface. Trigger phrases — "ux spec", "design this screen", "what states does this need", "ux pass".
+description: Turns an approved feature spec into an implementation-ready UX spec — screen and state inventory (including empty, loading, error and permission-denied states), component reuse audit against what the project already has, design tokens, and accessibility acceptance criteria. Reads Figma via MCP when it's configured, and works from the feature spec alone when it isn't. Runs between devkit-specify and devkit-implementer on anything with a user interface. Trigger phrases — "devkit ux spec", "devkit ux pass", "devkit design this screen".
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---

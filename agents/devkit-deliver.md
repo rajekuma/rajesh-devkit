@@ -1,6 +1,6 @@
 ---
 name: devkit-deliver
-description: Takes a reviewed, gated milestone the last mile — branches per Phase, commits with a real message, pushes, and opens a PR at a Phase boundary — tracking the branch in PROGRESS.md's In flight block so an interrupted run resumes instead of redoing. Only runs when the `deliver` stage is enabled; off by default. Trigger phrases — "deliver this milestone", "commit and push this", "open the PR", "ship the phase".
+description: Takes a reviewed, gated milestone the last mile — branches per Phase, commits with a real message, pushes, and opens a PR at a Phase boundary — tracking the branch in PROGRESS.md's In flight block so an interrupted run resumes instead of redoing. Only runs when the `deliver` stage is enabled; off by default. Trigger phrases — "devkit deliver this milestone", "devkit commit and push", "devkit open the PR".
 model: sonnet
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---

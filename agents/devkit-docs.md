@@ -1,6 +1,6 @@
 ---
 name: devkit-docs
-description: Updates the documentation a shipped milestone just made stale — changelog entry, release notes, and any README/usage/API docs the diff contradicts — working from the spec and the actual diff rather than from the commit subject. Run it after devkit-ship comes back clear. Report-only on anything it can't confidently write. Trigger phrases — "update the docs", "changelog for this milestone", "release notes", "what docs did this break".
+description: Updates the documentation a shipped milestone just made stale — changelog entry, release notes, and any README/usage/API docs the diff contradicts — working from the spec and the actual diff rather than from the commit subject. Run it after devkit-ship comes back clear. Report-only on anything it can't confidently write. Trigger phrases — "devkit docs", "devkit changelog", "devkit update the docs".
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---

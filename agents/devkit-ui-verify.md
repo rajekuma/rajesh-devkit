@@ -1,6 +1,6 @@
 ---
 name: devkit-ui-verify
-description: Runs the built UI and drives it through every state the UX spec named — empty, loading, error, permission-denied, success — checking what actually renders rather than what the tests assert. Report-only; never edits code. Runs after implementation on any milestone with a user interface. Trigger phrases — "verify the ui", "check the screens", "does it actually look right", "ui verification".
+description: Runs the built UI and drives it through every state the UX spec named — empty, loading, error, permission-denied, success — checking what actually renders rather than what the tests assert. Report-only; never edits code. Runs after implementation on any milestone with a user interface. Trigger phrases — "devkit ui verify", "devkit check the screens", "devkit ui verification".
 model: sonnet
 tools: Read, Glob, Grep, Bash
 ---

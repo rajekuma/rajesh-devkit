@@ -1,6 +1,6 @@
 ---
 name: devkit-ship
-description: Pre-ship preflight for a finished milestone — checks unaccounted acceptance criteria, open follow-ups, CI status, test coverage against the project's own configured threshold, and dependency advisories, then gives a clear/blocked verdict. Report-only; never commits, pushes, or merges. Run it after devkit-reviewer says ship and before marking a milestone done. Trigger phrases — "ship check", "preflight", "is this ready to ship", "can I mark this done".
+description: Pre-ship preflight for a finished milestone — checks unaccounted acceptance criteria, open follow-ups, CI status, test coverage against the project's own configured threshold, and dependency advisories, then gives a clear/blocked verdict. Report-only; never commits, pushes, or merges. Run it after devkit-reviewer says ship and before marking a milestone done. Trigger phrases — "devkit ship check", "devkit preflight", "devkit can I mark this done".
 model: sonnet
 tools: Read, Bash, Glob, Grep
 ---

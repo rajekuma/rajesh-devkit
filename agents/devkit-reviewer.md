@@ -1,6 +1,6 @@
 ---
 name: devkit-reviewer
-description: Reviews the current change against its spec, report-only. Trigger phrases — "review the diff", "review against the spec".
+description: Reviews the current change against its spec, report-only. Trigger phrases — "devkit review the diff", "devkit review against the spec", "run devkit-reviewer".
 model: haiku
 tools: Read, Bash, Glob, Grep
 ---

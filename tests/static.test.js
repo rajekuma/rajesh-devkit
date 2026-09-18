@@ -159,3 +159,46 @@ test('skills declare model: inherit, agents pin a model', () => {
     assert.notStrictEqual(model[1], 'inherit', `agent ${f} says inherit, but subagents honour their own model`);
   }
 });
+
+test('every trigger phrase is namespaced to devkit', () => {
+  // This plugin is a GUEST in someone else's repository. A phrase like
+  // "write a spec" or "review the diff" is a plain-English description of a
+  // universal dev activity, and is exactly what a project's own components
+  // already answer to - MyHomeMaintenance's `specify`, `implementer` and
+  // `reviewer` claimed all three verbatim. The harness resolves that
+  // ambiguity silently, so the user never learns which one ran.
+  //
+  // The rule: every trigger contains "devkit". A bare generic phrase then
+  // reaches the project's own component, and "devkit <thing>" unambiguously
+  // reaches this plugin's. Namespacing the NAMES was never enough; the
+  // phrases are what the harness actually matches on.
+  const components = [];
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) {
+    if (f.endsWith('.md')) components.push(path.join(PLUGIN_ROOT, 'agents', f));
+  }
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'), { withFileTypes: true })) {
+    if (!d.isDirectory()) continue;
+    const s = path.join(PLUGIN_ROOT, 'skills', d.name, 'SKILL.md');
+    if (fs.existsSync(s)) components.push(s);
+  }
+
+  let checked = 0;
+  for (const file of components) {
+    const text = fs.readFileSync(file, 'utf8');
+    const name = text.match(/^name:\s*(\S+)\s*$/m)[1];
+    const desc = text.match(/^description:\s*(.*)$/m)[1];
+    const clause = desc.match(/Trigger phrases? [—-] (.*)$/);
+    assert.ok(clause, `${name} declares no trigger phrases - the harness cannot reach it`);
+
+    const phrases = [...clause[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    assert.ok(phrases.length > 0, `${name}'s trigger clause lists no quoted phrases`);
+    for (const phrase of phrases) {
+      assert.ok(
+        phrase.toLowerCase().includes('devkit'),
+        `${name} claims the un-namespaced phrase "${phrase}" - a host project's own component may answer to it too`
+      );
+      checked++;
+    }
+  }
+  assert.ok(checked >= 40, `expected 40+ trigger phrases across the plugin, checked ${checked}`);
+});
