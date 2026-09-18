@@ -178,10 +178,12 @@ devkit ux spec
 `devkit-ux` audits your existing components and design tokens *before*
 designing, so it reuses rather than reinvents, then enumerates the states
 that actually break interfaces — empty, loading, partial, error,
-permission-denied, success, destructive-confirm. It appends accessibility
-criteria to the feature spec's own acceptance list, which is what gives them
-teeth: the implementer works from acceptance criteria, and the later gates
-check them.
+permission-denied, success, destructive-confirm. Where the project has an
+i18n mechanism, every string it specifies is a key plus its default text in
+that mechanism's form, plurals included. It appends accessibility criteria
+— and localisation criteria, where they apply — to the feature spec's own
+acceptance list, which is what gives them teeth: the implementer works from
+acceptance criteria, and the later gates check them.
 
 ### 5. Plan the data (only if stored data changes)
 

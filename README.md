@@ -672,6 +672,25 @@ ceremony — they are for things whose truth depends on something the unit
 test cannot see. A project with no contract or end-to-end mechanism gets a
 finding from the implementer, not a unit test dressed as one.
 
+### Localisation — copy is a key, not a literal
+
+`devkit-ux` finds how the project handles user-visible strings before it
+writes any (`.arb` + `intl`, `i18next`, `.resx`, gettext, `strings.xml`, a
+`t()` helper — whatever is actually there), reads three existing keys for
+the naming convention, and then specifies every string as a key plus its
+default-locale text, with plurals and arguments in the mechanism's own
+form. It appends localisation criteria to the feature spec — no hardcoded
+string, every locale has the key, counts use the plural form — so
+`devkit-implementer` adds entries to the locale files rather than typing
+English into a widget, `devkit-reviewer` names any literal that slipped
+through, and `devkit-ui-verify` drives a second locale where one ships.
+
+A project with no i18n mechanism gets plain copy and one line under Open
+design decisions. Adding i18n is a project decision; a UX spec doesn't
+introduce it through the back door, and it doesn't work against a project
+that already has it either — which is what a spec full of literal strings
+was doing.
+
 ### Observability and performance — decided in the spec, not discovered in production
 
 A feature that works and cannot be debugged when it doesn't is half-built,

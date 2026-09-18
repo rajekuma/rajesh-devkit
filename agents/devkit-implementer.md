@@ -147,6 +147,11 @@ assuming anything.
        project already uses; if the spec says the project has no mechanism,
        **stop** — choosing one is an ADR, and an ad-hoc `console.log` is not
        observability, it is noise the next person deletes.
+     - A criterion from the UX spec's **Localisation** section — the test
+       asserts the key resolves through the project's mechanism, and you
+       add the string to the locale files, never to the widget. A
+       hardcoded string in a project with an i18n mechanism is a bug the
+       reviewer will name, however correct the English looks.
      - `[perf]` — the test measures against the budget's number at the
        budget's volume, in the suite the project runs such tests in. If no
        such suite exists, say so and leave it unticked; a `[perf]` criterion

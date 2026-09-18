@@ -15,6 +15,15 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- Localisation in `devkit-ux`. It specified literal copy strings, which in a
+  project whose rules say every user-visible string goes through `intl`
+  meant the design stage was actively working against the project's own
+  convention. It now detects the i18n mechanism the project actually has,
+  specifies copy as key plus default text in that mechanism's plural and
+  argument form, and appends localisation criteria the implementer,
+  reviewer and ui-verify each check. A project with no mechanism gets plain
+  copy and an open decision, never an i18n stack it didn't choose.
+
 - `## Observability` and `## Performance budget` sections in the spec
   template, and `[observability]` / `[perf]` criterion markers that make them
   gated rather than read once. Nothing in the loop put a log line, a metric

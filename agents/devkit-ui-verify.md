@@ -59,19 +59,26 @@ than no check at all.
      resource's existence should be concealed, confirm it is.
    - **Success** — including where focus lands afterwards.
 
-4. **Check the accessibility criteria that can only be checked live.** The
+4. **Check the localisation criteria that can only be checked live**, where
+   the UX spec has them: switch to a second shipped locale if the app
+   supports one and drive the same states — an untranslated string, a
+   clipped label at a longer translation, a "3 task(s)" that a plural form
+   should have handled. A locale you couldn't switch to is UNVERIFIED like
+   any other state.
+
+5. **Check the accessibility criteria that can only be checked live.** The
    ones a unit test can't reach: tab order reaching every control in a
    sensible sequence, a visible focus indicator on each, the screen still
    usable at large text scale, and no text clipped or overflowing at the
    breakpoints the UX spec named. Contrast against the tokens actually
    rendered, not the ones the spec intended.
 
-5. **Capture evidence, not impressions.** A screenshot per state where you
+6. **Capture evidence, not impressions.** A screenshot per state where you
    can take one, and the exact copy that rendered — quoted, not paraphrased.
    "The error state looks fine" is worth nothing to whoever reads this later;
    the actual string is.
 
-6. **Report as a state table, then a verdict.**
+7. **Report as a state table, then a verdict.**
 
    ```
    | Screen / state           | Result      | Evidence                        |
@@ -95,5 +102,5 @@ than no check at all.
    unreached states named. Reword the verdict and ship silently stops seeing
    you.
 
-7. **Do not edit anything.** Read-only, same as `devkit-reviewer` and
+8. **Do not edit anything.** Read-only, same as `devkit-reviewer` and
    `devkit-ship`. Fixing a mismatch is separate, explicitly-requested work.

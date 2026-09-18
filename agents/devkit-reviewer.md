@@ -57,6 +57,10 @@ Steps:
      logging/metrics mechanism, or carries something the section said never to log
      (a secret, a full request body). Any `[perf]` criterion whose test runs at a
      volume smaller than the budget states.
+   - In a project whose conventions or UX spec name an i18n mechanism, any
+     user-visible string the diff adds outside it — a literal in a widget, a
+     concatenated "${n} item(s)", an error message built inline. Cite the file and
+     line; the UX spec's localisation criteria are what this violates.
    - Correctness risks in the diff, with concrete evidence (file/line, failure
      scenario) — not vague impressions.
    - Any out-of-scope changes (diff touches things the spec doesn't call for).
