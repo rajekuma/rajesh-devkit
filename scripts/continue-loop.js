@@ -153,6 +153,13 @@ function downstream() {
         'documentation the change just made wrong;'
     );
   }
+  if (on('release')) {
+    steps.push(
+      'if this milestone closes a Phase, invoke the devkit-release subagent to decide the ' +
+        'version bump from what shipped, roll the changelog into a versioned section and ' +
+        'draft release notes (it never tags - it ends with the tag command for a human);'
+    );
+  }
   if (on('pipeline')) {
     steps.push(
       'and check the delivery pipeline with the devkit-pipeline subagent if this ' +

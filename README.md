@@ -17,7 +17,9 @@ The exception is `devkit-deliver`, and it is **off unless you enable the
 enabled, it is standing permission for the recoverable flow only (branch,
 commit, push a feature branch, open a PR) and never for force-pushing,
 pushing to a default branch, merging, deleting branches or rewriting history.
-Those aren't a confirmation question; they're an irreversibility one.
+Those aren't a confirmation question; they're an irreversibility one. Tagging
+a release is on the same side of that line: `devkit-release` prepares one
+and prints the tag command; nothing here runs it.
 
 > **New here?** [**docs/SDLC.md**](docs/SDLC.md) is the end-to-end
 > walkthrough — how to take a product from nothing, or from an existing
@@ -62,6 +64,15 @@ Those aren't a confirmation question; they're an irreversibility one.
   it couldn't run reports `UNKNOWN`, never `PASS`.
 - `devkit-docs` — writes the changelog entry a shipped milestone earns, and
   hunts down the documentation that milestone just made wrong.
+- `devkit-release` — at a Phase boundary, turns the accumulated changelog
+  entries into a release: decides the semver bump from what actually
+  shipped (with the evidence — a `SENSITIVE:` compatibility break is a
+  major whether or not the changelog said so), rolls `[Unreleased]` into a
+  versioned section, updates the version everywhere the project declares
+  it, drafts release notes. Working tree only. It ends with the `git tag`
+  command and never runs it — tagging is the one git operation that stays
+  human in every configuration, because a tag is what registries and
+  pipelines act on the moment it exists.
 - `devkit-adr` — records an architecture decision properly, interviewing for
   the alternatives and consequences that aren't inferable from code.
 - `devkit-dep-audit` — a report-only subagent that checks the project's
@@ -127,6 +138,7 @@ rajesh-devkit/
 │   ├── devkit-implementer.md    # RED-GREEN implementer, stack-agnostic
 │   ├── devkit-pipeline.md       # CI/CD audit or scaffold, gates not files
 │   ├── devkit-quality.md        # design + performance review vs the project own rules
+│   ├── devkit-release.md        # semver bump + changelog roll-up + notes; never tags
 │   ├── devkit-reviewer.md       # spec-compliance review, report-only
 │   ├── devkit-security.md       # code-level vulns vs the project own invariants
 │   ├── devkit-ui-verify.md      # drives the built UI through every specified state
@@ -574,7 +586,8 @@ configurable, in one committed file:
 ```
 
 Valid stages: `specify`, `ux`, `datamodel`, `implement`, `ui-verify`,
-`review`, `quality`, `security`, `ship`, `docs`, `pipeline`, `deliver`. Every one except `deliver` is
+`review`, `quality`, `security`, `ship`, `docs`, `release`, `pipeline`,
+`deliver`. Every one except `deliver` is
 on by default. `role` is a label for humans; only `stages` changes
 behaviour. `devkit-onboard` asks the question during setup and writes the
 file.

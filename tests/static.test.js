@@ -271,3 +271,34 @@ test('README and docs/SDLC.md name every component and every stage', () => {
     }
   }
 });
+
+test('no component runs git tag', () => {
+  // Tagging is the one git operation that stays human in every
+  // configuration - a tag is what registries and deploy pipelines act on
+  // the moment it exists. devkit-release prints the command; nothing runs
+  // it. This looks for "git tag" used as an instruction rather than shown
+  // as output or forbidden in a sentence: any line containing it must also
+  // contain "never", "not run", "for a human", or be inside a fenced block
+  // (the printed command).
+  const files = [];
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) files.push(path.join(PLUGIN_ROOT, 'agents', f));
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'))) {
+    const s = path.join(PLUGIN_ROOT, 'skills', d, 'SKILL.md');
+    if (fs.existsSync(s)) files.push(s);
+  }
+  files.push(...scriptFiles());
+  for (const f of files) {
+    const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/);
+    let fenced = false;
+    lines.forEach((line, n) => {
+      if (/^\s*```/.test(line)) fenced = !fenced;
+      // `git tag --list` / `-l` only reads; that is how release finds the
+      // current version. Everything else `git tag` does, writes.
+      if (fenced || !/git tag(?! (--list|-l)\b)/.test(line)) return;
+      assert.ok(
+        /never|not run|did not run|for a human|do not run|stays human|human action/i.test(line),
+        `${path.basename(f)}:${n + 1} mentions git tag as an instruction: ${line.trim()}`
+      );
+    });
+  }
+});

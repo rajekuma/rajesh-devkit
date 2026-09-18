@@ -405,7 +405,7 @@ test('a nudge never names a component whose stage is disabled', () => {
   // Not just the instructions - the explanatory asides too. A backend loop's
   // datamodel step once described itself as "the data-side counterpart to
   // devkit-ux", naming a stage that loop had switched off.
-  const ALL = ['specify', 'ux', 'datamodel', 'implementer', 'reviewer', 'quality', 'security', 'ship', 'docs', 'pipeline'];
+  const ALL = ['specify', 'ux', 'datamodel', 'implementer', 'reviewer', 'quality', 'security', 'ship', 'docs', 'release', 'pipeline'];
   const stages = ['specify', 'datamodel', 'implement', 'review'];
   withStages(stages, { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } }, (dir) => {
     const r = runHook('continue-loop.js', dir);
@@ -523,6 +523,21 @@ test('the quality stage is nudged after review and before security', () => {
       assert.ok(i('devkit-quality') > 0, 'quality not nudged');
       assert.ok(i('devkit-reviewer') < i('devkit-quality'), 'quality before review');
       assert.ok(i('devkit-quality') < i('devkit-security'), 'security before quality');
+    }
+  );
+});
+
+test('the release stage is nudged after docs, and says it never tags', () => {
+  withStages(
+    ['implement', 'docs', 'release', 'deliver'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } },
+    (dir) => {
+      const r = runHook('continue-loop.js', dir);
+      const i = (s) => r.stderr.indexOf(s);
+      assert.ok(i('devkit-release') > 0, 'release not nudged');
+      assert.ok(i('devkit-docs') < i('devkit-release'), 'release before docs');
+      assert.ok(i('devkit-release') < i('devkit-deliver'), 'deliver before release');
+      assert.match(r.stderr, /never tags/, 'the nudge must carry the one rule that matters');
     }
   );
 });

@@ -56,7 +56,7 @@ const GITIGNORE_ENTRY = '.claude/rajesh-devkit/';
 // what makes a two-stage loop a real loop instead of a crippled one.
 const ALL_STAGES = [
   'specify', 'ux', 'datamodel', 'implement', 'ui-verify',
-  'review', 'quality', 'security', 'ship', 'docs', 'pipeline', 'deliver',
+  'review', 'quality', 'security', 'ship', 'docs', 'release', 'pipeline', 'deliver',
 ];
 
 // 'deliver' is the one stage that is NOT on by default. Every other component

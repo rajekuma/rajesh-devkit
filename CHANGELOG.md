@@ -15,6 +15,16 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- `devkit-release`, the `release` stage. `devkit-deliver` stopped at the
+  PR and `devkit-docs` wrote one changelog entry per milestone; nothing
+  decided a semver bump, rolled the entries into a version or wrote release
+  notes. It runs at a Phase boundary, decides the bump with the evidence
+  visible (a `SENSITIVE:` compatibility break in any shipped spec is a
+  major whether the changelog said so or not), updates the version in every
+  file that declares it, and ends with the `git tag` command without
+  running it - tagging is the one git operation that stays human in every
+  configuration, and a static test now fails if any component instructs it.
+
 - `devkit-quality`, a report-only agent for the review the spec cannot ask
   for: design and performance. `devkit-reviewer` checks the change against
   its spec and `devkit-security` checks it for vulnerabilities; nothing

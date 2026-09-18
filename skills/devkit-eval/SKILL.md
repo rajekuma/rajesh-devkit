@@ -86,6 +86,11 @@ a failed case. Read each component and verify:
   the working tree. Grep for `git commit`, `git push`, `gh pr create` outside
   `devkit-deliver`; a second component gaining them is a real regression, and
   a silent one.
+- **Nothing tags, in any configuration.** `devkit-release` prepares a
+  release and ends with the tag command for a human; `devkit-deliver`
+  commits and pushes branches but never tags. Grep for `git tag` outside a
+  sentence that says "never" or shows the command as output; a component
+  that runs it has crossed the one line even `deliver` doesn't.
 - **`deliver` is still off by default.** `DEFAULT_STAGES` in
   `scripts/lib/devkit.js` must continue to exclude it. Installing this plugin
   must never be sufficient to grant commit-and-push in someone's repository —
@@ -106,7 +111,7 @@ a failed case. Read each component and verify:
   there's a UI) → (`devkit-datamodel` if stored data changes) →
   `devkit-implementer` → (`devkit-ui-verify` if there's a UI) →
   `devkit-reviewer` → `devkit-quality` → `devkit-security` → `devkit-ship` →
-  `devkit-docs` →
+  `devkit-docs` → (`devkit-release` at a Phase boundary) →
   (`devkit-pipeline`) → (`devkit-deliver`, opt-in). Each component should
   name what precedes and follows it. Check `continue-loop.js`'s `downstream()`
   names the same chain in the same order, and that `ALL_STAGES` in

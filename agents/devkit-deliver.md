@@ -115,7 +115,12 @@ that a human needs to look at. Stop and describe it.
    so a human decides how to reconcile.
 
 5. **At a Phase boundary — and only there — open the PR.** A Phase boundary
-   means the last milestone in that Phase just shipped. Mid-Phase, push and
+   means the last milestone in that Phase just shipped. If the `release`
+   stage is enabled, `devkit-release` has already run and the working tree
+   holds a version bump, a rolled-up changelog and release notes: those go
+   in the Phase's final commit, and the PR body links the new changelog
+   section. The tag does **not** happen here — not by you, not by anyone,
+   until the PR merges; `devkit-release` printed the command for a human. Mid-Phase, push and
    stop; a PR per milestone fragments review.
 
    The PR body summarises the **Phase**, not the last commit: what shipped

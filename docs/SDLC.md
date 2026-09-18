@@ -49,10 +49,11 @@ lives in a conversation.
    │                                                     │                 │
    │            ┌────────────────────────────────────────┘                 │
    │            ▼                                                          │
-   │  quality ─► security ─► ship ─► docs ─► [pipeline] ─► [deliver]       │
-   │  (verdict)  (verdict)   (gate)  (changelog) (CI audit) (branch, commit,│
-   │                                                        PR - OFF unless │
-   │                                                        enabled)        │
+   │  quality ─► security ─► ship ─► docs ─► release ─► [pipeline] ─► [deliver]
+   │  (verdict)  (verdict)   (gate)  (changelog) (Phase    (CI audit)  (branch,
+   │                                             boundary:             commit, PR -
+   │                                             version,              OFF unless
+   │                                             notes)                enabled)   │
    │                                                                       │
    │  adr ◄── written whenever a real decision gets made                   │
    └───────────────────────────────────────────────────────────────────────┘
@@ -76,6 +77,7 @@ those are done. No file means every stage except `deliver` is on. See
 | `security` | `devkit-security` | findings + verdict | the diff, the project's own invariants |
 | `ship` | `devkit-ship` | a verdict | criteria, CI, coverage, advisories, secrets, the other verdicts |
 | `docs` | `devkit-docs` | changelog entry, fixed docs | the spec + the diff |
+| `release` | `devkit-release` | version bump, changelog section, release notes, the tag command | Unreleased entries, shipped specs, git tags |
 | `pipeline` | `devkit-pipeline` | a CI audit or a proposed workflow | the repo's CI config |
 | `deliver` | `devkit-deliver` | a branch, commits, a PR | `PROGRESS.md`'s In flight block |
 | Decide | `devkit-adr` | `docs/adr/NNNN-*.md` | the decision, the code |
@@ -250,7 +252,21 @@ so a finding cites something the project decided rather than a principle it
 didn't. Findings that are matters of taste are marked advisory and never
 change its verdict.
 
-### 9. Audit the pipeline, then deliver (both optional)
+### 9. Cut a release (at a Phase boundary)
+
+```
+devkit release
+```
+
+`devkit-docs` wrote one changelog entry per milestone; nothing turned the
+pile into a version. `devkit-release` does, once per Phase: it decides the
+bump from what shipped and says why (a `SENSITIVE:` compatibility break in
+any shipped spec is a major whether the changelog entry said so or not),
+rolls `[Unreleased]` into a versioned section, updates the version in every
+file that declares it, and drafts release notes for someone deciding whether
+to upgrade. It ends with the exact `git tag` command and does not run it.
+
+### 10. Audit the pipeline, then deliver (both optional)
 
 ```
 devkit pipeline
@@ -270,7 +286,7 @@ permission for the recoverable flow only: branch, commit, push a feature
 branch, open a PR at a Phase boundary. Never force-push, never a default
 branch, never a merge, never a deleted branch or rewritten history.
 
-### 10. Record decisions as they happen
+### 11. Record decisions as they happen
 
 ```
 devkit write an ADR: <decision>
@@ -410,7 +426,8 @@ enough to grant it. Even enabled, it is permission for the recoverable flow
 (branch, commit, push a feature branch, open a PR) and never for
 force-pushing, pushing to a default branch, merging, deleting branches or
 rewriting history. Tagging a release stays a human action in every
-configuration. The reasoning is unchanged: an agent that can rewrite a
+configuration: `devkit-release` prepares the release and prints the tag
+command; nothing runs it. The reasoning is unchanged: an agent that can rewrite a
 shared branch is an agent that can break it unattended, so the irreversible
 operations are not a confirmation question — they are simply not available.
 
