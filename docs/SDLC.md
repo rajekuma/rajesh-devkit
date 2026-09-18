@@ -49,11 +49,12 @@ lives in a conversation.
    │                                                     │                 │
    │            ┌────────────────────────────────────────┘                 │
    │            ▼                                                          │
-   │  quality ─► security ─► ship ─► docs ─► release ─► [pipeline] ─► [deliver]
-   │  (verdict)  (verdict)   (gate)  (changelog) (Phase    (CI audit)  (branch,
-   │                                             boundary:             commit, PR -
-   │                                             version,              OFF unless
-   │                                             notes)                enabled)   │
+   │  quality ─► security ─► ship ─► docs ─► release ─► [pipeline] ─► [deliver]│
+   │  (verdict)  (verdict)   (gate)  (change- (Phase     (CI audit)   (branch,  │
+   │                                  log)     boundary:               commit,  │
+   │                                           version,                PR - OFF │
+   │                                           notes)                  unless   │
+   │                                                                   enabled) │
    │                                                                       │
    │  adr ◄── written whenever a real decision gets made                   │
    └──────────────────────────────────┬────────────────────────────────────┘
