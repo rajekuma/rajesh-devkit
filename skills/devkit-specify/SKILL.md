@@ -101,9 +101,25 @@ repo's own files and the user's answers.
    a secret or a full request body), which **metric** moves (a count, a duration, a
    failure rate), and which **existing alert or dashboard** picks it up or needs a new
    line. Use the mechanism this project already has - its logger, its metrics library,
-   its tracing - and name it. If the project has none, say so here and stop at that:
-   picking one is an ADR, not a spec decision. Leave this section out only for a
-   change nobody will ever need to debug in production, and say why that is true.
+   its tracing - and name it, per signal: structured logging is usually there long
+   before metrics or tracing are (`ILogger`/Serilog, `logging`, `slog`, `log4j`,
+   Crashlytics), and "we have logs but no metrics pipeline yet" is a normal, honest
+   answer that this section states rather than glosses. Never require a specific
+   stack - OpenTelemetry, Prometheus, Datadog, Application Insights are project
+   decisions, not spec decisions. Three cases for a signal the project has no
+   mechanism for:
+   - **The project has recorded a plan for it** - a `PROGRESS.md` milestone ("Phase
+     14: OpenTelemetry"), an ADR, a roadmap row. Specify the events and metrics anyway,
+     in mechanism-neutral terms (the event name and fields, the metric and its unit),
+     and say "metrics: deferred to <that milestone>". The implementer will defer those
+     criteria into `Tracked follow-ups` with that milestone as the unblock condition,
+     so the feature ships with the logging it can have now and the metrics arrive when
+     the pipeline does, already specified.
+   - **No mechanism and no plan** - say so here and stop at that: picking one is an
+     ADR, not a spec decision, and the implementer will stop and ask rather than
+     inventing a `console.log` convention.
+   - **Genuinely nothing to observe** - a change nobody will ever need to debug in
+     production. Leave the section out and say why that is true.
 
    ## Performance budget
 

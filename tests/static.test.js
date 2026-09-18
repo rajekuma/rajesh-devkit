@@ -302,3 +302,30 @@ test('no component runs git tag', () => {
     });
   }
 });
+
+test('README lists every component in "What this plugin is" AND in the model table', () => {
+  // "Mentioned somewhere" was not enough: six components existed only in
+  // the layout tree, and eight had no row in the model table, while the
+  // previous test passed. The two sections a reader actually uses to learn
+  // what a component is and what to run it on are checked separately.
+  const readme = fs.readFileSync(path.join(PLUGIN_ROOT, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
+  const section = (start, end) => {
+    const a = readme.indexOf(start);
+    assert.ok(a >= 0, `README lost its "${start}" heading`);
+    const b = readme.indexOf(end, a + start.length);
+    return readme.slice(a, b < 0 ? undefined : b);
+  };
+  const list = section('## What this plugin is', '## Repository layout');
+  const models = section('## Which model each component runs on', '### Skills inherit');
+  const names = [];
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) {
+    if (f.endsWith('.md')) names.push(f.replace(/\.md$/, ''));
+  }
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'), { withFileTypes: true })) {
+    if (d.isDirectory()) names.push(d.name);
+  }
+  for (const name of names) {
+    assert.ok(list.includes(`- \`${name}\` —`), `"What this plugin is" has no entry for ${name}`);
+    assert.ok(models.includes(`\`${name}\``), `the model table has no row naming ${name}`);
+  }
+});

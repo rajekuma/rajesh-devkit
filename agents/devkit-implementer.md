@@ -144,9 +144,17 @@ assuming anything.
        `## Observability` section named, with the fields it named, through
        the project's existing logging or metrics mechanism (a captured
        logger, a metrics registry, a test sink). Emit through what the
-       project already uses; if the spec says the project has no mechanism,
-       **stop** — choosing one is an ADR, and an ad-hoc `console.log` is not
-       observability, it is noise the next person deletes.
+       project already uses. For a signal the project has no mechanism for:
+       if the spec says it is **deferred to a recorded milestone or ADR**,
+       record the criterion in `PROGRESS.md`'s `## Tracked follow-ups`
+       with that milestone as the unblock condition and leave it unticked —
+       the same deferral path any criterion takes, so `devkit-ship` sees
+       it as accounted for rather than missing. If the spec says there is
+       **no mechanism and no plan**, **stop** — choosing one is an ADR, and
+       an ad-hoc `console.log` is not observability, it is noise the next
+       person deletes. Never add OpenTelemetry, a metrics library, or any
+       observability dependency to satisfy a criterion; that is the decision
+       the stop exists to surface.
      - A criterion from the UX spec's **Localisation** section — the test
        asserts the key resolves through the project's mechanism, and you
        add the string to the locale files, never to the widget. A

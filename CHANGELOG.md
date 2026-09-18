@@ -107,6 +107,19 @@ reader six months from now cannot recover from the diff.
 
 ### Fixed
 
+- The observability rule stopped the implementer whenever a signal had no
+  mechanism, which on a project that has structured logging today and
+  OpenTelemetry deliberately scheduled for a later Phase would have blocked
+  every milestone until then. A signal with a *recorded* plan is now
+  specified in mechanism-neutral terms and deferred through
+  `Tracked follow-ups` with that milestone as the unblock condition; the
+  stop is reserved for no mechanism *and* no plan. The spec template and
+  README now say plainly that no particular stack is required.
+- README's "What this plugin is" list was missing six components and the
+  model table eight, while the presence test passed because every name
+  appeared in the layout tree. A stricter static test checks those two
+  sections separately.
+
 - `devkit-ui-verify` could satisfy "get the app running" by writing its own
   backend. Its eval caught a run that stood up a stub API to reach the
   empty, success and permission-denied states, reported them PASS, and
