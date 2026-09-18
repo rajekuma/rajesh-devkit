@@ -75,13 +75,24 @@ Undo.
 - [x] complete(store, id) sets done = true on that task
 - [x] list(store, { open: true }) returns only tasks with done = false
 - [x] archive(store, id) removes a done task from list() results
+EOF
+
+# The follow-up lives in PROGRESS.md's table, not the spec - a follow-up has
+# to stay visible after the spec ships, and a shipped spec is a document
+# nobody re-opens. Milestone 1 is marked done so findNextMilestone returns
+# nothing and the Stop hook stays quiet; this fixture is about the reviewer.
+cat > PROGRESS.md <<'EOF'
+# Progress
+
+| # | Milestone | Status |
+|---|-----------|--------|
+| 1 | Task completion | ✅ |
 
 ## Tracked follow-ups
 
-- [ ] archive(store, id) removes a done task from list() results
-  - Deferred: 2026-09-17, during M1 - Task completion
-  - Why: archive storage format not decided yet
-  - Unblocks when: ADR on persistence lands
+| Item | Status | Source | Notes |
+|---|---|---|---|
+| archive(store, id) removes a done task from list() results | ⬜ | [specs/task-completion.md](specs/task-completion.md) | Deferred 2026-09-17 during M1 - Task completion. Why: archive storage format not decided yet. Unblocks when: ADR on persistence lands. |
 EOF
 
 cat > src/tasks.js <<'EOF'

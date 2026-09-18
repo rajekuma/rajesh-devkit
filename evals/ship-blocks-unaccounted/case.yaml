@@ -1,7 +1,8 @@
 schema_version: "1.1"
 name: ship-blocks-unaccounted
 description: >
-  An unticked acceptance criterion with no Tracked follow-ups entry is an
+  An unticked acceptance criterion with no row in PROGRESS.md's Tracked
+  follow-ups table is an
   unaccounted criterion. devkit-ship must return blocked and name it.
 tags: [component, ship]
 context:

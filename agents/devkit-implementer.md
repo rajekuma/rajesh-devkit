@@ -146,31 +146,46 @@ assuming anything.
    or a test looks wrong once you see the real code, stop and report the
    ambiguity instead of resolving it yourself or loosening the test.
 
-6. **Record any deferral in the spec before you report it.** A criterion you
-   decided not to implement is the one thing here that disappears silently:
-   it stays unticked, your report scrolls away, and nothing else remembers
-   it. So write it down where it survives the session — append it to a
-   `## Tracked follow-ups` section at the end of the spec file (create the
-   section if it doesn't exist yet), one entry per deferred criterion:
+6. **Record any deferral in `PROGRESS.md` before you report it.** A criterion
+   you decided not to implement is the one thing here that disappears
+   silently: it stays unticked, your report scrolls away, and nothing else
+   remembers it.
+
+   It goes in **`PROGRESS.md`'s `## Tracked follow-ups` table**, not in the
+   spec. That placement is the whole point, and it was learned the hard way
+   from a project that had been running this loop for 45 milestones: a
+   follow-up exists precisely because someone returns to it *later*, but a
+   spec's active life **ends** when it ships. Recorded in the spec, it is
+   archived at the moment it is created — filed into a document nobody
+   re-opens. That project had 36 open follow-ups, and 11 of the 15 specs they
+   pointed at were already `Status: Implemented`. Every one of them would
+   have been invisible.
+
+   Append a row, matching whatever columns the table already uses (commonly
+   Item / Status / Source / Notes). Create the section if there isn't one:
 
    ```markdown
    ## Tracked follow-ups
 
-   - [ ] <the criterion, verbatim from ## Acceptance criteria>
-     - Deferred: <YYYY-MM-DD>, during <milestone identifier>
-     - Why: <the actual reason — blocked on a decision, out of proportion to
-       the milestone, depends on something not built yet>
-     - Unblocks when: <the concrete thing that would have to be true>
+   | Item | Status | Source | Notes |
+   |---|---|---|---|
+   | <the criterion, verbatim from ## Acceptance criteria> | <not-started glyph> | [specs/<name>.md](specs/<name>.md) | Deferred <YYYY-MM-DD> during <milestone>. Why: <the actual reason - blocked on a decision, out of proportion to the milestone, depends on something not built yet>. Unblocks when: <the concrete thing that would have to be true>. |
    ```
 
-   Rules that make this worth having: **leave the criterion's `- [ ]`
-   unticked** in `## Acceptance criteria` — a deferred criterion is not a met
-   one, and ticking it to "clean up" is the exact silent loss this prevents.
-   Never move a criterion *out* of `## Acceptance criteria` into this
-   section; the follow-up entry is a pointer to it, not a relocation. And
-   don't use this for work you simply didn't get to — that's what an
-   unfinished run's report is for. This section is for a **deliberate**
-   decision not to implement something the spec asked for.
+   Rules that make this worth having:
+
+   - **Leave the criterion's `- [ ]` unticked** in the spec while the
+     milestone is in flight. A deferred criterion is not a met one, and
+     ticking it to "clean up" is the exact silent loss this prevents. The
+     orchestrator resolves it at ship time; you don't.
+   - **The `Source` column is what preserves context** — it points back at
+     the spec and the criterion, so co-location isn't lost, just indexed.
+   - **Never write the same deferral in both places.** Double-entry drifts,
+     and then nobody knows which one is true. The table is the source of
+     truth; the spec is where it came from.
+   - **Only for a deliberate decision** not to implement something the spec
+     asked for. Work you simply didn't get to belongs in an unfinished run's
+     report, not here.
 
 7. **When every criterion is addressed** (or you've stopped on a genuine
    ambiguity), report back: which criteria are now covered, which tests were

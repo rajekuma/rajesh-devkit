@@ -21,8 +21,8 @@ Two jobs, and the second matters more:
 
 1. **Read what actually shipped**, in this order:
    - The spec (`specs/<feature>.md`) — the intent, the acceptance criteria,
-     and anything in `## Tracked follow-ups`, which is a deliberate limitation
-     users may need to know about.
+     and any row in `PROGRESS.md`'s `## Tracked follow-ups` table that names this
+     milestone as its source — a deliberate limitation users may need to know about.
    - The real diff: `git status`, `git diff`, `git diff --staged`, and the
      full contents of any untracked new files (`git diff` won't show those —
      `devkit-reviewer` hits the same trap).

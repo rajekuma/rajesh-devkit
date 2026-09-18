@@ -2,7 +2,7 @@ schema_version: "1.1"
 name: reviewer-catches-unmet
 description: >
   devkit-reviewer must return needs-changes when a criterion is ticked but
-  also listed as deferred, and must name the Deferred state - while writing
+  also has a row in PROGRESS.md's Tracked follow-ups table, and must name the Deferred state - while writing
   nothing.
 tags: [component, reviewer]
 context:

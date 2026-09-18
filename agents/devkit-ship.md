@@ -37,10 +37,11 @@ saying so plainly is the honest result.
 2. **Criteria and follow-ups — the cheapest gate, run it first.** From the
    spec:
    - Every `- [ ]` still unchecked in `## Acceptance criteria` that has **no**
-     matching entry in `## Tracked follow-ups` → **BLOCKED**. That's an
+     matching row in `PROGRESS.md`'s `## Tracked follow-ups` table → **BLOCKED**.
+     That's an
      unaccounted criterion: not implemented, not deliberately deferred, just
      missing.
-   - Every criterion ticked `- [x]` that *also* appears in
+   - Every criterion ticked `- [x]` that *also* has a row in `PROGRESS.md`'s
      `## Tracked follow-ups` → **BLOCKED**. It's being counted as done and
      deferred simultaneously.
    - Open follow-ups that are properly recorded → **PASS, with each one

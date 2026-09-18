@@ -310,10 +310,17 @@ loop, not the run loop. Saying so is more useful than implying coverage that
 doesn't exist.
 
 **Deferred work is recorded, not silently dropped.** A criterion nobody
-implements gets a `## Tracked follow-ups` entry naming what was deferred, why,
-and what would unblock it — and the criterion stays *unticked*. `devkit-ship`
-blocks on an unchecked criterion with no follow-up entry, and `devkit-reviewer`
-returns `needs-changes` for a criterion that is ticked *and* deferred.
+implements gets a row in `PROGRESS.md`'s `## Tracked follow-ups` table naming
+what was deferred, why, and what would unblock it — and the criterion stays
+*unticked*. `devkit-ship` blocks on an unchecked criterion with no row, and
+`devkit-reviewer` returns `needs-changes` for a criterion that is ticked *and*
+deferred.
+
+It lives in the tracker rather than the spec for a reason worth stealing: a
+follow-up exists because someone returns to it *later*, but a spec's active
+life ends when it ships. In the spec, it's archived the moment it's written.
+Measured on a real project — 36 open follow-ups, 11 of the 15 specs they
+point at already marked `Implemented`.
 
 ---
 

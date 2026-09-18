@@ -29,19 +29,22 @@ Steps:
    Partially Met / Deferred, citing the specific file(s) and line(s) that satisfy or
    fail it.
 
-   **Deferred** means the spec's `## Tracked follow-ups` section has an entry for that
-   criterion. Read that section if it exists. A deferral is a legitimate outcome, not a
+   **Deferred** means `PROGRESS.md`'s `## Tracked follow-ups` table has a row for that
+   criterion. Read that table if it exists — follow-ups live there rather than in the
+   spec because they have to stay visible after the spec ships, and a shipped spec is a
+   document nobody re-opens. A deferral is a legitimate outcome, not a
    failure — but it is never invisible: name every deferred criterion in your report
    with its stated reason, even when you still conclude `ship`. Two things make a
    deferral illegitimate, and both are `needs-changes`:
-   - A criterion ticked `- [x]` in `## Acceptance criteria` that also appears in
-     `## Tracked follow-ups` — it is being counted as done and deferred at once.
-   - A criterion that the diff plainly doesn't implement, with no follow-up entry and
+   - A criterion ticked `- [x]` in `## Acceptance criteria` that also has a row in
+     `PROGRESS.md`'s `## Tracked follow-ups` — counted as done and deferred at once.
+   - A criterion that the diff plainly doesn't implement, with no follow-up row and
      no mention in the implementer's report — that's a silent drop, which is the exact
-     thing the follow-ups section exists to prevent.
+     thing the follow-ups table exists to prevent.
 4. Report:
    - Unmet or partially met acceptance criteria, with evidence.
-   - Deferred criteria, each with the reason recorded in `## Tracked follow-ups`.
+   - Deferred criteria, each with the reason recorded in `PROGRESS.md`'s
+     `## Tracked follow-ups` table.
    - Correctness risks in the diff, with concrete evidence (file/line, failure
      scenario) — not vague impressions.
    - Any out-of-scope changes (diff touches things the spec doesn't call for).

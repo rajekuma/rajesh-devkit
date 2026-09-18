@@ -32,9 +32,10 @@ repo's own files and the user's answers.
    discipline, layering rules, or approval gates, and the spec should respect
    them without restating them.
 
-   Also grep `specs/` for any `## Tracked follow-ups` sections — that's where a
+   Also read `PROGRESS.md`'s `## Tracked follow-ups` table — that's where a
    previous milestone recorded a criterion it deliberately deferred (see
-   `devkit-implementer`). If an open follow-up covers what you're about to spec,
+   `devkit-implementer`). One table, so this is a single read rather than a grep
+   across every spec. If an open follow-up covers what you're about to spec,
    say so before writing anything: this feature may be that follow-up coming due,
    in which case the new spec should reference the original rather than silently
    restate it as new work.

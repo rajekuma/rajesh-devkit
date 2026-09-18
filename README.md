@@ -601,35 +601,49 @@ implementer's report explaining why scrolled out of the session, and nothing
 afterwards remembered it existed. The spec then sat there looking like an
 unfinished job rather than a finished one with a recorded exception.
 
-So a deliberate deferral now goes in the spec itself, in a
-`## Tracked follow-ups` section `devkit-implementer` appends to:
+So a deliberate deferral goes in **`PROGRESS.md`'s `## Tracked follow-ups`
+table**, which `devkit-implementer` appends a row to:
 
 ```markdown
 ## Tracked follow-ups
 
-- [ ] <the criterion, verbatim from ## Acceptance criteria>
-  - Deferred: 2026-09-17, during M4 - Password reset
-  - Why: depends on the notification service, which isn't built yet
-  - Unblocks when: notifications ship (M7)
+| Item | Status | Source | Notes |
+|---|---|---|---|
+| archive(store, id) removes a done task from list() | ⬜ | [specs/task-completion.md](specs/task-completion.md) | Deferred 2026-09-17 during M4. Why: depends on the notification service, which isn't built yet. Unblocks when: notifications ship (M7). |
 ```
+
+**Why `PROGRESS.md` and not the spec**, since the spec is where the criterion
+lives and co-location looks obviously right: a follow-up exists precisely
+because someone returns to it *later*, but a spec's active life **ends** when
+it ships. Recorded in the spec, a follow-up is archived the moment it's
+created — filed into a document nobody re-opens.
+
+This isn't reasoning from first principles; it's measured. The project this
+toolkit was modelled on has run this loop for 45 milestones and carries **36
+open follow-ups — and 11 of the 15 specs they point at are already
+`Status: Implemented`.** Every one of those would now be invisible if it had
+been written into the spec. (The plugin originally did put them in the spec.
+That was wrong, and this is the correction.)
 
 Three rules keep it honest:
 
-- **The criterion stays unticked** in `## Acceptance criteria`. A deferred
-  criterion is not a met one, and ticking it to tidy up is the exact silent
-  loss this prevents.
-- **Nothing moves.** The follow-up entry points at the criterion; it never
-  relocates it out of the acceptance list.
-- **It's for deliberate decisions only** — not work someone simply didn't get
-  to, which is what an unfinished run's report is for.
+- **The criterion stays unticked** in `## Acceptance criteria` while the
+  milestone is in flight. A deferred criterion is not a met one, and ticking
+  it to tidy up is the exact silent loss this prevents.
+- **The `Source` column preserves the context** co-location would have given
+  you — it points back at the spec and criterion, so nothing is lost, just
+  indexed.
+- **Never record it in both places.** Double-entry drifts, and then nobody
+  knows which is true. The table is the source of truth.
 
-`devkit-reviewer` reads the section and reports every deferred criterion by
+`devkit-reviewer` reads the table and reports every deferred criterion by
 name even when its verdict is still `ship`; it returns `needs-changes` for a
-criterion that's ticked *and* deferred, or dropped with no entry at all.
-`devkit-ship` blocks on any unchecked criterion with no follow-up entry. And
-`devkit-specify` greps these sections before writing a new spec, so a feature
-that's really an old follow-up coming due gets linked to the original instead
-of silently restated as new work.
+criterion that's ticked *and* has a follow-up row, or dropped with no row at
+all. `devkit-ship` blocks on any unchecked criterion with no row. And
+`devkit-specify` reads the table before writing a new spec — one read rather
+than a grep across every spec — so a feature that's really an old follow-up
+coming due gets linked to the original instead of silently restated as new
+work.
 
 ## Testing this plugin
 
