@@ -15,6 +15,18 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- `devkit-roadmap`, the component that bends the loop into a circle. Both
+  boundaries were open: `devkit-onboard` decomposed milestones once and
+  `PROGRESS.md` was hand-maintained forever, and nothing after release
+  informed what to build next. The skill proposes the next Phase from four
+  evidence sources - the shipped specs' `## Out of scope`, follow-ups whose
+  unblock condition has been met, the gap to the vision document, and the
+  production signal the repo records (issues, incidents, feedback files;
+  never a live system) - with every candidate carrying its evidence. It
+  interviews for the priority call, writes rows only on approval, and never
+  starts a milestone. The empty-queue banner now points at it instead of
+  saying "add a row when you have one".
+
 - A licence pass in `devkit-dep-audit`. It found CVEs and nothing else, so
   a GPL dependency in a proprietary product passed clean. It now establishes
   the project's own posture first - its licence, whether it ships as a

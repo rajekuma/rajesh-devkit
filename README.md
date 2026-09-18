@@ -99,6 +99,16 @@ and prints the tag command; nothing here runs it.
   or the next milestone's status otherwise.
 - `devkit-help` — the on-demand, verified version of the same check, for
   when you'd rather ask than wait for the automatic banner.
+- `devkit-roadmap` — the component that bends the loop into a circle.
+  When the queue is empty or a Phase just closed, it proposes the next
+  milestones from evidence rather than a blank page: what the shipped specs
+  left `## Out of scope`, the `Tracked follow-ups` whose unblock condition
+  has since been met, the gap to the product vision, and whatever production
+  signal the repo records (issues via `gh`, `docs/incidents/`,
+  `docs/feedback/`). Every candidate carries its evidence; it interviews
+  for the priority call; it writes rows only on approval and never starts a
+  milestone. A project that records no production signal is told so in one
+  sentence, not given a simulated feedback loop.
 - `devkit-stats` — a skill that reports real duration, real USD cost, and a
   heuristic manual-effort comparison per milestone from that local telemetry
   log (see "Telemetry" below).
@@ -156,6 +166,8 @@ rajesh-devkit/
 │   │   └── SKILL.md             # this plugin's own regression + drift check
 │   ├── devkit-onboard/
 │   │   └── SKILL.md             # gets a new or brownfield project onto the loop
+│   ├── devkit-roadmap/
+│   │   └── SKILL.md             # proposes the next milestones from what shipped + production
 │   ├── devkit-specify/
 │   │   └── SKILL.md             # spec-drafting, product-owner style
 │   ├── devkit-help/

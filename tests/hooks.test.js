@@ -541,3 +541,16 @@ test('the release stage is nudged after docs, and says it never tags', () => {
     }
   );
 });
+
+test('an empty queue points at devkit-roadmap instead of a dead end', () => {
+  // "Add a row when you have one" was the open end of the loop. The moment
+  // the queue empties is when everything roadmap reads is freshest.
+  const allDone = SAMPLE_PROGRESS.replace(/\u{2B1C}/gu, '\u{2705}');
+  withFixture({ progress: allDone }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.strictEqual(r.exitCode, 0);
+    assert.match(r.stdout, /nothing queued/);
+    assert.match(r.stdout, /devkit roadmap/);
+    assert.match(r.stdout, /only when you approve/, 'must say it does not write rows unasked');
+  });
+});

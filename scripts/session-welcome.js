@@ -102,9 +102,15 @@ const stageLine =
 
 const milestone = d.findNextMilestone(progressPath);
 if (!milestone) {
+  // An empty queue used to be a dead end - "add a row when you have one".
+  // It is the one moment the loop can close on itself: what shipped, what
+  // was deferred and what production says are all in the repo, and
+  // devkit-roadmap turns them into the next rows. Point there instead.
   say(
     'rajesh-devkit: no unstarted milestone found in PROGRESS.md - nothing queued right now. ' +
-      "Add a new row when there's a next milestone to work on."
+      'Say "devkit roadmap" to propose the next milestones from what shipped, the open ' +
+      'Tracked follow-ups, the gap to the product vision and any production signal the ' +
+      'repo records - it proposes rows and writes them only when you approve.'
   );
   process.exit(0);
 }

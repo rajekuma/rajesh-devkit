@@ -130,5 +130,8 @@ that a human needs to look at. Stop and describe it.
    auto-merge, do not request reviewers unless asked.
 
 6. **Report** the branch, the commits, the push result, and the PR URL if one
-   was opened. If you stopped at a precondition or a rejected push, lead with
+   was opened. At a Phase boundary, end with one line pointing at
+   `devkit-roadmap`: the Phase's specs, its deferred follow-ups and whatever
+   production has said since are the evidence for the next Phase, and this
+   is the moment they are all fresh. If you stopped at a precondition or a rejected push, lead with
    that — it's the only part that needs a decision.

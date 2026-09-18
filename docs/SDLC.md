@@ -56,7 +56,15 @@ lives in a conversation.
    │                                             notes)                enabled)   │
    │                                                                       │
    │  adr ◄── written whenever a real decision gets made                   │
-   └───────────────────────────────────────────────────────────────────────┘
+   └──────────────────────────────────┬────────────────────────────────────┘
+                                      │ queue empty / Phase closed
+                    ┌─────────────────▼───────────────────────┐
+                    │  roadmap   (what shipped, follow-ups,   │
+                    │  vision gap, production signal)         │
+                    │  -> proposes the next Phase's rows      │
+                    └─────────────────┬───────────────────────┘
+                                      │ on approval
+                                      └──────────► back to specify
 ```
 
 Every stage in the per-milestone box is a name in `.claude/devkit.json`'s
@@ -81,6 +89,7 @@ those are done. No file means every stage except `deliver` is on. See
 | `pipeline` | `devkit-pipeline` | a CI audit or a proposed workflow | the repo's CI config |
 | `deliver` | `devkit-deliver` | a branch, commits, a PR | `PROGRESS.md`'s In flight block |
 | Decide | `devkit-adr` | `docs/adr/NNNN-*.md` | the decision, the code |
+| Plan | `devkit-roadmap` | the next Phase's rows in `PROGRESS.md`, on approval | shipped specs, follow-ups, the vision, recorded production signal |
 
 Two more run on demand rather than as a stage: `devkit-dep-audit`
 (dependency advisories, and licences against the project's own posture) and
@@ -443,10 +452,20 @@ shared branch is an agent that can break it unattended, so the irreversible
 operations are not a confirmation question — they are simply not available.
 
 **Product intent is a conversation, not a skill.** See Path A, step 1.
+What *is* a skill is the step after it: once there is a vision and a shipped
+Phase, `devkit-roadmap` proposes the next Phase from evidence — and it is
+built to refuse the blank page. A candidate with no evidence line is not
+proposed; the user prioritises; rows are written only on approval. A
+roadmap nobody chose is the one thing a milestone-driven unattended loop
+must never grind through.
 
 **Deployment and incident response are out of scope.** This covers the build
 loop, not the run loop. Saying so is more useful than implying coverage that
-doesn't exist.
+doesn't exist. What the run loop *records* — issues, incident write-ups,
+support themes, a committed metrics review — is read by `devkit-roadmap` on
+the way back into the plan, so the circle closes through files in the repo
+rather than through a live connection to production, which nothing here
+makes.
 
 **Deferred work is recorded, not silently dropped.** A criterion nobody
 implements gets a row in `PROGRESS.md`'s `## Tracked follow-ups` table naming
