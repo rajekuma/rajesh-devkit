@@ -278,3 +278,146 @@ test('run-verify does not block when it cannot execute what it found', () => {
     assert.strictEqual(r.exitCode, 0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Stage configuration. Not everyone runs the whole chain: a product owner
+// wants specs and documentation, a UX designer wants the design stage, a
+// project that already owns spec/implement/review wants only what it lacks.
+// A stage that isn't enabled must never be nudged toward, and when nothing
+// enabled applies the loop must STOP - that is what makes a two-stage loop a
+// real loop rather than a crippled version of the full one.
+// ---------------------------------------------------------------------------
+function withStages(stages, opts, fn) {
+  return withFixture(
+    { ...opts, files: { ...(opts.files ?? {}), '.claude/devkit.json': JSON.stringify({ stages }) } },
+    fn
+  );
+}
+
+const READY_SPEC = '# Spec: User login\n\nMilestone: 1\n\n## Acceptance criteria\n\n- [ ] It works\n';
+
+test('a product-owner loop nudges the spec stage and names no engineering stage', () => {
+  withStages(['specify', 'docs'], { progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    assert.strictEqual(r.exitCode, 2);
+    assert.match(r.stderr, /devkit-specify/);
+    assert.doesNotMatch(r.stderr, /devkit-implementer/, 'named a stage this loop does not run');
+    assert.doesNotMatch(r.stderr, /devkit-reviewer/, 'named a stage this loop does not run');
+    assert.doesNotMatch(r.stderr, /devkit-ship/, 'named a stage this loop does not run');
+  });
+});
+
+test('a product-owner loop STOPS once the spec exists', () => {
+  // docs is enabled, so it still has something to say; the point is that it
+  // must not push toward implementation.
+  withStages(['specify'], { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    assert.strictEqual(r.exitCode, 0, 'should allow the stop - every enabled stage is done');
+    assert.strictEqual(r.stderr.trim(), '', `should say nothing, said: ${r.stderr}`);
+  });
+});
+
+test('a UX loop nudges toward devkit-ux while the ux spec is missing', () => {
+  withStages(['ux'], { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    assert.strictEqual(r.exitCode, 2);
+    assert.match(r.stderr, /devkit-ux/);
+    assert.doesNotMatch(r.stderr, /devkit-implementer/);
+  });
+});
+
+test('a UX loop stops once the ux spec exists', () => {
+  withStages(
+    ['ux'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC, 'user-login.ux.md': '# UX\n' } },
+    (dir) => {
+      assert.strictEqual(runHook('continue-loop.js', dir).exitCode, 0);
+    }
+  );
+});
+
+test('a loop without the spec stage stays silent when no spec exists', () => {
+  // A ship-only or ux-only loop waits for whoever owns specs to write one,
+  // rather than telling them to.
+  withStages(['ship'], { progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    assert.strictEqual(r.exitCode, 0);
+    assert.strictEqual(r.stderr.trim(), '');
+  });
+});
+
+test('the escalation gate does not fire for a loop that does not implement', () => {
+  // The escalation message is entirely about whether to delegate to
+  // devkit-implementer. With implement disabled there is nothing to ask.
+  const sens = spec(`1. ${GLYPH.lock} SENSITIVE: touches auth`);
+  withStages(['specify', 'ux'], { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': sens } }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    assert.doesNotMatch(r.stderr, /WRITE NO CODE YET/);
+  });
+});
+
+test('the escalation gate still fires when implement IS enabled', () => {
+  const sens = spec(`1. ${GLYPH.lock} SENSITIVE: touches auth`);
+  withStages(['specify', 'implement'], { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': sens } }, (dir) => {
+    assert.match(runHook('continue-loop.js', dir).stderr, ESCALATION_RE);
+  });
+});
+
+test('a local config overrides the committed project one', () => {
+  withFixture(
+    {
+      progress: SAMPLE_PROGRESS,
+      files: {
+        '.claude/devkit.json': JSON.stringify({ stages: ['specify', 'implement', 'review', 'ship'] }),
+        '.claude/rajesh-devkit/devkit.local.json': JSON.stringify({ stages: ['specify'] }),
+      },
+    },
+    (dir) => {
+      const r = runHook('continue-loop.js', dir);
+      assert.match(r.stderr, /devkit-specify/);
+      assert.doesNotMatch(r.stderr, /devkit-ship/, 'local override was ignored');
+    }
+  );
+});
+
+test('a malformed config falls back to the full loop rather than crashing', () => {
+  // A hook that dies on a typo in a config file is worse than one that runs
+  // the behaviour every project had before the file existed.
+  withFixture(
+    { progress: SAMPLE_PROGRESS, files: { '.claude/devkit.json': '{ this is not json' } },
+    (dir) => {
+      const r = runHook('continue-loop.js', dir);
+      assert.strictEqual(r.exitCode, 2);
+      assert.match(r.stderr, /devkit-specify/);
+    }
+  );
+});
+
+test('no config at all still means the full chain', () => {
+  withFixture({ progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    assert.match(r.stderr, /devkit-reviewer/);
+    assert.match(r.stderr, /devkit-ship/);
+  });
+});
+
+test('a nudge never names a component whose stage is disabled', () => {
+  // Not just the instructions - the explanatory asides too. A backend loop's
+  // datamodel step once described itself as "the data-side counterpart to
+  // devkit-ux", naming a stage that loop had switched off.
+  const ALL = ['specify', 'ux', 'datamodel', 'implementer', 'reviewer', 'ship', 'docs', 'pipeline'];
+  const stages = ['specify', 'datamodel', 'implement', 'review'];
+  withStages(stages, { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    // component name -> the stage that enables it
+    const stageOf = { implementer: 'implement', reviewer: 'review' };
+    for (const name of ALL) {
+      const stage = stageOf[name] ?? name;
+      if (stages.includes(stage)) continue;
+      assert.ok(
+        !r.stderr.includes(`devkit-${name}`),
+        `nudge named devkit-${name} but the ${stage} stage is disabled: ${r.stderr}`
+      );
+    }
+  });
+});

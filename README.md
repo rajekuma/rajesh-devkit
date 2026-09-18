@@ -102,9 +102,11 @@ rajesh-devkit/
 ├── .claude-plugin/
 │   └── plugin.json              # name, version, description, author, license
 ├── agents/
+│   ├── devkit-datamodel.md      # schema + migration + backfill + rollback plan
 │   ├── devkit-dep-audit.md      # dependency CVE audit, report-only
 │   ├── devkit-docs.md           # changelog/release notes + stale-doc hunt, post-ship
 │   ├── devkit-implementer.md    # RED-GREEN implementer, stack-agnostic
+│   ├── devkit-pipeline.md       # CI/CD audit or scaffold, gates not files
 │   ├── devkit-reviewer.md       # spec-compliance review, report-only
 │   ├── devkit-ship.md           # pre-ship preflight: CI, coverage, advisories, secrets
 │   └── devkit-ux.md             # spec -> screens/states/tokens/a11y criteria
@@ -436,6 +438,8 @@ just a downgrade. There is no automatic failover in either case.
 | `devkit-ux` | `fable` | `Read, Write, Edit, Glob, Grep, Bash` | "ux spec", "design this screen", "what states does this need", "ux pass" | Runs between `devkit-specify` and `devkit-implementer` on anything with a user interface — the stage this toolkit previously skipped entirely, leaving every interface decision to be made implicitly, mid-implementation. Audits the existing component library and design tokens **before** designing anything, so it reuses rather than reinvents. Enumerates the states that actually break interfaces (empty, loading, partial, error, permission-denied, success, destructive-confirm) rather than only the happy path everyone builds. Reads Figma via MCP when it's configured and translates frames into the project's existing tokens instead of transcribing raw hex and pixel values; works from the feature spec alone when it isn't, which is the normal case and not a degraded one. Writes `specs/<name>.ux.md` — no component code — and **appends its accessibility criteria to the feature spec's own `## Acceptance criteria`**, which is what gives them teeth: the implementer works from criteria, and `devkit-reviewer`/`devkit-ship` gate on them. |
 | `devkit-ship` | `sonnet` | `Read, Bash, Glob, Grep` | "ship check", "preflight", "is this ready to ship", "can I mark this done" | Report-only. Asks the question `devkit-reviewer` doesn't: the diff matches its spec, but is everything *around* it shippable? Five gates — unaccounted acceptance criteria and open follow-ups, CI status (detects the CI system rather than assuming GitHub; reads it via `gh` when that's actually available), test coverage **against whatever threshold the project itself already declares** rather than one invented here, dependency advisories when the diff touched a manifest, and a secrets scan of the diff. Its central rule: **a gate it couldn't run is `UNKNOWN`, never `PASS`** — an unrun check reported as green buys false confidence at precisely the moment someone decides to ship.<br>**Verdict: clear** — every gate passed or was legitimately not applicable.<br>**Verdict: blocked** — a gate failed; lists what to fix, in order.<br>**Verdict: clear-with-unknowns** — nothing failed but something couldn't be checked; never silently promoted to `clear`. |
 | `devkit-docs` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "update the docs", "changelog for this milestone", "release notes", "what docs did this break" | Runs after `devkit-ship` comes back clear. Two jobs, the second mattering more: write the changelog entry (from the user's point of view — "sessions now survive a restart", not "refactored the auth middleware"), and **hunt down the documentation the change just falsified** — the README example that no longer runs, the renamed flag still documented as current, the obsolete setup step. Stale docs beat missing docs for harm, because people follow them. Matches the project's existing changelog format and won't start one where none exists. Fixes what it can verify from the diff and *reports* what it can't, rather than writing a plausible-sounding correction it couldn't confirm. |
+| `devkit-datamodel` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "datamodel", "schema design", "design the migration", "what does this do to existing rows" | The data-side counterpart to `devkit-ux`, and the stage this plugin used to lack entirely: a `SENSITIVE:` data-model flag stopped the loop and then offered no help. Detects the project's own ORM and migration convention, then plans the change as a *sequence* rather than an event — additive versus destructive, the backfill and what it costs at production scale, what happens to writes landing mid-migration during a rolling deploy, and the rollback path or an explicit statement that there isn't one. Writes `specs/<name>.data.md` and appends criteria to the feature spec; writes no migration and no entity class. Leads its report with anything irreversible, because that is the part a human must actually agree to. |
+| `devkit-pipeline` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "pipeline", "set up CI", "audit the pipeline", "what gates our merges", "add security scanning to CI" | Audits or scaffolds delivery. `devkit-ship` *reads* CI status and assumes a meaningful pipeline exists; this is the component that makes that true. Its framing is deliberate: not "does a workflow exist" but **"what would actually stop a bad change?"** — reporting each gate as **GATED** (failure blocks a merge), **RUNS** (executes, blocks nothing) or **MISSING**, plus **UNKNOWN** where it could not check, because the gap between GATED and RUNS is invisible from a list of green checkmarks. Never enables branch protection, never commits a workflow, and never adds a scanner nobody will read — a permanently ignored job trains a team that red means nothing. |
 | `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "implement the spec", "build the next milestone", "implement \<feature\>" | Not report-only — writes code and tests. Checks `.claude\rajesh-devkit\test-runners.json` for a cached test command per area first; only derives one from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) — and verifies it actually runs, not just that the marker matched — on a cache miss, writing the result back so future milestones skip re-derivation (verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation). Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
 | `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "audit dependencies", "check for vulnerable packages", "scan dependencies for CVEs", "dependency security check" | Report-only. Detects whichever package ecosystems are present (npm/yarn/pnpm, PyPI, NuGet, pub/Dart, Go, Cargo, Maven, ...) from marker files, then runs `osv-scanner --recursive` as the universal pass (covers most ecosystems in one command) plus ecosystem-native fallbacks (`dotnet list package --vulnerable`, `npm audit`, `pip-audit`) only where the universal pass can't reach (e.g. NuGet without a lock file) — all backed by the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file, unrecognised ecosystem) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
 | `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "review the diff", "review against the spec" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met / **Deferred**, with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
@@ -526,6 +530,55 @@ that *denies* `Edit`/`Write` while the current milestone is flagged and
 unacknowledged — a design change, not a fix, and not built. Until then: if a
 milestone is genuinely sensitive, decide the approach before saying
 "continue", rather than trusting the gate to interrupt you.
+
+### Loop stages — not everyone runs the whole chain
+
+A product owner wants to write specs and document what shipped. A UX
+designer wants the design stage and nothing downstream of it. A backend
+engineer wants schema, implementation and review. A DevSecOps engineer wants
+pipelines and release gating. And a project that already has its own
+spec/implement/review loop wants only the parts it lacks.
+
+A loop that nudges toward stages its owner never wanted is noise they learn
+to ignore — which costs you the nudges that *did* matter. So the chain is
+configurable, in one committed file:
+
+```json
+// .claude/devkit.json
+{ "role": "product-owner", "stages": ["specify", "docs"] }
+```
+
+Valid stages: `specify`, `ux`, `datamodel`, `implement`, `review`, `ship`,
+`docs`, `pipeline`. `role` is a label for humans; only `stages` changes
+behaviour. `devkit-onboard` asks the question during setup and writes the
+file.
+
+**No file means every stage is enabled**, so a project that never answers
+behaves exactly as it did before this existed. For a narrower loop that's
+yours alone rather than the repo's, `.claude/rajesh-devkit/devkit.local.json`
+takes the same shape, is gitignored, and wins over the committed one. A
+malformed file is treated as absent and the full loop runs — a hook that dies
+on a typo in a config file is worse than one that does what it always did.
+
+Two behaviours make a narrow loop a real loop rather than a crippled one:
+
+- **It stops.** When every enabled stage for a milestone is done, the `Stop`
+  hook allows the stop instead of pushing toward stages nobody enabled. A
+  product owner's loop genuinely ends at "the spec exists".
+- **It stays quiet about work it doesn't own.** A `ux`-only or `ship`-only
+  loop facing a milestone with no spec says nothing, rather than telling
+  someone to go write one.
+
+The escalation gate follows the same rule: it fires only when `implement` is
+enabled, because its entire question is whether to delegate to
+`devkit-implementer`. With implementation out of scope, there's nothing to
+ask.
+
+**What stage config does not fix: trigger-phrase collisions.** Stages control
+what the loop *nudges toward*. Every installed component is still loaded by
+the harness, so if a host project already has a skill triggered by "write a
+spec", `devkit-specify` answers to that phrase too. Disabling the `specify`
+stage doesn't change that — it's a separate problem with a separate fix.
 
 ### Tracked follow-ups — deferred work that can't vanish
 

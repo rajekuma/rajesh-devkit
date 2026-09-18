@@ -47,6 +47,50 @@ const SENSITIVE_MARKER = /SENSITIVE\s*:/;
 const TELEMETRY_SUBDIR = path.join('.claude', 'rajesh-devkit');
 const GITIGNORE_ENTRY = '.claude/rajesh-devkit/';
 
+// Which stages of the loop this project actually runs. Not everyone wants the
+// whole chain: a product owner wants to write specs and document what
+// shipped; a UX designer wants the design stage and nothing downstream of it;
+// a project that already has its own spec/implement/review wants only the
+// parts it lacks. A stage that isn't listed is never nudged toward - and when
+// no enabled stage applies, the loop stops rather than pushing on, which is
+// what makes a two-stage loop a real loop instead of a crippled one.
+const ALL_STAGES = ['specify', 'ux', 'datamodel', 'implement', 'review', 'ship', 'docs', 'pipeline'];
+
+// Committed, so a project's declared process is visible and reviewable; the
+// local file is gitignored, so one person can run a narrower loop than the
+// repo's default without changing it for everyone.
+const CONFIG_PROJECT = path.join('.claude', 'devkit.json');
+const CONFIG_LOCAL = path.join('.claude', 'rajesh-devkit', 'devkit.local.json');
+
+function readJsonOrNull(file) {
+  const text = readFileOrNull(file);
+  if (text === null) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+// Local overrides project, project overrides "everything on". An unreadable
+// or malformed file is treated as absent rather than fatal: a hook that
+// crashes on a typo in a config file is worse than one that runs the full
+// loop, which is the behaviour every project had before this existed.
+function readStageConfig(dir) {
+  for (const [file, source] of [[CONFIG_LOCAL, 'local'], [CONFIG_PROJECT, 'project']]) {
+    const cfg = readJsonOrNull(path.join(dir, file));
+    if (!cfg || !Array.isArray(cfg.stages)) continue;
+    const stages = cfg.stages.filter((s) => ALL_STAGES.includes(s));
+    if (stages.length === 0) continue;
+    return { stages, source, role: typeof cfg.role === 'string' ? cfg.role : null };
+  }
+  return { stages: [...ALL_STAGES], source: 'default', role: null };
+}
+
+function stageEnabled(config, stage) {
+  return config.stages.includes(stage);
+}
+
 function readStdin() {
   try {
     return fs.readFileSync(0, 'utf8');
@@ -261,6 +305,11 @@ module.exports = {
   GLYPH,
   SENSITIVE_MARKER,
   GITIGNORE_ENTRY,
+  ALL_STAGES,
+  CONFIG_PROJECT,
+  CONFIG_LOCAL,
+  readStageConfig,
+  stageEnabled,
   readStdin,
   readStdinJson,
   projectDir,

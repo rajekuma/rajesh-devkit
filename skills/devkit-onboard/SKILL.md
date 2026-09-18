@@ -125,7 +125,43 @@ user confirms.
    that `devkit-specify` won't contradict something load-bearing — not a
    complete written history.
 
-7. **Verify the loop can actually see what you built.** Before declaring
+7. **Ask which stages this project's loop should actually run, and write it
+   down.** Not everyone wants the whole chain, and a loop that nudges toward
+   stages its owner never wanted is noise they'll learn to ignore — which
+   costs you the nudges that did matter.
+
+   Ask once, offering these as starting points rather than a fixed menu (use
+   `AskUserQuestion`; people can combine them):
+
+   | Role | Stages |
+   |---|---|
+   | Product owner — write specs, document what shipped | `specify`, `docs` |
+   | UX / design — turn specs into screens and states | `ux` |
+   | Backend engineer — schema, API, tests | `specify`, `datamodel`, `implement`, `review` |
+   | DevSecOps — pipelines, scanning, release gating | `pipeline`, `ship` |
+   | Everything (solo, or one person wearing all hats) | all of them |
+   | This project already has its own loop | only the stages it lacks |
+
+   Write the answer to `.claude/devkit.json`, **committed**, so the project's
+   declared process is visible and reviewable rather than living in one
+   person's head:
+
+   ```json
+   { "role": "product-owner", "stages": ["specify", "docs"] }
+   ```
+
+   Valid stages: `specify`, `ux`, `datamodel`, `implement`, `review`, `ship`,
+   `docs`, `pipeline`. `role` is a label for humans; only `stages` changes
+   behaviour. **No file means every stage is enabled** — so a project that
+   never answers this question behaves exactly as it did before the setting
+   existed.
+
+   If someone wants a narrower loop than the repo's default just for
+   themselves, that goes in `.claude/rajesh-devkit/devkit.local.json` (same
+   shape, gitignored, wins over the committed one). Mention it only if they
+   ask; most projects want one answer.
+
+8. **Verify the loop can actually see what you built.** Before declaring
    this done, confirm the machinery works rather than assuming it:
    - Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/session-welcome.js"` (the same
      check `devkit-help` runs) and confirm it identifies the next milestone
@@ -135,7 +171,7 @@ user confirms.
      this plugin depends on it.
    - Confirm `.claude/rajesh-devkit/` is gitignored.
 
-8. **Hand off with one concrete next step, then stop.** Name the actual first
+9. **Hand off with one concrete next step, then stop.** Name the actual first
    milestone and the exact thing to say to start it
    (`"spec this feature: <name>"`). Don't end on a summary of what you did —
    end on what happens next.

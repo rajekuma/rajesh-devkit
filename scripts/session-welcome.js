@@ -83,6 +83,13 @@ next instead of this.
   process.exit(0);
 }
 
+const config = d.readStageConfig(dir);
+const on = (stage) => d.stageEnabled(config, stage);
+const stageLine =
+  config.source === 'default'
+    ? ''
+    : `\nLoop stages enabled here (${config.source}): ${config.stages.join(', ')}.`;
+
 const milestone = d.findNextMilestone(progressPath);
 if (!milestone) {
   say(
@@ -94,9 +101,12 @@ if (!milestone) {
 
 const specPath = d.findSpecForMilestone(dir, milestone.number, milestone.name);
 
-if (d.isSensitiveSpec(specPath)) {
+const relSpec = specPath ? path.relative(dir, specPath).split(path.sep).join('/') : null;
+const uxMissing = specPath && on('ux') && !fs.existsSync(specPath.replace(/\.md$/, '.ux.md'));
+
+if (d.isSensitiveSpec(specPath) && on('implement')) {
   say(`
-rajesh-devkit: next milestone is ${milestone.display} - its spec (${specPath}) flags
+rajesh-devkit: next milestone is ${milestone.display} - its spec (${relSpec}) flags
 one or more requirements as SENSITIVE (an existing invariant, a
 security/authorization boundary, a data-model change, an external
 integration, or a backward-compatibility break).
@@ -105,22 +115,37 @@ Nothing should be written for this milestone until you decide the approach:
 implement it yourself at higher reasoning, or delegate to
 devkit-implementer as normal. That choice is yours to make before the work
 starts, not after - being shown finished code and asked to bless it is not
-the same decision.
+the same decision.${stageLine}
 `);
-} else if (!specPath) {
+} else if (!specPath && on('specify')) {
   say(`
 rajesh-devkit: next milestone is ${milestone.display} - no spec yet.
 Let's start creating the first spec: say "spec this feature: ${milestone.name}"
-to draft one with devkit-specify. Once it exists, say "implement it" or
-just keep working - the Stop hook will nudge automatically when the
-session pauses.
+to draft one with devkit-specify. Once it exists, just keep working - the
+Stop hook will nudge toward whatever this loop does next when the session
+pauses.${stageLine}
+`);
+} else if (!specPath) {
+  // This loop doesn't own the spec stage, so there's nothing to suggest
+  // until somebody else writes one. Say so rather than nudging them to do
+  // work their role explicitly excluded.
+  say(`
+rajesh-devkit: next milestone is ${milestone.display}, and it has no spec yet.
+This project's loop doesn't include the spec stage, so there's nothing
+queued here until one exists.${stageLine}
+`);
+} else if (uxMissing) {
+  say(`
+rajesh-devkit: next milestone is ${milestone.display} - spec ready at ${relSpec},
+but there's no UX spec for it yet. Say "ux spec" to invoke devkit-ux before
+implementation starts, so the screens and their empty/loading/error states
+are decided deliberately rather than mid-build.${stageLine}
 `);
 } else {
-  const relSpec = path.relative(dir, specPath).split(path.sep).join('/');
   say(`
 rajesh-devkit: next milestone is ${milestone.display} - spec ready at ${relSpec}.
-Say "implement it", or just keep working - the Stop hook will nudge
-toward it automatically the next time the session pauses.
+Just keep working - the Stop hook will nudge toward whatever this loop does
+next when the session pauses.${stageLine}
 `);
 }
 
