@@ -115,7 +115,28 @@ saying so plainly is the honest result.
    - Nothing found → **PASS (diff only)**. Word it exactly that way, so
      nobody reads it as a clean bill of health for the repository.
 
-7. **Report.** A compact table — one row per gate, no prose padding:
+   Note what this gate is *not*: a check for hardcoded credentials is not a
+   security review. Vulnerabilities in code you wrote — a missing
+   authorization check, a cross-tenant query, an injection path — are
+   `devkit-security`'s job, and step 7 covers them.
+
+7. **Code-level security.** Distinct from both the secrets scan above and
+   `devkit-dep-audit`: a project can have a clean dependency tree and no
+   leaked keys, and still hand one tenant's data to another.
+   - A `devkit-security` verdict for this diff already in the conversation →
+     use it. `blocked` (a Critical or High finding) → **BLOCKED**.
+     `clear-with-unknowns` → **UNKNOWN**, naming what it couldn't check.
+     `clear` → **PASS**.
+   - No verdict yet, and the diff touches an endpoint, a query, an
+     authorization check, authentication, or anything the spec marked
+     `SENSITIVE:` for a security boundary → say `devkit-security` should run,
+     and report **UNKNOWN** until it has. Don't attempt the review inline;
+     it's a dedicated subagent because it needs to read the project's own
+     invariants first, which is not a step to do in passing.
+   - The diff touches none of that (docs, tests, a build script) →
+     **PASS (not applicable)**, and say which, so the judgement is visible.
+
+8. **Report.** A compact table — one row per gate, no prose padding:
 
    ```
    | Gate            | Result  | Detail                                  |
@@ -125,6 +146,7 @@ saying so plainly is the honest result.
    | Coverage        | UNKNOWN | no threshold configured in this project |
    | Dependencies    | PASS    | manifests untouched this milestone      |
    | Secrets         | PASS    | diff only                               |
+   | Security        | UNKNOWN | devkit-security hasn't run on this diff |
    ```
 
    Then a single verdict line:
@@ -138,6 +160,6 @@ saying so plainly is the honest result.
    whether that's acceptable is the user's call, not yours. Never quietly
    promote this to `clear`.
 
-8. **Do not modify any files.** Read-only, same as `devkit-reviewer` and
+9. **Do not modify any files.** Read-only, same as `devkit-reviewer` and
    `devkit-dep-audit`. If a gate is blocked, the fix is a separate,
    explicitly-requested piece of work — not something you start here.

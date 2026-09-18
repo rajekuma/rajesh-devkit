@@ -79,6 +79,15 @@ assuming anything.
    - If nothing matches, say so and ask rather than guessing a command that
      might not exist. Don't cache a guess.
 
+   **Also work out which test *layers* this project has**, not just which
+   runner — they are usually separate projects or folders, and they prove
+   different things: `tests/*.UnitTests` vs `tests/*.IntegrationTests`,
+   `test/unit` vs `test/integration`, a suite that needs a live database or
+   compose stack versus one that doesn't. Note what each layer actually runs
+   against, because that is the part that matters: a suite that builds its
+   schema from the model never executes a migration, so it cannot fail on a
+   broken one no matter how many tests it has.
+
    **Once you've worked out a real, working command this way, write it to
    the cache** before running anything else, so every future milestone in
    this project skips this step for the same area: write
@@ -119,6 +128,17 @@ assuming anything.
 4. **For each unchecked acceptance criterion, in order:**
    - Write a test that captures it, in whichever test project/folder matches
      what you detected in step 2. No implementation code yet.
+   - **Honour the criterion's layer.** A criterion marked `[integration]`
+     must be proven at that layer — against the real database, the real
+     migration, the real HTTP boundary — never by a unit test with a
+     substitute standing in for the thing under test. If the integration
+     suite can't run here (no Docker, no connection string), **stop and say
+     so**; do not quietly satisfy it at a weaker layer and tick it. A
+     criterion ticked by a test that never exercised the path production
+     uses is the most expensive kind of green, because everything downstream
+     now believes it. If a criterion is unmarked but you find it can only be
+     honestly proven at integration level, say that too — the spec got it
+     wrong, and that's worth one sentence rather than a silent downgrade.
    - Run it and confirm it fails for the right reason — the behaviour is
      genuinely missing, not a typo, bad fixture, or compile error (RED).
    - Write the minimum code to make it pass, then run that test *and* the
@@ -188,8 +208,9 @@ assuming anything.
      report, not here.
 
 7. **When every criterion is addressed** (or you've stopped on a genuine
-   ambiguity), report back: which criteria are now covered, which tests were
-   added, full suite status, and anything left ambiguous or deliberately
+   ambiguity), report back: which criteria are now covered, **which layer each
+   was proven at** (and loudly if any was proven lower than its mark), which
+   tests were added, full suite status, and anything left ambiguous or deliberately
    deferred with your reasoning — naming the follow-up entries you just wrote,
    so the prose report and the spec agree. Do not invoke a reviewer yourself — that's
    the orchestrator's job. You own only the spec's per-criterion ticks and

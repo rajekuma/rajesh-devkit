@@ -117,6 +117,7 @@ rajesh-devkit/
 │   ├── devkit-implementer.md    # RED-GREEN implementer, stack-agnostic
 │   ├── devkit-pipeline.md       # CI/CD audit or scaffold, gates not files
 │   ├── devkit-reviewer.md       # spec-compliance review, report-only
+│   ├── devkit-security.md       # code-level vulns vs the project own invariants
 │   ├── devkit-ui-verify.md      # drives the built UI through every specified state
 │   ├── devkit-ship.md           # pre-ship preflight: CI, coverage, advisories, secrets
 │   └── devkit-ux.md             # spec -> screens/states/tokens/a11y criteria
@@ -452,6 +453,7 @@ just a downgrade. There is no automatic failover in either case.
 | `devkit-pipeline` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "devkit pipeline", "devkit ci audit", "devkit what gates our merges" | Audits or scaffolds delivery. `devkit-ship` *reads* CI status and assumes a meaningful pipeline exists; this is the component that makes that true. Its framing is deliberate: not "does a workflow exist" but **"what would actually stop a bad change?"** — reporting each gate as **GATED** (failure blocks a merge), **RUNS** (executes, blocks nothing) or **MISSING**, plus **UNKNOWN** where it could not check, because the gap between GATED and RUNS is invisible from a list of green checkmarks. Never enables branch protection, never commits a workflow, and never adds a scanner nobody will read — a permanently ignored job trains a team that red means nothing. |
 | `devkit-ui-verify` | `sonnet` | `Read, Glob, Grep, Bash` | "devkit ui verify", "devkit check the screens", "devkit ui verification" | Report-only, and the only component that checks what a person actually sees. Every other gate reads code: the reviewer maps criteria to a diff, ship reads CI and coverage, the suite asserts through an API — none can tell you the empty state renders a blank screen or the loading spinner never clears. A passing suite and a broken screen coexist comfortably. Runs the app the project's own way, drives each state the `.ux.md` named, and captures the copy that actually rendered rather than a paraphrase. Its rule mirrors `devkit-ship`: **a state it could not reach is UNVERIFIED, never fine** — inducing an error state often needs a failure you have to cause, and an unchecked state reported as working is worse than no check.<br>**Verdict: matches / mismatches / partly-unverified.** |
 | `devkit-deliver` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "devkit deliver this milestone", "devkit commit and push", "devkit open the PR" | **The one component that touches git, and off unless the `deliver` stage is enabled.** Branches per Phase (`feat/phase<N>-<slug>`), commits with a message explaining *why*, pushes, and opens a PR **only at a Phase boundary** — a PR per milestone fragments review. Tracks `Branch:` in `PROGRESS.md`'s `## In flight` so an interrupted run resumes instead of redoing. Refuses to start unless review said `ship` and preflight said `clear`; **never delivers on `blocked`**. Enabling it is standing permission for the recoverable flow only — never force-push, never push to a default branch, never merge or enable auto-merge, never delete a branch or rewrite history, never `git add -A` blind, never `--no-verify`. If the situation seems to call for one of those, something is wrong that a human should look at. |
+| `devkit-security` | `sonnet` | `Read, Bash, Glob, Grep` | "devkit security review", "devkit check this for vulnerabilities", "devkit security scan" | Report-only, and deliberately **not** a generic OWASP checklist. Its highest-value move is reading the project own stated invariants first — ADRs, `.claude/rules/`, and how sibling endpoints already do it — so "check multi-tenancy" becomes the precise question *does this new entity carry the global query filter the ADR requires?* A violated invariant the project wrote down itself needs no convincing. Works the classes that actually cause breaches, in descending order of how often each is a real root cause: broken object-level authorization (BOLA/IDOR), tenant isolation, auth and session handling, injection, sensitive data exposure, mass assignment. Every finding names a file, a line and a reachable exploitation path — "potential risk" with no path is noise, and noise is how a security review gets ignored. Covers the diff; the rest of the repo is UNKNOWN, never clean.<br>**Verdict: clear / blocked / clear-with-unknowns**, matching `devkit-ship`. |
 | `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "devkit implement the spec", "devkit implement \<feature\>", "run devkit-implementer" | Not report-only — writes code and tests. Checks `.claude\rajesh-devkit\test-runners.json` for a cached test command per area first; only derives one from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) — and verifies it actually runs, not just that the marker matched — on a cache miss, writing the result back so future milestones skip re-derivation (verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation). Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
 | `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "devkit dep audit", "devkit audit dependencies", "devkit scan for CVEs" | Report-only. Detects whichever package ecosystems are present (npm/yarn/pnpm, PyPI, NuGet, pub/Dart, Go, Cargo, Maven, ...) from marker files, then runs `osv-scanner --recursive` as the universal pass (covers most ecosystems in one command) plus ecosystem-native fallbacks (`dotnet list package --vulnerable`, `npm audit`, `pip-audit`) only where the universal pass can't reach (e.g. NuGet without a lock file) — all backed by the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file, unrecognised ecosystem) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
 | `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "devkit review the diff", "devkit review against the spec", "run devkit-reviewer" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met / **Deferred**, with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
@@ -561,7 +563,7 @@ configurable, in one committed file:
 ```
 
 Valid stages: `specify`, `ux`, `datamodel`, `implement`, `ui-verify`,
-`review`, `ship`, `docs`, `pipeline`, `deliver`. Every one except `deliver` is
+`review`, `security`, `ship`, `docs`, `pipeline`, `deliver`. Every one except `deliver` is
 on by default. `role` is a label for humans; only `stages` changes
 behaviour. `devkit-onboard` asks the question during setup and writes the
 file.
@@ -592,6 +594,35 @@ what the loop *nudges toward*. Every installed component is still loaded by
 the harness, so if a host project already has a skill triggered by "write a
 spec", `devkit-specify` answers to that phrase too. Disabling the `specify`
 stage doesn't change that — it's a separate problem with a separate fix.
+
+### Test layers — what a green tick actually proves
+
+A criterion can be ticked by a test that never exercised the path production
+uses, and that is the most expensive kind of green: everything downstream now
+believes it. The failure shape is concrete — a suite that builds its schema
+from the model never executes a migration, so it cannot fail on a broken one
+no matter how many tests it has. A real project shipped a table with no
+migration for exactly that reason, and CI would have caught it if CI had ever
+run the migration path.
+
+So a criterion that **cannot honestly be proven in isolation** is marked in
+the spec:
+
+```markdown
+- [ ] complete(store, id) sets done = true on that task
+- [ ] [integration] the migration applies cleanly to a populated database
+```
+
+`devkit-specify` marks it. `devkit-implementer` must prove it at that layer,
+and **stops rather than quietly satisfying it with a substitute** if the
+integration suite cannot run on this machine. `devkit-reviewer` checks where
+the test actually lives and what it runs against, not merely that a test
+exists. The implementer also reports which layer each criterion was proven
+at, so a downgrade is visible rather than inferred.
+
+Unmarked means a unit test genuinely proves it. The marker is not ceremony —
+it is for things whose truth depends on a real database, a real migration, a
+real HTTP boundary, or a second process.
 
 ### Tracked follow-ups — deferred work that can't vanish
 

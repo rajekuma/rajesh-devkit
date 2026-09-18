@@ -202,3 +202,38 @@ test('every trigger phrase is namespaced to devkit', () => {
   }
   assert.ok(checked >= 40, `expected 40+ trigger phrases across the plugin, checked ${checked}`);
 });
+
+test('devkit-security and devkit-dep-audit stay distinct', () => {
+  // These answer different questions and it is easy for one to drift into
+  // the other's territory: dep-audit covers vulnerable DEPENDENCIES, security
+  // covers code YOU wrote. A project can have a spotless dependency tree and
+  // still hand one tenant's data to another.
+  const sec = fs.readFileSync(path.join(PLUGIN_ROOT, 'agents', 'devkit-security.md'), 'utf8');
+  const dep = fs.readFileSync(path.join(PLUGIN_ROOT, 'agents', 'devkit-dep-audit.md'), 'utf8');
+  assert.match(sec, /dep-audit/, 'devkit-security must say what it does NOT cover');
+  assert.match(dep, /not a substitute/i, 'devkit-dep-audit must disclaim code-level review');
+
+  // Both are report-only, and that must survive edits.
+  for (const [name, text] of [['devkit-security', sec], ['devkit-dep-audit', dep]]) {
+    assert.match(text, /[Rr]eport.only|do NOT (modify|edit)|never edits/, `${name} dropped its report-only boundary`);
+  }
+});
+
+test('the integration-layer convention is stated in every component that acts on it', () => {
+  // A criterion marked [integration] is written by devkit-specify, honoured by
+  // devkit-implementer, and checked by devkit-reviewer. If any one of the
+  // three loses it, the marker becomes decoration: the spec still asks, and
+  // nothing enforces. That is the same fail-open shape as the SENSITIVE gate.
+  const files = {
+    'devkit-specify': path.join(PLUGIN_ROOT, 'skills', 'devkit-specify', 'SKILL.md'),
+    'devkit-implementer': path.join(PLUGIN_ROOT, 'agents', 'devkit-implementer.md'),
+    'devkit-reviewer': path.join(PLUGIN_ROOT, 'agents', 'devkit-reviewer.md'),
+  };
+  for (const [name, file] of Object.entries(files)) {
+    const text = fs.readFileSync(file, 'utf8');
+    assert.ok(
+      text.includes('[integration]'),
+      `${name} no longer mentions the [integration] layer marker - the convention is now fail-open`
+    );
+  }
+});

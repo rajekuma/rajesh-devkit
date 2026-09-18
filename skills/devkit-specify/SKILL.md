@@ -99,7 +99,15 @@ repo's own files and the user's answers.
    today. Cover the happy path *and* at least one denial/negative case per boundary
    touched.
 
+   Prefix a criterion with `[integration]` when it **cannot honestly be proven in
+   isolation** — anything whose truth depends on a real database, a real migration, a
+   real HTTP boundary, or a second process. Leave it unmarked when a unit test genuinely
+   proves it. This is not ceremony: a criterion proven only against an in-memory
+   substitute is proven against something production does not run, and that gap ships
+   silently. Mark it and the implementer writes the test where it means something.
+
    - [ ] ...
+   - [ ] [integration] ...
    - [ ] ...
    ```
 

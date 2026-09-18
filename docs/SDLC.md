@@ -59,6 +59,7 @@ lives in a conversation.
 | Build | `devkit-implementer` | code + tests, ticked criteria | the spec |
 | Review | `devkit-reviewer` | a verdict | the spec + the diff |
 | Gate | `devkit-ship` | a verdict | CI, coverage, advisories |
+| Secure | `devkit-security` | findings + verdict | the diff, the project own invariants |
 | Document | `devkit-docs` | changelog / session log | the spec + the diff |
 | Decide | `devkit-adr` | `docs/adr/NNNN-*.md` | the decision, the code |
 
@@ -115,7 +116,7 @@ this is a conversation, not a generation step.
 ### 2. Onboard
 
 ```
-onboard this project
+devkit onboard this project
 ```
 
 `devkit-onboard` inventories what exists (nothing, yet), detects your stack,
@@ -127,7 +128,7 @@ up is yours to review before work starts against it.
 ### 3. Spec the first milestone
 
 ```
-spec this feature: <name>
+devkit spec this feature: <name>
 ```
 
 `devkit-specify` reads the code and any decision records first, then
@@ -138,12 +139,12 @@ implementation.
 The important part: it marks any requirement touching an existing invariant,
 a security/authorization boundary, a data-model change, an external
 integration, or a backward-compatibility break with `SENSITIVE:`. That marker
-is machine-checked — see [The three gates](#the-three-gates).
+is machine-checked — see [The four gates](#the-four-gates).
 
 ### 4. Design the interface (only if there is one)
 
 ```
-ux spec
+devkit ux spec
 ```
 
 `devkit-ux` audits your existing components and design tokens *before*
@@ -157,7 +158,7 @@ check them.
 ### 5. Build it
 
 ```
-implement the spec
+devkit implement the spec
 ```
 
 `devkit-implementer` works one acceptance criterion at a time under strict
@@ -169,23 +170,27 @@ ambiguity itself.
 ### 6. Review, gate, document
 
 ```
-review the diff
+devkit review the diff
 ```
 ```
-ship check
+devkit security review
 ```
 ```
-update the docs
+devkit ship check
+```
+```
+devkit docs
 ```
 
-Three separate questions, deliberately: does the change match its spec
-(`reviewer`), is everything *around* it shippable (`ship`), and what
-documentation did it just make wrong (`docs`).
+Four separate questions, deliberately: does the change match its spec
+(`reviewer`), is the code you wrote safe (`security`), is everything *around*
+it shippable (`ship`), and what documentation did it just make wrong
+(`docs`).
 
 ### 7. Record decisions as they happen
 
 ```
-write an ADR: <decision>
+devkit write an ADR: <decision>
 ```
 
 Not a phase — whenever a consequential, hard-to-reverse decision gets made.
@@ -203,7 +208,7 @@ next milestone" onward is identical.
 ### 1. Inventory before writing anything
 
 ```
-onboard this project
+devkit onboard this project
 ```
 
 On a repo with history, `devkit-onboard`'s governing rule is **inventory
@@ -245,7 +250,7 @@ else.
 
 ---
 
-## The three gates
+## The four gates
 
 Gates are where this stops being a convenience and starts being a process.
 
@@ -276,7 +281,24 @@ Met / Partially Met / Deferred, with file-and-line evidence, and ends with
 one of three verdicts: `ship`, `needs-changes`, `discuss`. It never edits
 files.
 
-### 3. The ship gate — before calling it done
+### 3. The security gate — before it reaches anyone
+
+`devkit-security` reviews the code you wrote for the classes that actually
+cause breaches: broken object-level authorization, tenant isolation, auth and
+session handling, injection, data exposure. Distinct from `devkit-dep-audit`,
+which covers vulnerable dependencies - a project can have a spotless
+dependency tree and still hand one tenant data to another.
+
+What makes it more than a checklist: it reads the project own stated
+invariants first - ADRs, convention files, how sibling endpoints already do
+it - so a vague "check multi-tenancy" becomes a precise question. A violated
+invariant the project wrote down itself needs no convincing.
+
+Every finding names a file, a line, and a reachable exploitation path.
+"Potential risk" with no path is noise, and noise is how a security review
+gets ignored.
+
+### 4. The ship gate — before calling it done
 
 `devkit-ship` asks the question review doesn't: the diff matches its spec,
 but is everything *around* it shippable? CI status, coverage against whatever

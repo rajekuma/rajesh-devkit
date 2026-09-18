@@ -457,3 +457,20 @@ test('ui-verify is nudged for a UI loop', () => {
     }
   );
 });
+
+test('the security stage is nudged when enabled, absent when not', () => {
+  withStages(
+    ['implement', 'security', 'ship'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } },
+    (dir) => {
+      assert.match(runHook('continue-loop.js', dir).stderr, /devkit-security/);
+    }
+  );
+  withStages(
+    ['implement', 'ship'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } },
+    (dir) => {
+      assert.doesNotMatch(runHook('continue-loop.js', dir).stderr, /devkit-security/);
+    }
+  );
+});

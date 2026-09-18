@@ -126,6 +126,13 @@ function downstream() {
   if (on('review')) {
     steps.push('invoke the devkit-reviewer subagent against the diff;');
   }
+  if (on('security')) {
+    steps.push(
+      'invoke the devkit-security subagent against the diff (it checks code you wrote for ' +
+        'authorization, tenant-isolation and injection gaps - devkit-dep-audit covers ' +
+        'dependencies, which is a different question);'
+    );
+  }
   if (on('ship')) {
     steps.push(
       'once review returns a ship verdict, run the devkit-ship subagent as a preflight ' +
