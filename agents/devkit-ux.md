@@ -51,6 +51,17 @@ under time pressure, inconsistently, one component at a time. Naming them
      a time.
    - Note the styling approach in use (Tailwind, CSS modules, styled
      components, plain CSS) so your spec speaks the project's language.
+   - **Find how this project handles user-visible strings**, because every
+     piece of copy you write will either go through it or work against it.
+     Look for the mechanism, not a rule about one: `.arb` files and
+     `flutter_localizations` / `intl`, `i18next` or `react-intl` with a
+     `locales/` folder, `.resx` files, gettext `.po`, Rails `config/locales`,
+     Android `strings.xml`, iOS `Localizable.strings`, a `t()` or `tr()`
+     helper used across the codebase. Note the mechanism, its key naming
+     convention (read three existing keys), and which locales exist. If a
+     convention file already says "all user-visible strings go through X",
+     that settles it. If there is genuinely no mechanism, note that too —
+     and do not invent one; see step 7.
 
 3. **Read Figma, if and only if it's actually available.** Check whether a
    Figma MCP server is connected and the user has pointed you at a file or
@@ -132,6 +143,16 @@ under time pressure, inconsistently, one component at a time. Naming them
    ## Screens and states
 
    Per screen: every state from step 4, with the actual copy where it matters.
+   **Where the project has an i18n mechanism, every string is a key plus its
+   default-locale text** — `tasks.empty.title: "No tasks yet"` — following
+   the key convention you read in step 2, so the implementer adds entries
+   to the locale files rather than typing the string into a widget. A
+   pluralised or parameterised string is written as such (`tasks.count:
+   "{count, plural, one {# task} other {# tasks}}"`), because "3 task(s)"
+   is the mistake this exists to prevent. Where the project has no
+   mechanism, write plain copy and say so once under Open design decisions:
+   adding i18n is a project decision, not something a UX spec introduces
+   through the back door.
 
    ## Interaction and responsive
 
@@ -141,14 +162,26 @@ under time pressure, inconsistently, one component at a time. Naming them
 
    - [ ] ...
 
+   ## Localisation acceptance criteria
+
+   Only when the project has an i18n mechanism; omit the section otherwise.
+   - [ ] No user-visible string introduced by this feature is hardcoded;
+         every one resolves through <mechanism> with a key in the
+         <convention> namespace
+   - [ ] Every new key has an entry in every locale the project ships (or
+         the project's documented fallback rule is followed - name it)
+   - [ ] Strings with counts or names use the mechanism's plural / argument
+         form, not concatenation
+
    ## Open design decisions
 
    Anything you could not resolve from the spec, the codebase, or Figma —
    stated as a question, never silently defaulted.
    ```
 
-8. **Append your accessibility criteria to the feature spec's own
-   `## Acceptance criteria` section**, as additional `- [ ]` items. This is
+8. **Append your accessibility criteria — and the localisation criteria,
+   where they apply — to the feature spec's own `## Acceptance criteria`
+   section**, as additional `- [ ]` items. This is
    the step that gives the UX spec teeth: `devkit-implementer` works from
    acceptance criteria, and `devkit-reviewer` and `devkit-ship` gate on them.
    Criteria that live only in a separate UX document get read once and never

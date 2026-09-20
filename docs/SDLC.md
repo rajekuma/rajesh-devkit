@@ -40,32 +40,61 @@ lives in a conversation.
                     │  PROGRESS.md + conventions + cache      │
                     └────────────────┬────────────────────────┘
                                      │
-      ┌──────────────────────────────▼──────────────────────────────┐
-      │                      per milestone                          │
-      │                                                             │
-      │   specify ──► ux ──► implementer ──► reviewer ──► ship ──► docs
-      │   (spec)     (ux     (code +        (verdict)    (gate)   (session
-      │              spec)    tests)                               log)
-      │                                                             │
-      │   adr ◄── written whenever a real decision gets made        │
-      └─────────────────────────────────────────────────────────────┘
+   ┌─────────────────────────────────▼─────────────────────────────────────┐
+   │                           per milestone                               │
+   │                                                                       │
+   │  specify ─► ux ─► datamodel ─► implementer ─► ui-verify ─► reviewer   │
+   │  (spec)    (ux    (data       (code +        (screens    (verdict)    │
+   │            spec)   spec)       tests)         verdict)                 │
+   │                                                     │                 │
+   │            ┌────────────────────────────────────────┘                 │
+   │            ▼                                                          │
+   │  quality ─► security ─► ship ─► docs ─► release ─► [pipeline] ─► [deliver]│
+   │  (verdict)  (verdict)   (gate)  (change- (Phase     (CI audit)   (branch,  │
+   │                                  log)     boundary:               commit,  │
+   │                                           version,                PR - OFF │
+   │                                           notes)                  unless   │
+   │                                                                   enabled) │
+   │                                                                       │
+   │  adr ◄── written whenever a real decision gets made                   │
+   └──────────────────────────────────┬────────────────────────────────────┘
+                                      │ queue empty / Phase closed
+                    ┌─────────────────▼───────────────────────┐
+                    │  roadmap   (what shipped, follow-ups,   │
+                    │  vision gap, production signal)         │
+                    │  -> proposes the next Phase's rows      │
+                    └─────────────────┬───────────────────────┘
+                                      │ on approval
+                                      └──────────► back to specify
 ```
+
+Every stage in the per-milestone box is a name in `.claude/devkit.json`'s
+`stages` list — a project runs the ones it enables and the loop stops when
+those are done. No file means every stage except `deliver` is on. See
+[Choosing which stages run](#choosing-which-stages-run).
 
 | Stage | Component | Produces | Reads |
 |---|---|---|---|
 | Onboard | `devkit-onboard` | `PROGRESS.md`, test-runner cache | the existing repo |
-| Specify | `devkit-specify` | `specs/<feature>.md` | code, ADRs, conventions |
-| Design | `devkit-ux` | `specs/<feature>.ux.md` | the spec, component library |
-| Build | `devkit-implementer` | code + tests, ticked criteria | the spec |
-| Review | `devkit-reviewer` | a verdict | the spec + the diff |
-| Gate | `devkit-ship` | a verdict | CI, coverage, advisories |
-| Secure | `devkit-security` | findings + verdict | the diff, the project own invariants |
-| Document | `devkit-docs` | changelog / session log | the spec + the diff |
+| `specify` | `devkit-specify` | `specs/<feature>.md` | code, ADRs, conventions |
+| `ux` | `devkit-ux` | `specs/<feature>.ux.md` | the spec, component library |
+| `datamodel` | `devkit-datamodel` | `specs/<feature>.data.md` | the spec, the ORM and migration tooling |
+| `implement` | `devkit-implementer` | code + tests, ticked criteria | the spec and both companion specs |
+| `ui-verify` | `devkit-ui-verify` | a verdict per UI state | the `.ux.md` spec, the running app |
+| `review` | `devkit-reviewer` | a verdict | the spec + the diff |
+| `quality` | `devkit-quality` | findings + verdict | the diff, the project's own architecture rules and budgets |
+| `security` | `devkit-security` | findings + verdict | the diff, the project's own invariants |
+| `ship` | `devkit-ship` | a verdict | criteria, CI, coverage, advisories, secrets, the other verdicts |
+| `docs` | `devkit-docs` | changelog entry, fixed docs | the spec + the diff |
+| `release` | `devkit-release` | version bump, changelog section, release notes, the tag command | Unreleased entries, shipped specs, git tags |
+| `pipeline` | `devkit-pipeline` | a CI audit or a proposed workflow | the repo's CI config |
+| `deliver` | `devkit-deliver` | a branch, commits, a PR | `PROGRESS.md`'s In flight block |
 | Decide | `devkit-adr` | `docs/adr/NNNN-*.md` | the decision, the code |
+| Plan | `devkit-roadmap` | the next Phase's rows in `PROGRESS.md`, on approval | shipped specs, follow-ups, the vision, recorded production signal |
 
-Two more run continuously rather than as a stage: `devkit-dep-audit`
-(dependency advisories) and `devkit-stats` (how long each milestone took and
-what it cost).
+Two more run on demand rather than as a stage: `devkit-dep-audit`
+(dependency advisories, and licences against the project's own posture) and
+`devkit-stats` (how long each milestone took and what it cost).
 
 ---
 
@@ -141,6 +170,15 @@ a security/authorization boundary, a data-model change, an external
 integration, or a backward-compatibility break with `SENSITIVE:`. That marker
 is machine-checked — see [The four gates](#the-four-gates).
 
+It also asks two questions that are almost never volunteered: what the
+person on call sees when this fails, and how many of these there will be.
+The answers become `## Observability` and `## Performance budget`, and
+from those, `[observability]` and `[perf]` acceptance criteria that the
+implementer must prove through the project's own logging and metrics, the
+reviewer checks field by field, and `devkit-quality` uses as the bar for
+its performance pass. A project with no logging or metrics mechanism gets a
+stop and an ADR question, not an ad-hoc print statement.
+
 ### 4. Design the interface (only if there is one)
 
 ```
@@ -150,12 +188,28 @@ devkit ux spec
 `devkit-ux` audits your existing components and design tokens *before*
 designing, so it reuses rather than reinvents, then enumerates the states
 that actually break interfaces — empty, loading, partial, error,
-permission-denied, success, destructive-confirm. It appends accessibility
-criteria to the feature spec's own acceptance list, which is what gives them
-teeth: the implementer works from acceptance criteria, and the later gates
-check them.
+permission-denied, success, destructive-confirm. Where the project has an
+i18n mechanism, every string it specifies is a key plus its default text in
+that mechanism's form, plurals included. It appends accessibility criteria
+— and localisation criteria, where they apply — to the feature spec's own
+acceptance list, which is what gives them teeth: the implementer works from
+acceptance criteria, and the later gates check them.
 
-### 5. Build it
+### 5. Plan the data (only if stored data changes)
+
+```
+devkit datamodel
+```
+
+`devkit-datamodel` is the data-side counterpart of `devkit-ux`: it turns the
+spec's data requirements into `specs/<name>.data.md` — entities and
+constraints, the migration, a backfill strategy for rows that already exist,
+a rollback path, and what happens to in-flight writes during deploy. It
+writes no migration and no entity class. A data-model change is the one kind
+of change a follow-up commit cannot fix, which is why it gets planned in a
+file someone reviews before it is in the schema.
+
+### 6. Build it
 
 ```
 devkit implement the spec
@@ -163,14 +217,35 @@ devkit implement the spec
 
 `devkit-implementer` works one acceptance criterion at a time under strict
 RED-GREEN: write the test, watch it fail *for the right reason*, write the
-minimum code, run the full suite. It never modifies a test to make it pass —
-if a criterion is ambiguous it stops and reports rather than resolving the
-ambiguity itself.
+minimum code, run the full suite. It reads both companion specs (`.ux.md`,
+`.data.md`) and follows their plans rather than generating its own. It never
+modifies a test to make it pass — if a criterion is ambiguous it stops and
+reports rather than resolving the ambiguity itself.
 
-### 6. Review, gate, document
+A criterion the spec marked `[integration]`, `[contract]` or `[e2e]` has to
+be proven at that layer. A unit test with a substitute standing in for the
+real dependency does not tick it, and the implementer stops rather than
+quietly downgrading what the spec asked for.
+
+### 7. Check the screens (only if there is a UI)
+
+```
+devkit ui verify
+```
+
+Every other gate reads code: the reviewer maps criteria to a diff, ship reads
+CI and coverage, the suite asserts through an API. None of them can tell you
+the empty state renders a blank screen. `devkit-ui-verify` runs the app the
+project's own way and drives it through every state the UX spec named. A
+state it could not reach is `UNVERIFIED`, never "fine".
+
+### 8. Review, secure, gate, document
 
 ```
 devkit review the diff
+```
+```
+devkit quality review
 ```
 ```
 devkit security review
@@ -182,12 +257,57 @@ devkit ship check
 devkit docs
 ```
 
-Four separate questions, deliberately: does the change match its spec
-(`reviewer`), is the code you wrote safe (`security`), is everything *around*
-it shippable (`ship`), and what documentation did it just make wrong
-(`docs`).
+Five separate questions, deliberately: does the change match its spec
+(`reviewer`), is it built well and will it hold at the spec's volume
+(`quality`), is the code you wrote safe (`security`), is everything
+*around* it shippable (`ship`), and what documentation did it just make
+wrong (`docs`). `ship` is where the other verdicts converge: a `security`,
+`quality`, `ui-verify` or `datamodel` result it hasn't seen is an
+`UNKNOWN` row in its table, not a pass.
 
-### 7. Record decisions as they happen
+`quality` is the one the spec cannot ask for. Spec compliance is
+per-milestone; design decay is cumulative, and no acceptance criterion says
+"the service class must not gain its fifteenth dependency". It reads the
+project's own architecture rules and any stated performance budget first,
+so a finding cites something the project decided rather than a principle it
+didn't. Findings that are matters of taste are marked advisory and never
+change its verdict.
+
+### 9. Cut a release (at a Phase boundary)
+
+```
+devkit release
+```
+
+`devkit-docs` wrote one changelog entry per milestone; nothing turned the
+pile into a version. `devkit-release` does, once per Phase: it decides the
+bump from what shipped and says why (a `SENSITIVE:` compatibility break in
+any shipped spec is a major whether the changelog entry said so or not),
+rolls `[Unreleased]` into a versioned section, updates the version in every
+file that declares it, and drafts release notes for someone deciding whether
+to upgrade. It ends with the exact `git tag` command and does not run it.
+
+### 10. Audit the pipeline, then deliver (both optional)
+
+```
+devkit pipeline
+```
+```
+devkit deliver this milestone
+```
+
+`devkit-pipeline` audits what actually gates a merge — build, tests,
+dependency and secret scanning — against whatever CI the repo already uses,
+and proposes one for a repo with none. It never enables a branch protection
+or commits a workflow on its own.
+
+`devkit-deliver` is the single exception to "nothing here touches git", and
+it is **off unless the `deliver` stage is enabled**. Even then it is
+permission for the recoverable flow only: branch, commit, push a feature
+branch, open a PR at a Phase boundary. Never force-push, never a default
+branch, never a merge, never a deleted branch or rewritten history.
+
+### 11. Record decisions as they happen
 
 ```
 devkit write an ADR: <decision>
@@ -319,17 +439,34 @@ never quietly promoted to `clear`.
 
 Judgment about what to leave out matters more than coverage.
 
-**Nothing commits, pushes, tags, merges, or opens a PR.** Every component is
-either read-only or writes only to the working tree. Everything that touches
-a shared remote stays an explicit human action. This is a deliberate
-property of the whole toolkit, not an unfinished feature — an agent that can
-push is an agent that can break a shared branch unattended.
+**Nothing commits, pushes, tags, merges, or opens a PR — with one opt-in
+exception.** Every component is read-only or writes only to the working
+tree, except `devkit-deliver`, which runs only when a project enables the
+`deliver` stage in `.claude/devkit.json`. Installing the plugin is never
+enough to grant it. Even enabled, it is permission for the recoverable flow
+(branch, commit, push a feature branch, open a PR) and never for
+force-pushing, pushing to a default branch, merging, deleting branches or
+rewriting history. Tagging a release stays a human action in every
+configuration: `devkit-release` prepares the release and prints the tag
+command; nothing runs it. The reasoning is unchanged: an agent that can rewrite a
+shared branch is an agent that can break it unattended, so the irreversible
+operations are not a confirmation question — they are simply not available.
 
 **Product intent is a conversation, not a skill.** See Path A, step 1.
+What *is* a skill is the step after it: once there is a vision and a shipped
+Phase, `devkit-roadmap` proposes the next Phase from evidence — and it is
+built to refuse the blank page. A candidate with no evidence line is not
+proposed; the user prioritises; rows are written only on approval. A
+roadmap nobody chose is the one thing a milestone-driven unattended loop
+must never grind through.
 
 **Deployment and incident response are out of scope.** This covers the build
 loop, not the run loop. Saying so is more useful than implying coverage that
-doesn't exist.
+doesn't exist. What the run loop *records* — issues, incident write-ups,
+support themes, a committed metrics review — is read by `devkit-roadmap` on
+the way back into the plan, so the circle closes through files in the repo
+rather than through a live connection to production, which nothing here
+makes.
 
 **Deferred work is recorded, not silently dropped.** A criterion nobody
 implements gets a row in `PROGRESS.md`'s `## Tracked follow-ups` table naming
@@ -348,17 +485,28 @@ point at already marked `Implemented`.
 
 ## How this system is verified
 
-A toolkit that runs unattended fails quietly, so it carries two suites.
+A toolkit that runs unattended fails quietly, so it carries two suites, and
+a skill — `devkit-eval` — that runs both and then reads the prompt
+components for the drift neither suite can catch (a report-only agent that
+stopped saying so, a verdict string that got reworded, a doc that describes
+last week's behaviour).
 
-**`node --test`** — 36 cases against the hooks. Mostly
-behavioural rather than unit: the hooks run as real processes against
-throwaway fixture projects, with exit codes and stderr asserted, because
-`exit 2` plus the right message *is* the contract with the harness.
+**`node --test`** — the hook suite, plus static checks on the plugin's own
+files. Mostly behavioural rather than unit: the hooks run as real processes
+against throwaway fixture projects, with exit codes and stderr asserted,
+because `exit 2` plus the right message *is* the contract with the harness.
+One static check exists specifically for this document: every agent, skill
+and stage name must appear here and in the README, so a component can no
+longer be added without the walkthrough knowing about it.
 
-**`evals/`** — 12 cases, 67 graders, run with `claude plugin eval`. Each
-scaffolds a throwaway project and runs one component in isolation. 60 of the
-67 graders are deterministic — file contents, files created, tools actually
-called — rather than an LLM's impression of a transcript.
+**`evals/`** — one or more cases per prompt-based component, run with
+`claude plugin eval`. Each scaffolds a throwaway project and runs one
+component in isolation. Nearly all graders are deterministic — file
+contents, files created, tools actually called — rather than an LLM's
+impression of a transcript. The current case list, with the invariant each
+one locks in, is the table in [evals/README.md](../evals/README.md); exact
+counts live there and in `node --test`'s own summary line rather than here,
+where they went stale twice.
 
 Both suites have earned their keep by finding real defects, including two
 worth generalising:
@@ -375,6 +523,43 @@ worth generalising:
 The rule that follows: **a failing check is a question, not an instruction.**
 Diagnose whether the component regressed or the test is wrong before
 "fixing" anything.
+
+---
+
+## Choosing which stages run
+
+The people using this are not interchangeable. A product owner wants to
+write specs and document what shipped; a UX designer wants the design stage
+and nothing downstream; a backend engineer wants schema, implementation and
+review; a DevSecOps engineer wants pipelines and release gating. A loop that
+nudges toward stages its owner never wanted is noise they learn to ignore —
+and that costs the nudges that did matter.
+
+`.claude/devkit.json`, committed, lists the stages a project runs:
+
+```json
+{ "role": "backend", "stages": ["specify", "datamodel", "implement", "review", "security", "ship"] }
+```
+
+`.claude/rajesh-devkit/devkit.local.json` (gitignored) lets one person run a
+narrower loop than the repo's default. No file means every stage except
+`deliver` is on, so a project that never answers behaves exactly as before.
+A malformed file is treated as absent — a hook that dies on a typo is worse
+than one that does what it always did.
+
+Two behaviours make a narrow loop a real loop rather than a crippled one:
+
+- **It stops.** When every enabled stage for a milestone is done, the `Stop`
+  hook allows the stop instead of pushing toward stages nobody enabled.
+- **It stays quiet about work it doesn't own.** A `ux`-only loop facing a
+  milestone with no spec says nothing rather than telling someone to go
+  write one.
+
+One consequence is worth stating plainly, because the config makes it easy
+to do by accident: a loop with `implement` on and `review`, `security` or
+`ship` off ships code no gate has looked at. The `SessionStart` banner says
+so, once, whenever that combination is configured — it doesn't stop you, but
+it makes sure the omission was a choice rather than an oversight.
 
 ---
 

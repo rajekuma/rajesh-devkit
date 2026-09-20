@@ -18,12 +18,18 @@ where the thing being checked is genuinely a judgment (did the report
 ## Running
 
 ```bash
-# From the plugin root. --scaffold is required: cases build their own fixtures.
-claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --max-cost-usd 15
+# From the plugin root. Dispatches to the official runner on macOS/Linux, or
+# to tests/run-evals.ps1 on Windows (see its header for why: the official
+# runner can't yet confine a Bash-granting run there).
+node tests/run-evals.js
 
 # One case while iterating on it
-claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --case reviewer-* --keep-temp
+node tests/run-evals.js --case reviewer-* --keep-temp
 ```
+
+Calling the official runner directly (`claude plugin eval . --scaffold
+--allow-tools Bash Write Edit --runs 1 --max-cost-usd 15`) works the same way
+on macOS/Linux and exposes its full flag set.
 
 Each run is a real Claude session on your credential. `--runs 1` while
 authoring; the default of 3 is better for catching flaky behavior once a
@@ -43,6 +49,31 @@ case is stable.
   `_template.md`. Target the feature spec's filename glob instead.
 - **`tool_used: Skill` graders are indicators, not scored** — the runner
   excludes them so the with-plugin and without-plugin arms stay comparable.
+- **"Did it commit?" is gradeable without a git-aware grader.** `.git/logs/HEAD`
+  gets one line per ref update: the scaffold's baseline is `commit (initial):`
+  and any commit the session makes is `commit: `. A `regex` grader on that
+  file with `match: not_contains` on `'	commit: '` catches it
+  deterministically. `file_exists` on `.git/refs/heads/**` catches a new
+  branch the same way, since it only sees files the session created.
+- **A fixture has to be right for its grader to mean anything.** The first
+  `ui-verify` fixture had a server that answered `ok` to every route and an
+  `app.js` with empty handlers, on a milestone marked Implemented.
+  `devkit-ui-verify` correctly returned `mismatches` - it found real defects
+  in the fixture - and the `partly-unverified` grader failed. The component
+  was right; the case was wrong. Before blaming a component, ask whether the
+  fixture actually holds the premise the grader assumes.
+- **An llm judge is a vote, not a verdict - back it with something
+  deterministic.** The rubric said "a stub backend is not acceptable"; the
+  judge passed a run whose own method note said "using a stub backend". A
+  `tool_used` grader with `min: 0, max: 0` on the Bash input
+  (`createServer`) now catches it regardless of what the judge thinks. Where
+  a rule can be checked mechanically, check it mechanically and let the
+  judge cover only what can't be.
+- **The judge's verdict is its first line.** The runner used to scan the
+  whole reply for PASS and FAIL, so a reason sentence that quoted the
+  agent's own "FAIL" table rows made a correct PASS "ambiguous". It now
+  reads the first non-empty line only; the one-line "PASS: no wait, actually
+  FAIL" reply that motivated the check is still caught.
 - **A case that drives a subagent must demand the foreground.** The `Agent`
   tool backgrounds by default; when it does, the parent answers "I'll relay
   its report once it completes", the run ends, and every grader scores an
@@ -89,6 +120,11 @@ were left alone. Check them by hand if you change the base.
 | `onboard-brownfield` | `devkit-onboard` | Existing `CLAUDE.md` is not clobbered, the test command is actually run before being cached, `PROGRESS.md` is created, and the loop check is executed |
 | `help-no-progress` | `devkit-help` | Without a tracker, walks through bootstrap rather than dumping a checklist |
 | `escalation-gate-integration` | hooks + orchestrator | With a `SENSITIVE:` spec queued, the session asks the user and never auto-delegates to the implementer |
+| `security-finds-ownership-gap` | `devkit-security` | A lookup-by-id that skips the ownership check the project's own ADR requires → `blocked`, file and function named, the ADR cited, nothing edited |
+| `datamodel-plans-not-writes` | `devkit-datamodel` | A column added to a populated table → `.data.md` with migration, backfill (naming the 30-day rule), rollback and verification; criteria appended; no migration file, no source |
+| `ui-verify-unreached-is-unverified` | `devkit-ui-verify` | The backend lives in another repo → states that need it are `UNVERIFIED` with the dependency named, verdict `partly-unverified`; no stub backend is written, and no state is PASS from reading code |
+| `pipeline-audits-without-writing` | `devkit-pipeline` | A tests-only workflow → the missing dependency and secret gates are named; no workflow written, no commit made |
+| `deliver-refuses-when-disabled` | `devkit-deliver` | No `.claude/devkit.json` → refuses, names the file and the `deliver` stage, and runs no git write: no branch, no commit, the change stays in the working tree |
 
 ### `escalation-gate-integration` currently FAILS, on purpose
 

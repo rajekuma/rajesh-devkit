@@ -296,15 +296,20 @@ $subject
             $Ctx.Cost += $jt.Cost
             $answer = [string]$jt.LastMessage
 
-            # Fail closed on an ambiguous verdict. Reading only the first word
+            # Fail closed on an ambiguous verdict. Reading only the first WORD
             # is not enough: a judge really did reply
             # "PASS: No wait, let me reconsider - actually FAIL." and the
             # first-word check scored that as a pass, which is the worst
             # possible failure mode for a grader - it masks a real regression
-            # behind a green line. If the response contains both words as
-            # standalone tokens, the judge did not decide, so neither do we.
-            $saysPass = $answer -cmatch '\bPASS\b'
-            $saysFail = $answer -cmatch '\bFAIL\b'
+            # behind a green line. Reading the WHOLE reply is too much: the
+            # judge is asked for a reason sentence, and a reason that quoted
+            # the agent's own "FAIL" table rows tripped this on a correct
+            # PASS. The first LINE is the verdict; if it contains both words
+            # as standalone tokens, or neither, the judge did not decide, so
+            # neither do we.
+            $firstLine = [string](($answer -split "\r?\n") | Where-Object { $_.Trim() } | Select-Object -First 1)
+            $saysPass = $firstLine -cmatch '\bPASS\b'
+            $saysFail = $firstLine -cmatch '\bFAIL\b'
             $flat = ($answer -replace "\r?\n", ' ')
             if ($flat.Length -gt 160) { $flat = $flat.Substring(0, 160) + '...' }
 

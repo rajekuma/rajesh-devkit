@@ -1,0 +1,19 @@
+schema_version: "1.1"
+name: datamodel-plans-not-writes
+description: >
+  devkit-datamodel must turn a spec that adds a column to a populated table
+  into specs/<name>.data.md with migration, backfill, rollback and
+  verification sections, append criteria to the feature spec, and write NO
+  migration file and NO source - the plan is reviewed before it is in the
+  schema.
+tags: [component, datamodel]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 25
+  timeout_seconds: 500
+  allowed_tools: [Read, Glob, Grep, Bash, Write, Edit, Agent]
+  prompt: |
+    Milestone 1 has an approved spec at specs/task-archiving.md. Use the
+    devkit-datamodel subagent, in the foreground (run_in_background: false),
+    to produce the schema and migration plan for it. Relay its report.

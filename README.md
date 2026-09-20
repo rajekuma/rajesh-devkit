@@ -17,7 +17,9 @@ The exception is `devkit-deliver`, and it is **off unless you enable the
 enabled, it is standing permission for the recoverable flow only (branch,
 commit, push a feature branch, open a PR) and never for force-pushing,
 pushing to a default branch, merging, deleting branches or rewriting history.
-Those aren't a confirmation question; they're an irreversibility one.
+Those aren't a confirmation question; they're an irreversibility one. Tagging
+a release is on the same side of that line: `devkit-release` prepares one
+and prints the tag command; nothing here runs it.
 
 > **New here?** [**docs/SDLC.md**](docs/SDLC.md) is the end-to-end
 > walkthrough — how to take a product from nothing, or from an existing
@@ -40,23 +42,78 @@ Those aren't a confirmation question; they're an irreversibility one.
   the states that actually break interfaces (empty, loading, error,
   permission-denied), reads Figma when it's configured, and writes
   accessibility criteria into the spec where they'll be enforced.
+- `devkit-datamodel` — the data-side counterpart of `devkit-ux`, for any
+  milestone that changes stored data: turns the spec into
+  `specs/<name>.data.md` — entities and constraints, the migration as an
+  ordered sequence, a backfill for rows that already exist, a rollback path
+  or an explicit statement that there isn't one, and what runs the migration
+  against a real engine. Writes no migration file and no entity class; the
+  plan is reviewed before it is in the schema, because a schema change is
+  the one kind a follow-up commit can't undo.
 - `devkit-implementer` — implements one spec test-first (RED-GREEN), one
   acceptance criterion at a time, detecting whatever test runner the project
   actually uses (`npm test`, `pytest`, `dotnet test`, `flutter test`, `go
   test`, `cargo test`, ...) instead of assuming one.
+- `devkit-ui-verify` — runs the built UI the project's own way and drives it
+  through every state the UX spec named, checking what actually rendered
+  rather than what the tests assert. A state it could not reach is
+  `UNVERIFIED`, never "fine" — and reached through a stub it wrote itself is
+  not reached. Report-only.
 - `devkit-reviewer` — a report-only subagent that diffs the current change
   against its spec and ends with a single verdict line.
+- `devkit-quality` — the review the spec can't ask for: is the change built
+  well enough to still be changeable, and will it hold at the volume the
+  spec describes? Layering drift, duplication, a class becoming the place
+  everything goes, N+1 and unbounded reads — checked against the project's
+  own architecture rules and performance budgets, so a finding cites a rule
+  the project wrote rather than a principle it didn't. Report-only.
+- `devkit-security` — reviews the code you wrote for the classes that
+  actually cause breaches — broken object-level authorization, tenant
+  isolation, auth and session handling, injection, data exposure — against
+  the project's own stated invariants (ADRs, rule files, how sibling
+  endpoints do it), so a finding cites a rule the project wrote. Every
+  finding names a file, a line and a reachable exploitation path. Distinct
+  from `devkit-dep-audit`, which covers code someone else wrote.
 - `devkit-ship` — the preflight between "the reviewer said ship" and "mark it
   done": CI status, coverage against the project's own threshold, dependency
-  advisories, a secrets scan of the diff, and any unaccounted acceptance
-  criteria. A gate it couldn't run reports `UNKNOWN`, never `PASS`.
+  advisories, a secrets scan of the diff, any unaccounted acceptance
+  criteria, and a row for every other gate that runs before it — the
+  `devkit-security` and `devkit-quality` verdicts, the `devkit-ui-verify`
+  verdict, and whether
+  the migration `devkit-datamodel` planned is actually in the diff. A gate
+  it couldn't run reports `UNKNOWN`, never `PASS`.
 - `devkit-docs` — writes the changelog entry a shipped milestone earns, and
   hunts down the documentation that milestone just made wrong.
+- `devkit-release` — at a Phase boundary, turns the accumulated changelog
+  entries into a release: decides the semver bump from what actually
+  shipped (with the evidence — a `SENSITIVE:` compatibility break is a
+  major whether or not the changelog said so), rolls `[Unreleased]` into a
+  versioned section, updates the version everywhere the project declares
+  it, drafts release notes. Working tree only. It ends with the `git tag`
+  command and never runs it — tagging is the one git operation that stays
+  human in every configuration, because a tag is what registries and
+  pipelines act on the moment it exists.
+- `devkit-pipeline` — audits what actually gates a merge — build, tests,
+  dependency and secret scanning — against whatever CI the repo already
+  uses, or proposes a pipeline for a repo with none. Report-first: it never
+  enables a branch protection or commits a workflow on its own.
+- `devkit-deliver` — the one component that touches git, and **off unless
+  the `deliver` stage is enabled** in `.claude/devkit.json` (it checks the
+  file itself; being asked by name is not the opt-in). Branches per Phase,
+  commits with a message that says why, pushes the feature branch, opens
+  the PR at a Phase boundary, and tracks the branch in `PROGRESS.md`'s In
+  flight block so an interrupted run resumes. Never force-pushes, never a
+  default branch, never merges, never tags.
 - `devkit-adr` — records an architecture decision properly, interviewing for
   the alternatives and consequences that aren't inferable from code.
 - `devkit-dep-audit` — a report-only subagent that checks the project's
   dependencies for known-vulnerable versions, across whichever package
-  ecosystems are actually present (npm, PyPI, NuGet, pub, Go, Cargo, Maven, ...).
+  ecosystems are actually present (npm, PyPI, NuGet, pub, Go, Cargo, Maven, ...),
+  and for licences that conflict with the project's own posture — its
+  licence, how it ships, any stated policy — rather than a generic rule. A
+  GPL dependency is a finding in a proprietary product and not in an MIT
+  library; an AGPL one in a hosted service is the case people miss; an
+  undeclared licence is all-rights-reserved and gets named.
 - `continue-loop.js` (Stop hook) — when a session stops, checks the host
   project's `PROGRESS.md` for the next not-started milestone and, if one
   exists, blocks the stop with an instruction to draft a spec first (if none
@@ -73,6 +130,20 @@ Those aren't a confirmation question; they're an irreversibility one.
   or the next milestone's status otherwise.
 - `devkit-help` — the on-demand, verified version of the same check, for
   when you'd rather ask than wait for the automatic banner.
+- `devkit-roadmap` — the component that bends the loop into a circle.
+  When the queue is empty or a Phase just closed, it proposes the next
+  milestones from evidence rather than a blank page: what the shipped specs
+  left `## Out of scope`, the `Tracked follow-ups` whose unblock condition
+  has since been met, the gap to the product vision, and whatever production
+  signal the repo records (issues via `gh`, `docs/incidents/`,
+  `docs/feedback/`). Every candidate carries its evidence; it interviews
+  for the priority call; it writes rows only on approval and never starts a
+  milestone. A project that records no production signal is told so in one
+  sentence, not given a simulated feedback loop.
+- `devkit-eval` — this plugin's own regression check: runs the hook suite,
+  runs the behavioral evals, and reads the prompt components for the drift
+  neither suite can catch (a report-only agent that stopped saying so, a
+  reworded verdict string, a document describing last week's behaviour).
 - `devkit-stats` — a skill that reports real duration, real USD cost, and a
   heuristic manual-effort comparison per milestone from that local telemetry
   log (see "Telemetry" below).
@@ -116,6 +187,8 @@ rajesh-devkit/
 │   ├── devkit-docs.md           # changelog/release notes + stale-doc hunt, post-ship
 │   ├── devkit-implementer.md    # RED-GREEN implementer, stack-agnostic
 │   ├── devkit-pipeline.md       # CI/CD audit or scaffold, gates not files
+│   ├── devkit-quality.md        # design + performance review vs the project own rules
+│   ├── devkit-release.md        # semver bump + changelog roll-up + notes; never tags
 │   ├── devkit-reviewer.md       # spec-compliance review, report-only
 │   ├── devkit-security.md       # code-level vulns vs the project own invariants
 │   ├── devkit-ui-verify.md      # drives the built UI through every specified state
@@ -128,6 +201,10 @@ rajesh-devkit/
 │   │   └── SKILL.md             # this plugin's own regression + drift check
 │   ├── devkit-onboard/
 │   │   └── SKILL.md             # gets a new or brownfield project onto the loop
+│   ├── devkit-roadmap/
+│   │   └── SKILL.md             # proposes the next milestones from what shipped + production
+│   ├── devkit-stats/
+│   │   └── SKILL.md             # timing + real cost + heuristic effort report
 │   ├── devkit-specify/
 │   │   └── SKILL.md             # spec-drafting, product-owner style
 │   ├── devkit-help/
@@ -383,6 +460,7 @@ doesn't know needs a model that reasons well.
 | `devkit-specify` | **a strong model** (Opus / Fable) | Its real job is deciding what it *doesn't* know — which gaps take a default and which must be asked, and whether a requirement touches one of the five sensitive categories when that isn't obvious. That can't be reduced to a checklist; if it could, the checklist would already be in the skill. The failure mode is the worst kind available here: a weaker model fills gaps confidently and produces a *plausible* spec with invented requirements. It looks fine, and everything downstream treats the spec as truth. It also writes the `SENSITIVE:` marker, and the escalation gate cannot catch what was never marked. |
 | `devkit-adr` | **a strong model** (Opus / Fable) | Two judgments carry it: refusing to record a non-decision, and never inventing a rationale. The second is the most damaging failure in this plugin — a fabricated "why" is indistinguishable from a real one and gets quoted back years later by someone assuming a human wrote it. |
 | `devkit-onboard` | anything from Sonnet up | The most procedural component here: inventory, detect the stack, run the test command, write `PROGRESS.md`, run `session-welcome.js` to confirm the loop can parse it. Its judgment calls (don't clobber, which ADRs are load-bearing) are stated very explicitly, and explicit instructions are what mid-tier models follow reliably. It also verifies its own work by executing things, so mistakes surface instead of hiding. 9/9 on its eval. |
+| `devkit-roadmap` | **a strong model** (Opus / Fable) | The same failure mode as `devkit-specify`, one level up: a weaker model fills the blank page with plausible features. Its whole discipline is refusing a candidate with no evidence line, and that refusal is the judgment. |
 | `devkit-help`, `devkit-stats`, `devkit-eval` | anything | Mechanical: relay a status check, read a telemetry log, run a suite. |
 
 **Subagents** (frontmatter `model:` is honoured, and they don't follow your
@@ -392,6 +470,8 @@ session):
 |---|---|---|
 | `devkit-ux` | `sonnet` | Measured, not assumed: 9/9 on its eval, enumerating all eight states, reusing only existing tokens, and deriving the forbidden-vs-not-found consequence of the spec's `SENSITIVE:` requirement unprompted. It works because this component's prompt **is** the expertise — the state list and the accessibility list are written out explicitly, so the model executes a well-specified checklist rather than inventing method. |
 | `devkit-implementer`, `devkit-ship`, `devkit-docs` | `sonnet` | Procedure plus evidence-gathering against a spec that already exists. |
+| `devkit-datamodel`, `devkit-ui-verify`, `devkit-pipeline`, `devkit-release`, `devkit-deliver` | `sonnet` | Same shape: a written procedure, executed against files that already exist. Each has a rule that carries its whole value (no migration file; UNVERIFIED not fine; never commit a workflow; never tag; check the config first) and those rules are stated explicitly enough for a mid-tier model to hold. Measured on `ui-verify`: the first eval run found the rule under-specified rather than the model failing to follow it. |
+| `devkit-security`, `devkit-quality` | `sonnet` | Read the project's own invariants first, then the diff. The judgment — is this a reachable path, does this finding cost anything — is real, but it is judgment *against a stated rule*, which is the kind a mid-tier model does reliably. A generic checklist pass would be haiku work; a review that cites the project's ADR is not. |
 | `devkit-reviewer`, `devkit-dep-audit` | `haiku` | Mechanical: map criteria to a diff, run a scanner. |
 
 ### Skills inherit your session model; subagents don't
@@ -563,7 +643,8 @@ configurable, in one committed file:
 ```
 
 Valid stages: `specify`, `ux`, `datamodel`, `implement`, `ui-verify`,
-`review`, `security`, `ship`, `docs`, `pipeline`, `deliver`. Every one except `deliver` is
+`review`, `quality`, `security`, `ship`, `docs`, `release`, `pipeline`,
+`deliver`. Every one except `deliver` is
 on by default. `role` is a label for humans; only `stages` changes
 behaviour. `devkit-onboard` asks the question during setup and writes the
 file.
@@ -589,6 +670,18 @@ enabled, because its entire question is whether to delegate to
 `devkit-implementer`. With implementation out of scope, there's nothing to
 ask.
 
+**One combination gets named, not blocked.** A loop with `implement` on and
+`review`, `security` or `ship` off calls code done without that check.
+That's legitimate — a backend engineer whose team reviews in the PR may want
+exactly that — but the config file makes it look identical to a loop nobody
+thought about, and the "`UNKNOWN`, never `PASS`" rule lives inside
+`devkit-ship`, so switching `ship` off removes the one place an unrun
+check would have been reported. The `SessionStart` banner therefore adds
+one sentence naming the gate stages that are off whenever `implement` is
+on, once per session. `skippedGates()` in `scripts/lib/devkit.js` is the
+whole rule; a loop that doesn't implement gets no note, because there's no
+code to gate.
+
 **What stage config does not fix: trigger-phrase collisions.** Stages control
 what the loop *nudges toward*. Every installed component is still loaded by
 the harness, so if a host project already has a skill triggered by "write a
@@ -605,13 +698,24 @@ no matter how many tests it has. A real project shipped a table with no
 migration for exactly that reason, and CI would have caught it if CI had ever
 run the migration path.
 
-So a criterion that **cannot honestly be proven in isolation** is marked in
-the spec:
+So a criterion that **cannot honestly be proven by a unit test** is marked
+with the layer that proves it:
 
 ```markdown
 - [ ] complete(store, id) sets done = true on that task
 - [ ] [integration] the migration applies cleanly to a populated database
+- [ ] [contract] the /tasks response still carries every field the mobile client reads
+- [ ] [e2e] a user can archive a task from the list and it is gone after reload
 ```
+
+`[integration]` is a real dependency this codebase owns (database,
+migration, queue). `[contract]` is an agreement with something deployed
+separately — a mobile client, a partner API, a webhook consumer — proven by
+the recorded contract both sides run. `[e2e]` is the full user path, and is
+reserved for criteria genuinely about the whole path. They are not
+interchangeable: an `[integration]` mark on what is really a `[contract]`
+criterion buys a Postgres-backed test that never sees the client that will
+break.
 
 `devkit-specify` marks it. `devkit-implementer` must prove it at that layer,
 and **stops rather than quietly satisfying it with a substitute** if the
@@ -620,9 +724,60 @@ the test actually lives and what it runs against, not merely that a test
 exists. The implementer also reports which layer each criterion was proven
 at, so a downgrade is visible rather than inferred.
 
-Unmarked means a unit test genuinely proves it. The marker is not ceremony —
-it is for things whose truth depends on a real database, a real migration, a
-real HTTP boundary, or a second process.
+Unmarked means a unit test genuinely proves it. The markers are not
+ceremony — they are for things whose truth depends on something the unit
+test cannot see. A project with no contract or end-to-end mechanism gets a
+finding from the implementer, not a unit test dressed as one.
+
+### Localisation — copy is a key, not a literal
+
+`devkit-ux` finds how the project handles user-visible strings before it
+writes any (`.arb` + `intl`, `i18next`, `.resx`, gettext, `strings.xml`, a
+`t()` helper — whatever is actually there), reads three existing keys for
+the naming convention, and then specifies every string as a key plus its
+default-locale text, with plurals and arguments in the mechanism's own
+form. It appends localisation criteria to the feature spec — no hardcoded
+string, every locale has the key, counts use the plural form — so
+`devkit-implementer` adds entries to the locale files rather than typing
+English into a widget, `devkit-reviewer` names any literal that slipped
+through, and `devkit-ui-verify` drives a second locale where one ships.
+
+A project with no i18n mechanism gets plain copy and one line under Open
+design decisions. Adding i18n is a project decision; a UX spec doesn't
+introduce it through the back door, and it doesn't work against a project
+that already has it either — which is what a spec full of literal strings
+was doing.
+
+### Observability and performance — decided in the spec, not discovered in production
+
+A feature that works and cannot be debugged when it doesn't is half-built,
+and nothing in a spec's acceptance criteria said otherwise. Two sections in
+the spec template close that: `## Observability` says what the person on
+call sees - which events, with which fields, through the project's own
+logging or metrics mechanism, never a secret or a request body - and
+`## Performance budget` says the volume the feature must hold at and the
+latency it must meet there, as a number someone can measure.
+
+Both become criteria the loop gates on: `[observability]` marks one
+asserting the event or metric exists with the named fields, `[perf]` one
+asserting the budget at the budget's volume. `devkit-implementer` emits
+through what the project already uses. Nothing here requires a particular
+stack: OpenTelemetry, Prometheus, Datadog and Application Insights are
+project decisions, and most projects have structured logging long before
+they have a metrics pipeline. A signal the project has no mechanism for is
+handled one of two ways — if the project has *recorded a plan* for it (a
+`PROGRESS.md` milestone, an ADR), the criterion is specified in
+mechanism-neutral terms and deferred into `Tracked follow-ups` with that
+milestone as the unblock condition, so the feature ships with the logging
+it can have now and the metrics arrive already specified; if there is no
+mechanism *and* no plan, the implementer **stops** — picking a stack is an
+ADR, and an ad-hoc print statement is noise, not observability. `devkit-reviewer` checks the fields and the
+volume. `devkit-quality` reviews the diff's queries and loops against the
+budget's number, and says so when it had to pick one because the spec
+didn't.
+
+The plugin still ships no telemetry into your product. What it does is
+refuse to let "how will we know this works in production" go unasked.
 
 ### Tracked follow-ups — deferred work that can't vanish
 

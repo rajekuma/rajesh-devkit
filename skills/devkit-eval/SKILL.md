@@ -49,13 +49,25 @@ project, runs the component in an isolated session, and grades what was
 actually written and which tools actually ran.
 
 ```bash
-# The official runner. Works on macOS/Linux; on Windows it currently
-# mangles the scaffold path (see tests/run-evals.ps1's header).
+# One command on any OS: dispatches to the official runner on macOS/Linux,
+# or to the Windows bridge script (tests/run-evals.ps1) on Windows, where
+# claude plugin eval currently can't grant Bash to a case at all.
+node tests/run-evals.js
+node tests/run-evals.js --case 'ship-*' --keep-temp
+```
+
+Calling either underlying runner directly still works, if you need its full
+flag set:
+
+```bash
+# The official runner, called directly. Works on macOS/Linux; on Windows it
+# can't confine a Bash-granting run yet (see tests/run-evals.ps1's header).
 claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --max-cost-usd 15
 ```
 
 ```powershell
-# Windows bridge: same case files, driven through `claude -p --plugin-dir`.
+# The Windows bridge, called directly: same case files, driven through
+# `claude -p --plugin-dir` with its own isolation instead of the sandbox.
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-evals.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-evals.ps1 -Case 'ship-*' -KeepTemp
 ```
@@ -76,6 +88,7 @@ Some invariants decay silently when a file gets edited and don't show up as
 a failed case. Read each component and verify:
 
 - **Report-only components still say so.** `devkit-reviewer`,
+  `devkit-quality`, `devkit-security`, `devkit-ui-verify`,
   `devkit-dep-audit`, `devkit-ship` and `devkit-help` must each still state
   that they don't modify files. That sentence disappearing is a real
   behavioral change.
@@ -85,6 +98,11 @@ a failed case. Read each component and verify:
   the working tree. Grep for `git commit`, `git push`, `gh pr create` outside
   `devkit-deliver`; a second component gaining them is a real regression, and
   a silent one.
+- **Nothing tags, in any configuration.** `devkit-release` prepares a
+  release and ends with the tag command for a human; `devkit-deliver`
+  commits and pushes branches but never tags. Grep for `git tag` outside a
+  sentence that says "never" or shows the command as output; a component
+  that runs it has crossed the one line even `deliver` doesn't.
 - **`deliver` is still off by default.** `DEFAULT_STAGES` in
   `scripts/lib/devkit.js` must continue to exclude it. Installing this plugin
   must never be sufficient to grant commit-and-push in someone's repository —
@@ -95,15 +113,31 @@ a failed case. Read each component and verify:
   branch, merging, deleting a branch, or rewriting history. Those prohibitions
   disappearing from its body is the highest-severity drift in this plugin.
 - **Every component that ends in a verdict still defines its exact verdict
-  strings.** `devkit-reviewer` (ship / needs-changes / discuss) and
-  `devkit-ship` (clear / blocked / clear-with-unknowns). The orchestrator
-  routes on these; a reworded verdict silently breaks the routing.
-- **The handoff chain is unbroken.** `devkit-specify` → (`devkit-ux` if there's
-  a UI) → `devkit-implementer` → `devkit-reviewer` → `devkit-ship` →
-  `devkit-docs`. Each component should name what precedes and follows it.
-  Check `continue-loop.js`'s nudge messages name the same chain — the script
-  and the prompts drifting apart is the most likely failure here, because
-  they're edited at different times.
+  strings.** `devkit-reviewer` (ship / needs-changes / discuss),
+  `devkit-quality` (clean / needs-changes / discuss), `devkit-security`
+  (clear / blocked / clear-with-unknowns), `devkit-ui-verify` (matches /
+  mismatches / partly-unverified) and `devkit-ship` (clear / blocked /
+  clear-with-unknowns). The orchestrator and `devkit-ship` route on these;
+  a reworded verdict silently breaks the routing.
+- **The handoff chain is unbroken.** `devkit-specify` → (`devkit-ux` if
+  there's a UI) → (`devkit-datamodel` if stored data changes) →
+  `devkit-implementer` → (`devkit-ui-verify` if there's a UI) →
+  `devkit-reviewer` → `devkit-quality` → `devkit-security` → `devkit-ship` →
+  `devkit-docs` → (`devkit-release` at a Phase boundary) →
+  (`devkit-pipeline`) → (`devkit-deliver`, opt-in). Each component should
+  name what precedes and follows it. Check `continue-loop.js`'s `downstream()`
+  names the same chain in the same order, and that `ALL_STAGES` in
+  `scripts/lib/devkit.js` has one entry per stage — the script and the
+  prompts drifting apart is the most likely failure here, because they're
+  edited at different times.
+- **`devkit-ship` consumes every verdict the chain produces.** Its gate
+  table must have a row for each report-only stage that runs before it
+  (`security`, `quality`, `ui-verify`, `datamodel`), each following the same rule: a
+  verdict in the conversation is used, a stage that hasn't run is `UNKNOWN`,
+  a stage that doesn't apply is `PASS (not applicable)` with the reason.
+  A new verdict-producing component that ship doesn't know about is a
+  report somebody has to remember to read, which is the failure ship exists
+  to prevent.
 - **The escalation marker agrees everywhere.** `devkit-specify` writes it;
   `continue-loop.js` and `session-welcome.js` match it. If the written form
   and the matched form ever disagree, the gate fails open and silently. The
@@ -114,14 +148,25 @@ a failed case. Read each component and verify:
   improves the prose while dropping the triggers makes a component
   unreachable without changing a line of its body.
 
-## 4. Check the README hasn't drifted from the code
+## 4. Check the README and docs/SDLC.md haven't drifted from the code
 
 The README is long and documents real behavior — exit codes, state file
 paths, hook conditions, matcher semantics. After any change to a script,
 confirm the README still describes what the code does. A README that
 confidently documents the previous behavior is worse than one that says
-nothing, and this is the single most likely thing to be stale, because it's
-the file furthest from the change.
+nothing.
+
+`docs/SDLC.md` is worse-placed still: it is the file newcomers are pointed
+at, and the file furthest from any change. It once stated "nothing commits,
+pushes, tags" as a property of the whole toolkit for a full day after
+`devkit-deliver` existed, and drew a six-stage loop while the code had
+eleven. The static suite now fails when a component or stage name is absent
+from either document, but it cannot check a *claim* — read the "What is
+deliberately not automated" and "The loop at a glance" sections against the
+code every time a component is added or a boundary moves. `CHANGELOG.md`
+at the plugin root lists what changed and why; if the entry you are about to
+write there contradicts a sentence in either document, that sentence is the
+bug.
 
 ## 5. Report
 

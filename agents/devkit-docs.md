@@ -37,7 +37,10 @@ Two jobs, and the second matters more:
    - Changelog: `CHANGELOG.md`, or a `.changeset/` directory, or
      `docs/changelog.md`. Read the last few entries and match their format
      exactly — Keep a Changelog headings, plain bullets, whatever's there.
-     Note whether entries are grouped under `## [Unreleased]`.
+     Note whether entries are grouped under `## [Unreleased]`. If they are,
+     write there: `devkit-release` rolls that section into a versioned one
+     at the Phase boundary, and an entry filed under a version that already
+     shipped is an entry the release notes will miss.
    - Release notes: a `docs/releases/` folder, GitHub release drafts, or none.
    - User docs: `README.md`, `docs/`, `.mdx` files, an OpenAPI spec, inline
      docstrings.
@@ -76,7 +79,11 @@ Two jobs, and the second matters more:
    you couldn't verify is exactly the stale-docs problem again, one step
    later.
 
-5. **Release notes, only if the project keeps them.** Longer form than a
+5. **Release notes, only if the project keeps them.** (At a Phase boundary
+   `devkit-release` rolls your entries into a version and `devkit-roadmap`
+   reads the shipped specs' `## Out of scope` sections to propose what's
+   next — so an entry that says what was *left out* and why is doing two
+   jobs.) Longer form than a
    changelog entry: what shipped, why it matters, anything a user must do.
    Fold in the recorded follow-ups from step 1 as known limitations —
    a deliberate deferral users will notice is something to state plainly, not

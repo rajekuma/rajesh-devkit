@@ -18,6 +18,20 @@ gated" leaves the last mile manual forever.
 
 Do not start unless **all** hold. If any fails, say which and stop:
 
+0. **The `deliver` stage is enabled — check the file yourself, first.** The
+   Stop hook honours stage config and will never nudge toward you when the
+   stage is off, but a person can invoke you by name regardless, and "the
+   hook wouldn't have sent me here" is not a check. Read
+   `.claude/rajesh-devkit/devkit.local.json`, then `.claude/devkit.json`
+   (the first that exists and parses wins, same precedence as the hooks).
+   `deliver` must appear in its `stages` array. **No file at all means the
+   stage is off** — it is the one stage excluded by default — and a
+   malformed file means off too. When it's off: say so, say which file to
+   add `"deliver"` to, and stop **before running any git command that
+   writes**. Do not offer to do it anyway. Being asked directly is not the
+   same as the project having opted in; that opt-in is a committed,
+   reviewable decision, and the whole reason this component is safe to
+   install is that it cannot be granted by a sentence in a conversation.
 1. **The milestone passed review.** `devkit-reviewer` returned `ship`, not
    `needs-changes` or `discuss`.
 2. **The preflight is clear.** `devkit-ship` returned `clear`, or
@@ -101,7 +115,12 @@ that a human needs to look at. Stop and describe it.
    so a human decides how to reconcile.
 
 5. **At a Phase boundary — and only there — open the PR.** A Phase boundary
-   means the last milestone in that Phase just shipped. Mid-Phase, push and
+   means the last milestone in that Phase just shipped. If the `release`
+   stage is enabled, `devkit-release` has already run and the working tree
+   holds a version bump, a rolled-up changelog and release notes: those go
+   in the Phase's final commit, and the PR body links the new changelog
+   section. The tag does **not** happen here — not by you, not by anyone,
+   until the PR merges; `devkit-release` printed the command for a human. Mid-Phase, push and
    stop; a PR per milestone fragments review.
 
    The PR body summarises the **Phase**, not the last commit: what shipped
@@ -111,5 +130,8 @@ that a human needs to look at. Stop and describe it.
    auto-merge, do not request reviewers unless asked.
 
 6. **Report** the branch, the commits, the push result, and the PR URL if one
-   was opened. If you stopped at a precondition or a rejected push, lead with
+   was opened. At a Phase boundary, end with one line pointing at
+   `devkit-roadmap`: the Phase's specs, its deferred follow-ups and whatever
+   production has said since are the evidence for the next Phase, and this
+   is the moment they are all fresh. If you stopped at a precondition or a rejected push, lead with
    that — it's the only part that needs a decision.

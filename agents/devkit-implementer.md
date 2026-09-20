@@ -128,12 +128,45 @@ assuming anything.
 4. **For each unchecked acceptance criterion, in order:**
    - Write a test that captures it, in whichever test project/folder matches
      what you detected in step 2. No implementation code yet.
-   - **Honour the criterion's layer.** A criterion marked `[integration]`
-     must be proven at that layer — against the real database, the real
-     migration, the real HTTP boundary — never by a unit test with a
-     substitute standing in for the thing under test. If the integration
-     suite can't run here (no Docker, no connection string), **stop and say
-     so**; do not quietly satisfy it at a weaker layer and tick it. A
+   - **Honour the criterion's layer.** A criterion marked `[integration]`,
+     `[contract]` or `[e2e]` must be proven at that layer, never by a unit
+     test with a substitute standing in for the thing under test:
+     - `[integration]` — against the real database, the real migration, the
+       real queue, in whichever suite the project runs those in.
+     - `[contract]` — against the recorded contract the project keeps (an
+       OpenAPI schema it validates responses against, a Pact file, a golden
+       response fixture). If the project has no contract mechanism, that is
+       a finding, not a licence to write a unit test and tick it: say so,
+       and leave the criterion unticked.
+     - `[e2e]` — through the project's own end-to-end runner, driving the
+       full path. Same rule if there isn't one.
+     - `[observability]` — the test asserts the event or metric the spec's
+       `## Observability` section named, with the fields it named, through
+       the project's existing logging or metrics mechanism (a captured
+       logger, a metrics registry, a test sink). Emit through what the
+       project already uses. For a signal the project has no mechanism for:
+       if the spec says it is **deferred to a recorded milestone or ADR**,
+       record the criterion in `PROGRESS.md`'s `## Tracked follow-ups`
+       with that milestone as the unblock condition and leave it unticked —
+       the same deferral path any criterion takes, so `devkit-ship` sees
+       it as accounted for rather than missing. If the spec says there is
+       **no mechanism and no plan**, **stop** — choosing one is an ADR, and
+       an ad-hoc `console.log` is not observability, it is noise the next
+       person deletes. Never add OpenTelemetry, a metrics library, or any
+       observability dependency to satisfy a criterion; that is the decision
+       the stop exists to surface.
+     - A criterion from the UX spec's **Localisation** section — the test
+       asserts the key resolves through the project's mechanism, and you
+       add the string to the locale files, never to the widget. A
+       hardcoded string in a project with an i18n mechanism is a bug the
+       reviewer will name, however correct the English looks.
+     - `[perf]` — the test measures against the budget's number at the
+       budget's volume, in the suite the project runs such tests in. If no
+       such suite exists, say so and leave it unticked; a `[perf]` criterion
+       ticked by a test over ten rows proves nothing about ten thousand.
+     If the suite for that layer can't run here (no Docker, no connection
+     string, no device), **stop and say so**; do not quietly satisfy it at a
+     weaker layer and tick it. A
      criterion ticked by a test that never exercised the path production
      uses is the most expensive kind of green, because everything downstream
      now believes it. If a criterion is unmarked but you find it can only be

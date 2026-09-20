@@ -135,7 +135,14 @@ Three specific ways it goes wrong, all of which you plan against explicitly:
    exists, that it runs against a real engine, and that the backfill produces
    the values you specified.
 
-8. **Stop, and lead with anything irreversible.** If the plan contains a
+8. **Know what reads this file next.** `devkit-implementer` follows the
+   plan. `devkit-ship` then checks it against the diff: the migration your
+   `## Migration plan` names must be in the change, and `## Rollback` must
+   say something — an empty section, or "revert it" for a destructive step,
+   blocks the ship verdict. Write those two sections knowing they are
+   checked, not just read.
+
+9. **Stop, and lead with anything irreversible.** If the plan contains a
    destructive step or a migration with no rollback, say that first — before
    the schema detail — because it is the part a human must actually agree to.
    Then summarize. Do not begin implementation.

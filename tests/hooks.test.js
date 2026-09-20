@@ -405,7 +405,7 @@ test('a nudge never names a component whose stage is disabled', () => {
   // Not just the instructions - the explanatory asides too. A backend loop's
   // datamodel step once described itself as "the data-side counterpart to
   // devkit-ux", naming a stage that loop had switched off.
-  const ALL = ['specify', 'ux', 'datamodel', 'implementer', 'reviewer', 'ship', 'docs', 'pipeline'];
+  const ALL = ['specify', 'ux', 'datamodel', 'implementer', 'reviewer', 'quality', 'security', 'ship', 'docs', 'release', 'pipeline'];
   const stages = ['specify', 'datamodel', 'implement', 'review'];
   withStages(stages, { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } }, (dir) => {
     const r = runHook('continue-loop.js', dir);
@@ -473,4 +473,84 @@ test('the security stage is nudged when enabled, absent when not', () => {
       assert.doesNotMatch(runHook('continue-loop.js', dir).stderr, /devkit-security/);
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// A narrow loop is legitimate; a narrow loop nobody noticed was narrow is
+// not. The "UNKNOWN, never PASS" rule lives inside devkit-ship, so switching
+// ship off removes the one place an unrun check would have been reported.
+// The banner names what was switched off - once, at session start, without
+// blocking - so the omission is a choice rather than an oversight.
+// ---------------------------------------------------------------------------
+test('the banner names gate stages a loop switched off while implementing', () => {
+  withStages(['specify', 'implement'], { progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.strictEqual(r.exitCode, 0, 'the banner never blocks');
+    assert.match(r.stdout, /implement is on but review, security, ship are off/);
+    assert.match(r.stdout, /\.claude\/devkit\.json/, 'should say where to change it');
+  });
+});
+
+test('the banner stays quiet about gates when the loop does not implement', () => {
+  // A product owner's specify-and-docs loop skips every gate by design;
+  // there is no code to gate, so there is nothing to warn about.
+  withStages(['specify', 'docs'], { progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.doesNotMatch(r.stdout, /is on but/);
+  });
+  // And the full default chain has every gate on.
+  withFixture({ progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.doesNotMatch(r.stdout, /is on but/);
+  });
+});
+
+test('the banner names only the gates that are actually off', () => {
+  withStages(['implement', 'review', 'ship'], { progress: SAMPLE_PROGRESS }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.match(r.stdout, /implement is on but security is off/);
+    assert.doesNotMatch(r.stdout, /review, security/);
+  });
+});
+
+test('the quality stage is nudged after review and before security', () => {
+  withStages(
+    ['implement', 'review', 'quality', 'security'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } },
+    (dir) => {
+      const r = runHook('continue-loop.js', dir);
+      const i = (s) => r.stderr.indexOf(s);
+      assert.ok(i('devkit-quality') > 0, 'quality not nudged');
+      assert.ok(i('devkit-reviewer') < i('devkit-quality'), 'quality before review');
+      assert.ok(i('devkit-quality') < i('devkit-security'), 'security before quality');
+    }
+  );
+});
+
+test('the release stage is nudged after docs, and says it never tags', () => {
+  withStages(
+    ['implement', 'docs', 'release', 'deliver'],
+    { progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC } },
+    (dir) => {
+      const r = runHook('continue-loop.js', dir);
+      const i = (s) => r.stderr.indexOf(s);
+      assert.ok(i('devkit-release') > 0, 'release not nudged');
+      assert.ok(i('devkit-docs') < i('devkit-release'), 'release before docs');
+      assert.ok(i('devkit-release') < i('devkit-deliver'), 'deliver before release');
+      assert.match(r.stderr, /never tags/, 'the nudge must carry the one rule that matters');
+    }
+  );
+});
+
+test('an empty queue points at devkit-roadmap instead of a dead end', () => {
+  // "Add a row when you have one" was the open end of the loop. The moment
+  // the queue empties is when everything roadmap reads is freshest.
+  const allDone = SAMPLE_PROGRESS.replace(/\u{2B1C}/gu, '\u{2705}');
+  withFixture({ progress: allDone }, (dir) => {
+    const r = runHook('session-welcome.js', dir);
+    assert.strictEqual(r.exitCode, 0);
+    assert.match(r.stdout, /nothing queued/);
+    assert.match(r.stdout, /devkit roadmap/);
+    assert.match(r.stdout, /only when you approve/, 'must say it does not write rows unasked');
+  });
 });

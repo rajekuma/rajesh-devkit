@@ -93,21 +93,92 @@ repo's own files and the user's answers.
    What this deliberately does not cover, and why (deferred, already handled elsewhere,
    etc.). Keeps reviewers from scope-creeping the implementation.
 
+   ## Observability
+
+   What someone on call sees when this feature works, and when it doesn't. Answer it
+   from the operator's side, not the developer's: which **events** get logged (name,
+   the fields that make one searchable - the tenant, the entity id, the outcome, never
+   a secret or a full request body), which **metric** moves (a count, a duration, a
+   failure rate), and which **existing alert or dashboard** picks it up or needs a new
+   line. Use the mechanism this project already has - its logger, its metrics library,
+   its tracing - and name it, per signal: structured logging is usually there long
+   before metrics or tracing are (`ILogger`/Serilog, `logging`, `slog`, `log4j`,
+   Crashlytics), and "we have logs but no metrics pipeline yet" is a normal, honest
+   answer that this section states rather than glosses. Never require a specific
+   stack - OpenTelemetry, Prometheus, Datadog, Application Insights are project
+   decisions, not spec decisions. Three cases for a signal the project has no
+   mechanism for:
+   - **The project has recorded a plan for it** - a `PROGRESS.md` milestone ("Phase
+     14: OpenTelemetry"), an ADR, a roadmap row. Specify the events and metrics anyway,
+     in mechanism-neutral terms (the event name and fields, the metric and its unit),
+     and say "metrics: deferred to <that milestone>". The implementer will defer those
+     criteria into `Tracked follow-ups` with that milestone as the unblock condition,
+     so the feature ships with the logging it can have now and the metrics arrive when
+     the pipeline does, already specified.
+   - **No mechanism and no plan** - say so here and stop at that: picking one is an
+     ADR, not a spec decision, and the implementer will stop and ask rather than
+     inventing a `console.log` convention.
+   - **Genuinely nothing to observe** - a change nobody will ever need to debug in
+     production. Leave the section out and say why that is true.
+
+   ## Performance budget
+
+   Only when the feature reads a collection, calls something over a network, or runs
+   on a path a user waits on - and then always. The **volume** it must hold at (rows,
+   items, requests per minute - the realistic production number, not the test one),
+   and the **latency** or throughput it must meet there, stated as a number someone
+   can measure ("list under 300ms p95 at 10k tasks per user"). If the project has a
+   stated budget in an ADR or a convention file, that is the number. Everything in
+   `devkit-quality`'s performance pass is checked against this section; a spec with
+   no budget gets a performance review with no bar to fail.
+
    ## Acceptance criteria
 
    Concrete, testable statements — each should map to a test name someone could write
    today. Cover the happy path *and* at least one denial/negative case per boundary
    touched.
 
-   Prefix a criterion with `[integration]` when it **cannot honestly be proven in
-   isolation** — anything whose truth depends on a real database, a real migration, a
-   real HTTP boundary, or a second process. Leave it unmarked when a unit test genuinely
-   proves it. This is not ceremony: a criterion proven only against an in-memory
-   substitute is proven against something production does not run, and that gap ships
-   silently. Mark it and the implementer writes the test where it means something.
+   Prefix a criterion with the **test layer that honestly proves it** when that
+   layer is anything other than a unit test. Leave it unmarked when a unit test
+   genuinely proves it. Three markers, and they are not interchangeable:
+
+   - `[integration]` — truth depends on a real dependency this codebase owns:
+     a real database, a real migration, a real queue, a second process of
+     this system. "The migration applies cleanly to a populated table."
+   - `[contract]` — truth is an agreement with a **separately deployed**
+     consumer or provider: the mobile app that parses this response, the
+     partner API this calls, the webhook shape a customer integrates
+     against. The test is the recorded contract (an OpenAPI schema, a Pact
+     file, a golden response) and both sides run it. "The /tasks response
+     still carries every field the mobile client reads."
+   - `[e2e]` — truth is only visible from the outside, through the full
+     path a user takes: browser or device to API to database and back.
+     Reserve it for the few criteria that are genuinely about the whole
+     path; an `[e2e]` criterion that a unit test could prove is a slow,
+     flaky way of saying nothing.
+
+   This is not ceremony: a criterion proven only against an in-memory
+   substitute is proven against something production does not run, and that
+   gap ships silently. A criterion marked `[integration]` when it is really
+   a `[contract]` gets a Postgres-backed test that never leaves the process
+   and never sees the client that will break. Mark the layer and the
+   implementer writes the test where it means something.
+
+   Two more prefixes turn the sections above into things the loop gates on rather
+   than prose it reads once. `[observability]` marks a criterion asserting an event
+   or metric exists with the fields specified ("archive emits `task.archived` with
+   tenant_id, task_id, actor"). `[perf]` marks one asserting the budget is met
+   ("list returns under 300ms p95 with 10k tasks in the store"). Every
+   `## Observability` section produces at least one `[observability]` criterion;
+   every `## Performance budget` produces at least one `[perf]` criterion, and a
+   `[perf]` criterion is almost always also `[integration]` - a budget proven against
+   an in-memory fake is not proven. Write both markers.
 
    - [ ] ...
    - [ ] [integration] ...
+   - [ ] [contract] ...
+   - [ ] [observability] ...
+   - [ ] [integration] [perf] ...
    - [ ] ...
    ```
 
@@ -121,7 +192,16 @@ repo's own files and the user's answers.
    cost a review comment — it means a milestone that should have paused for
    a human decision gets automated straight through instead.
 
-5. **Interview, one question at a time.** For every section, fill in what you
+5. **Ask the on-call question, and the volume question, explicitly.** Two
+   questions the user rarely volunteers and the code never answers: "When
+   this fails at 3am, what does the person paged see, and what do they
+   search for?" fills `## Observability`. "How many of these will there be,
+   and how long may a user wait?" fills `## Performance budget`. Ask them
+   as questions, once each; a shrug is an answer ("no budget stated") and
+   goes in the section as such, so `devkit-quality` reviews against
+   "unstated" rather than against a number you invented.
+
+6. **Interview, one question at a time.** For every section, fill in what you
    can confidently infer from the code and docs you just read, and say what
    you're basing each inference on. For anything you can't confidently infer —
    the actual desired behaviour, edge-case decisions, what's deliberately out
@@ -141,12 +221,12 @@ repo's own files and the user's answers.
    consolidated question about the section's actual intent instead of
    individually defaulting every gap inside it.
 
-6. **Write the file.** Once every section has real content — no section left
+7. **Write the file.** Once every section has real content — no section left
    as a placeholder or a bare "TBD" — write the result to
    `specs/<kebab-case-feature>.md`, following the template's structure and
    section order exactly.
 
-7. **Stop, and lead with the sensitive flags if there are any.** If step 4
+8. **Stop, and lead with the sensitive flags if there are any.** If step 4
    marked one or more requirements `🔒 SENSITIVE:`, say so plainly as the
    first thing in your report — not buried after the spec content — and
    name which requirements and why: this milestone may warrant implementing

@@ -52,7 +52,7 @@ console.log(list(store));
 ```
 EOF
 
-# One criterion is unticked with no Tracked follow-ups entry: not implemented,
+# One criterion is unticked with no Tracked follow-ups row anywhere: not implemented,
 # not deliberately deferred, just missing. devkit-ship must block.
 cat > specs/task-completion.md <<'EOS'
 # Spec: Task completion

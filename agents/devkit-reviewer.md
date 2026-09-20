@@ -45,11 +45,22 @@ Steps:
    - Unmet or partially met acceptance criteria, with evidence.
    - Deferred criteria, each with the reason recorded in `PROGRESS.md`'s
      `## Tracked follow-ups` table.
-   - Any criterion marked `[integration]` in the spec whose test does not actually run
-     at that layer — a unit test with a substitute standing in for the real dependency
-     does not satisfy it, and ticking it anyway is a silent downgrade of what the spec
-     asked for. Check where the test lives and what it runs against, not just that a
-     test exists.
+   - Any criterion marked `[integration]`, `[contract]` or `[e2e]` in the spec
+     whose test does not actually run at that layer — a unit test with a substitute
+     standing in for the real dependency does not satisfy `[integration]`; a test
+     that never touches the recorded contract does not satisfy `[contract]`; a test
+     that enters below the user-facing surface does not satisfy `[e2e]`. Ticking it
+     anyway is a silent downgrade of what the spec asked for. Check where the test
+     lives and what it runs against, not just that a test exists.
+   - Any `[observability]` criterion whose event or metric is missing a field the
+     spec's `## Observability` section named, is emitted outside the project's own
+     logging/metrics mechanism, or carries something the section said never to log
+     (a secret, a full request body). Any `[perf]` criterion whose test runs at a
+     volume smaller than the budget states.
+   - In a project whose conventions or UX spec name an i18n mechanism, any
+     user-visible string the diff adds outside it — a literal in a widget, a
+     concatenated "${n} item(s)", an error message built inline. Cite the file and
+     line; the UX spec's localisation criteria are what this violates.
    - Correctness risks in the diff, with concrete evidence (file/line, failure
      scenario) — not vague impressions.
    - Any out-of-scope changes (diff touches things the spec doesn't call for).

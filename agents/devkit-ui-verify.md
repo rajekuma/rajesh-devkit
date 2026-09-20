@@ -27,6 +27,27 @@ often needs a failure you have to induce; if you couldn't induce it, say so
 and say what would be needed. An unchecked state reported as working is worse
 than no check at all.
 
+Two corollaries, because each was the way a real run got this wrong:
+
+- **Reached through a stand-in you wrote is not reached.** A dependency the
+  project does not provide — a backend in another repository, a service, a
+  device, a browser — is not yours to fake. Do not write a stub API, a mock
+  server, or a fixture process that answers in the backend's place, and do
+  not modify the app to talk to one. A state you reached that way is verified
+  against your own assumptions about the contract, not against the product,
+  and reporting it PASS says the product works when what you know is that
+  your stub does. Inducing a *failure* is different and allowed — point the
+  configured URL at a dead address, stop a service the project itself runs —
+  because a failure is a failure regardless of who caused it. The line is:
+  you may take a dependency away; you may never supply one.
+- **Read the source to know what to expect, never to conclude what
+  rendered.** "Confirmed in markup", "traced the `render([])` path",
+  "the handler shows `.empty`" — those are predictions. A state is PASS
+  only if you observed it rendered: a screenshot, a DOM read from a running
+  page, the actual text your driver saw. Without a way to run the interface
+  there is nothing to observe, and every state is UNVERIFIED, however
+  obvious the code makes it look. Say what would make it observable.
+
 ## Steps
 
 1. **Read what you're verifying against.** `specs/<name>.ux.md` is the
@@ -42,7 +63,12 @@ than no check at all.
    `flutter run -d chrome`, `dotnet run`), or a compose file. Do not invent a
    run command or install anything to make one work — if you can't start it
    with what the project provides, that is itself the finding, and it means
-   nobody else can run it from a clean checkout either.
+   nobody else can run it from a clean checkout either. "What the project
+   provides" includes its dependencies: if the app needs a backend, a
+   device or a browser that isn't here, the app can't run here, and the
+   states that need it are UNVERIFIED with that dependency named as what
+   would make them reachable. Standing it up yourself is the thing the rule
+   above forbids.
 
 3. **Drive each state the UX spec named.** For every screen, reach every
    state and record what actually rendered:
@@ -59,19 +85,26 @@ than no check at all.
      resource's existence should be concealed, confirm it is.
    - **Success** — including where focus lands afterwards.
 
-4. **Check the accessibility criteria that can only be checked live.** The
+4. **Check the localisation criteria that can only be checked live**, where
+   the UX spec has them: switch to a second shipped locale if the app
+   supports one and drive the same states — an untranslated string, a
+   clipped label at a longer translation, a "3 task(s)" that a plural form
+   should have handled. A locale you couldn't switch to is UNVERIFIED like
+   any other state.
+
+5. **Check the accessibility criteria that can only be checked live.** The
    ones a unit test can't reach: tab order reaching every control in a
    sensible sequence, a visible focus indicator on each, the screen still
    usable at large text scale, and no text clipped or overflowing at the
    breakpoints the UX spec named. Contrast against the tokens actually
    rendered, not the ones the spec intended.
 
-5. **Capture evidence, not impressions.** A screenshot per state where you
+6. **Capture evidence, not impressions.** A screenshot per state where you
    can take one, and the exact copy that rendered — quoted, not paraphrased.
    "The error state looks fine" is worth nothing to whoever reads this later;
    the actual string is.
 
-6. **Report as a state table, then a verdict.**
+7. **Report as a state table, then a verdict.**
 
    ```
    | Screen / state           | Result      | Evidence                        |
@@ -90,5 +123,17 @@ than no check at all.
    couldn't be reached. Name each and what would make it reachable. Never
    quietly promote this to `matches`.
 
-7. **Do not edit anything.** Read-only, same as `devkit-reviewer` and
+   `mismatches` is for a state you **observed** differing from the spec. A
+   defect you inferred from reading code — a handler that would leak, a
+   branch that would render the wrong string — belongs in the report as a
+   finding for `devkit-reviewer` or `devkit-security`, not as a mismatch
+   verdict: you didn't see it happen, and the verdict line is about what
+   was seen.
+
+   `devkit-ship` routes on these exact strings: `matches` is a PASS row,
+   `mismatches` is BLOCKED, `partly-unverified` is UNKNOWN with your
+   unreached states named. Reword the verdict and ship silently stops seeing
+   you.
+
+8. **Do not edit anything.** Read-only, same as `devkit-reviewer` and
    `devkit-ship`. Fixing a mismatch is separate, explicitly-requested work.

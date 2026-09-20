@@ -126,6 +126,13 @@ function downstream() {
   if (on('review')) {
     steps.push('invoke the devkit-reviewer subagent against the diff;');
   }
+  if (on('quality')) {
+    steps.push(
+      'invoke the devkit-quality subagent against the diff (design and performance - ' +
+        'layering drift, duplication, N+1 and unbounded reads, checked against this ' +
+        "project's own architecture rules; the reviewer checks the spec, not the shape);"
+    );
+  }
   if (on('security')) {
     steps.push(
       'invoke the devkit-security subagent against the diff (it checks code you wrote for ' +
@@ -136,13 +143,21 @@ function downstream() {
   if (on('ship')) {
     steps.push(
       'once review returns a ship verdict, run the devkit-ship subagent as a preflight ' +
-        '(CI, coverage, advisories, secrets, open follow-ups);'
+        '(CI, coverage, advisories, secrets, open follow-ups, and a row for every other ' +
+        "gate's verdict - one it has not seen is UNKNOWN, not a pass);"
     );
   }
   if (on('docs')) {
     steps.push(
       'then invoke the devkit-docs subagent to record what shipped and fix the ' +
         'documentation the change just made wrong;'
+    );
+  }
+  if (on('release')) {
+    steps.push(
+      'if this milestone closes a Phase, invoke the devkit-release subagent to decide the ' +
+        'version bump from what shipped, roll the changelog into a versioned section and ' +
+        'draft release notes (it never tags - it ends with the tag command for a human);'
     );
   }
   if (on('pipeline')) {

@@ -237,3 +237,95 @@ test('the integration-layer convention is stated in every component that acts on
     );
   }
 });
+
+test('README and docs/SDLC.md name every component and every stage', () => {
+  // docs/SDLC.md is the file newcomers are pointed at, and it is the file
+  // furthest from any change: five components landed in one morning and it
+  // mentioned two of them, while still stating a property (nothing commits)
+  // that one of the five had just made false. The README got updated because
+  // it sits next to the code; the walkthrough did not. So the walkthrough is
+  // now checked the same way the README is - a component or stage that
+  // exists in the code but not in both documents fails here.
+  const docs = {
+    'README.md': fs.readFileSync(path.join(PLUGIN_ROOT, 'README.md'), 'utf8'),
+    'docs/SDLC.md': fs.readFileSync(path.join(PLUGIN_ROOT, 'docs', 'SDLC.md'), 'utf8'),
+  };
+  const names = [];
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) {
+    if (f.endsWith('.md')) names.push(f.replace(/\.md$/, ''));
+  }
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'), { withFileTypes: true })) {
+    if (d.isDirectory()) names.push(d.name);
+  }
+  const { ALL_STAGES } = require(path.join(PLUGIN_ROOT, 'scripts', 'lib', 'devkit.js'));
+
+  for (const [doc, text] of Object.entries(docs)) {
+    for (const name of names) {
+      assert.ok(text.includes(name), `${doc} never mentions ${name}`);
+    }
+    for (const stage of ALL_STAGES) {
+      assert.ok(
+        new RegExp(`\`${stage}\``).test(text),
+        `${doc} never names the \`${stage}\` stage - a project cannot enable what the docs do not list`
+      );
+    }
+  }
+});
+
+test('no component runs git tag', () => {
+  // Tagging is the one git operation that stays human in every
+  // configuration - a tag is what registries and deploy pipelines act on
+  // the moment it exists. devkit-release prints the command; nothing runs
+  // it. This looks for "git tag" used as an instruction rather than shown
+  // as output or forbidden in a sentence: any line containing it must also
+  // contain "never", "not run", "for a human", or be inside a fenced block
+  // (the printed command).
+  const files = [];
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) files.push(path.join(PLUGIN_ROOT, 'agents', f));
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'))) {
+    const s = path.join(PLUGIN_ROOT, 'skills', d, 'SKILL.md');
+    if (fs.existsSync(s)) files.push(s);
+  }
+  files.push(...scriptFiles());
+  for (const f of files) {
+    const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/);
+    let fenced = false;
+    lines.forEach((line, n) => {
+      if (/^\s*```/.test(line)) fenced = !fenced;
+      // `git tag --list` / `-l` only reads; that is how release finds the
+      // current version. Everything else `git tag` does, writes.
+      if (fenced || !/git tag(?! (--list|-l)\b)/.test(line)) return;
+      assert.ok(
+        /never|not run|did not run|for a human|do not run|stays human|human action/i.test(line),
+        `${path.basename(f)}:${n + 1} mentions git tag as an instruction: ${line.trim()}`
+      );
+    });
+  }
+});
+
+test('README lists every component in "What this plugin is" AND in the model table', () => {
+  // "Mentioned somewhere" was not enough: six components existed only in
+  // the layout tree, and eight had no row in the model table, while the
+  // previous test passed. The two sections a reader actually uses to learn
+  // what a component is and what to run it on are checked separately.
+  const readme = fs.readFileSync(path.join(PLUGIN_ROOT, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
+  const section = (start, end) => {
+    const a = readme.indexOf(start);
+    assert.ok(a >= 0, `README lost its "${start}" heading`);
+    const b = readme.indexOf(end, a + start.length);
+    return readme.slice(a, b < 0 ? undefined : b);
+  };
+  const list = section('## What this plugin is', '## Repository layout');
+  const models = section('## Which model each component runs on', '### Skills inherit');
+  const names = [];
+  for (const f of fs.readdirSync(path.join(PLUGIN_ROOT, 'agents'))) {
+    if (f.endsWith('.md')) names.push(f.replace(/\.md$/, ''));
+  }
+  for (const d of fs.readdirSync(path.join(PLUGIN_ROOT, 'skills'), { withFileTypes: true })) {
+    if (d.isDirectory()) names.push(d.name);
+  }
+  for (const name of names) {
+    assert.ok(list.includes(`- \`${name}\` —`), `"What this plugin is" has no entry for ${name}`);
+    assert.ok(models.includes(`\`${name}\``), `the model table has no row naming ${name}`);
+  }
+});
