@@ -18,12 +18,18 @@ where the thing being checked is genuinely a judgment (did the report
 ## Running
 
 ```bash
-# From the plugin root. --scaffold is required: cases build their own fixtures.
-claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --max-cost-usd 15
+# From the plugin root. Dispatches to the official runner on macOS/Linux, or
+# to tests/run-evals.ps1 on Windows (see its header for why: the official
+# runner can't yet confine a Bash-granting run there).
+node tests/run-evals.js
 
 # One case while iterating on it
-claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --case reviewer-* --keep-temp
+node tests/run-evals.js --case reviewer-* --keep-temp
 ```
+
+Calling the official runner directly (`claude plugin eval . --scaffold
+--allow-tools Bash Write Edit --runs 1 --max-cost-usd 15`) works the same way
+on macOS/Linux and exposes its full flag set.
 
 Each run is a real Claude session on your credential. `--runs 1` while
 authoring; the default of 3 is better for catching flaky behavior once a

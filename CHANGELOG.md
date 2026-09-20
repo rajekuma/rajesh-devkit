@@ -13,6 +13,8 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-21
+
 ### Added
 
 - `devkit-roadmap`, the component that bends the loop into a circle. Both

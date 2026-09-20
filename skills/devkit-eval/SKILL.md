@@ -49,13 +49,25 @@ project, runs the component in an isolated session, and grades what was
 actually written and which tools actually ran.
 
 ```bash
-# The official runner. Works on macOS/Linux; on Windows it currently
-# mangles the scaffold path (see tests/run-evals.ps1's header).
+# One command on any OS: dispatches to the official runner on macOS/Linux,
+# or to the Windows bridge script (tests/run-evals.ps1) on Windows, where
+# claude plugin eval currently can't grant Bash to a case at all.
+node tests/run-evals.js
+node tests/run-evals.js --case 'ship-*' --keep-temp
+```
+
+Calling either underlying runner directly still works, if you need its full
+flag set:
+
+```bash
+# The official runner, called directly. Works on macOS/Linux; on Windows it
+# can't confine a Bash-granting run yet (see tests/run-evals.ps1's header).
 claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --max-cost-usd 15
 ```
 
 ```powershell
-# Windows bridge: same case files, driven through `claude -p --plugin-dir`.
+# The Windows bridge, called directly: same case files, driven through
+# `claude -p --plugin-dir` with its own isolation instead of the sandbox.
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-evals.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-evals.ps1 -Case 'ship-*' -KeepTemp
 ```
