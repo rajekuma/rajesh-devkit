@@ -19,7 +19,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
+const lease = require('./lib/lease');
+const { detectProvider, describeProvider } = require('./lib/provider');
 
 const hookInput = d.readStdinJson();
 
@@ -32,8 +35,16 @@ if (hookInput && hookInput.source && hookInput.source !== 'startup') process.exi
 const dir = d.projectDir();
 if (!dir) process.exit(0);
 
+const config = d.readStageConfig(dir);
+const provider = detectProvider();
+const providerLine = describeProvider(provider);
+
+// Appended to every banner below rather than printed on its own, so it rides
+// along with something worth reading. Silent on a stock Claude session; see
+// describeProvider.
 function say(text) {
-  process.stdout.write(`${text.trim()}\n`);
+  const body = text.trim();
+  process.stdout.write(`${providerLine ? `${body}\n\n${providerLine}` : body}\n`);
 }
 
 // This banner defers for the same reason continue-loop does, plus one of its
@@ -42,7 +53,7 @@ function say(text) {
 // will nudge automatically" - false precisely BECAUSE continue-loop deferred.
 // Say something short and true rather than nothing, since devkit-help invokes
 // this script directly and silence there would look broken.
-if (d.hasOwnLoopSkill(dir)) {
+if (!d.devkitOwnsLoop(dir, config)) {
   say(`
 rajesh-devkit: this project has its own spec-loop skill, so the Stop hook
 defers to it and will not nudge between milestones - that project's loop owns
@@ -51,6 +62,9 @@ its own stop conditions. Use it as you normally would.
 The report-only components still work on demand if you want them:
 devkit-reviewer (review the diff), devkit-ship (pre-ship preflight),
 devkit-dep-audit (dependency advisories), devkit-stats (timing and cost).
+
+To hand the loop to this plugin instead, add "loop": "devkit" to
+.claude/devkit.json - the project's own skill stays on disk as a fallback.
 `);
   process.exit(0);
 }
@@ -83,7 +97,6 @@ next instead of this.
   process.exit(0);
 }
 
-const config = d.readStageConfig(dir);
 const on = (stage) => d.stageEnabled(config, stage);
 // Named, not blocked: a loop that implements without review, security or
 // ship is legitimate, but the config file makes it look identical to one
@@ -95,12 +108,28 @@ const gateNote =
     : ` Note: implement is on but ${skipped.join(', ')} ${skipped.length === 1 ? 'is' : 'are'} off, ` +
       'so code this loop writes is called done without that check. If that is deliberate, ' +
       'ignore this; if not, add the stage to .claude/devkit.json.';
+// checkpointCommit's whole design assumes devkit-deliver squashes the `wip:`
+// run into the milestone commit at ship. With deliver off, nothing does -
+// the checkpoints simply accumulate on the branch, one per criterion, and
+// whoever commits next inherits a history nobody wanted. The combination is
+// still legitimate (someone may squash by hand, or want the trail), so this
+// names it rather than refusing it - same rule as the gate note above.
+const orphanCheckpointNote =
+  config.checkpointCommit && !d.stageEnabled(config, 'deliver')
+    ? ' Note: checkpointCommit is on but the deliver stage is off, so the per-criterion ' +
+      '`wip:` commits it makes will pile up with nothing to squash them - devkit-deliver ' +
+      'is what normally does that at ship. Squash them yourself before the milestone ' +
+      'commit, or turn one of the two off.'
+    : '';
+
 const stageLine =
   config.source === 'default'
     ? ''
-    : `\nLoop stages enabled here (${config.source}): ${config.stages.join(', ')}.` + gateNote;
+    : `\nLoop stages enabled here (${config.source}): ${config.stages.join(', ')}.` +
+      gateNote +
+      orphanCheckpointNote;
 
-const milestone = d.findNextMilestone(progressPath);
+const milestone = d.findNextMilestone(progressPath, config.parked);
 if (!milestone) {
   // An empty queue used to be a dead end - "add a row when you have one".
   // It is the one moment the loop can close on itself: what shipped, what
@@ -115,12 +144,137 @@ if (!milestone) {
   process.exit(0);
 }
 
+// Is somebody else already holding this milestone in this tree?
+//
+// Checked here, before any of the branches below, because every one of them
+// ends in an instruction to go and do the work - and "resume at criterion 4"
+// aimed at a milestone another session is four files into is the single most
+// expensive thing this banner can say. See lib/lease.js for the incident.
+//
+// Deliberately not a block. The session is told what was found and asked to
+// settle it with the owner; it is not stopped, and this hook does not try to
+// work out which of the two sessions has the better claim. It cannot know -
+// a second window opened on purpose looks identical from here to a collision.
+const sessionId = hookInput && typeof hookInput.session_id === 'string' ? hookInput.session_id : null;
+const transcript =
+  hookInput && typeof hookInput.transcript_path === 'string' ? hookInput.transcript_path : null;
+const ttl = lease.ttlMs(config);
+const worktree = lease.worktreeId(dir);
+
+// Everything from here to the exit is best-effort: a lease that cannot be read
+// or written leaves the banner exactly as it was before any of this existed.
+let conflict = null;
+try {
+  conflict = lease.findConflict({ dir, sessionId, milestone: milestone.display, worktree, ttl });
+} catch {
+  conflict = null;
+}
+
+function branchName() {
+  const r = spawnSync('git', ['branch', '--show-current'], { cwd: dir, encoding: 'utf8' });
+  if (r.error || r.status !== 0) return null;
+  return (r.stdout ?? '').trim() || null;
+}
+
+// Claimed whether or not a conflict was found. Standing down silently would
+// make this session invisible to the next one to arrive, which just moves the
+// same collision one session along.
+if (sessionId) {
+  lease.renew(
+    dir,
+    { sessionId, milestone: milestone.display, worktree, branch: branchName(), transcript },
+    { ttl }
+  );
+}
+
+if (conflict) {
+  say(
+    [
+      `rajesh-devkit: another session appears to be working ${milestone.display} in this same`,
+      `working tree right now.`,
+      ``,
+      ...lease.describeConflict(conflict),
+      `  this tree   ${worktree}`,
+      ``,
+      `So the usual "resume at criterion N" instruction is being withheld: acting on it`,
+      `would mean two sessions writing the same milestone from the same starting point,`,
+      `which is how the same file gets created twice and a test baseline goes stale`,
+      `without anyone noticing.`,
+      ``,
+      `Ask the owner which session should own ${milestone.display} before writing anything`,
+      `for it. If that other session is finished or dead, its claim clears by itself`,
+      `within ${Math.round(ttl / 60000)} minutes, or you can delete its entry from`,
+      `.claude/rajesh-devkit/${lease.LEASE_FILE}. If both sessions are wanted, give this`,
+      `one a different milestone - reading, reviewing and answering questions here are`,
+      `all fine.`,
+    ].join('\n')
+  );
+  process.exit(0);
+}
+
 const specPath = d.findSpecForMilestone(dir, milestone.number, milestone.name);
 
 const relSpec = specPath ? path.relative(dir, specPath).split(path.sep).join('/') : null;
 const uxMissing = specPath && on('ux') && !fs.existsSync(specPath.replace(/\.md$/, '.ux.md'));
+const specStatus = d.readSpecStatus(specPath);
 
-if (d.isSensitiveSpec(specPath) && on('implement')) {
+// The resume path, and the reason write-resume.js exists.
+//
+// A session killed by a usage limit gets no turn: no Stop hook, no summary,
+// no chance to write down where it was. The session that picks the work up
+// afterwards is a NEW one - a fresh window, another machine, or the same
+// work continued on a different provider - and it starts with no memory of
+// any of it. Resumption therefore cannot be a matter of remembering; it has
+// to be a matter of reading. This banner is that read: one file, written by
+// a hook after the last edit that actually happened, printed before anything
+// else is decided.
+const resume = (() => {
+  const raw = d.readFileOrNull(path.join(d.telemetryDir(dir), 'resume.json'));
+  if (raw === null) return null;
+  try {
+    const r = JSON.parse(raw);
+    // Only a checkpoint for the milestone that is actually next. A stale
+    // file describing something already shipped would send the session
+    // backwards, which is worse than having no checkpoint at all.
+    return r && r.milestone === milestone.display ? r : null;
+  } catch {
+    return null;
+  }
+})();
+
+if (resume && resume.started && resume.nextCriterion) {
+  const parts = [
+    `rajesh-devkit: picking up ${resume.milestone}, mid-flight.`,
+    ``,
+    `  spec        ${resume.spec ?? '(none)'}${resume.specStatus ? ` (${resume.specStatus})` : ''}`,
+    `  criteria    ${resume.criteria} ticked - resume at criterion ${resume.nextCriterion}`,
+    resume.branch ? `  branch      ${resume.branch}` : null,
+    `  tree        ${resume.dirty === null ? 'unknown' : resume.dirty ? 'dirty - uncommitted work from the last run' : 'clean'}`,
+    `  checkpoint  ${resume.updatedAt}, on ${resume.provider}`,
+    ``,
+    `Read that spec and continue from criterion ${resume.nextCriterion}. Do not restart the`,
+    `milestone or re-run finished criteria - the ticks and the working tree are`,
+    `the record of what is already done.${stageLine}`,
+  ].filter((l) => l !== null);
+  say(parts.join('\n'));
+  process.exit(0);
+}
+
+if (specStatus === 'draft' && on('implement')) {
+  say(`
+rajesh-devkit: next milestone is ${milestone.display} - its spec (${relSpec}) is
+still Status: Draft, so nothing should be built from it yet. Go through the
+spec with the owner and get it marked Approved (or changed) first; the loop
+picks up by itself once the header says Approved.${stageLine}
+`);
+} else if (specStatus === 'implemented') {
+  say(`
+rajesh-devkit: next milestone is ${milestone.display}, but its spec (${relSpec})
+already says Status: Implemented - so the tracker row is stale, not the work.
+Check the spec's criteria against the repo and fix whichever of the two is
+wrong. Do not re-implement it.${stageLine}
+`);
+} else if (d.isSensitiveSpec(specPath, config) && on('implement')) {
   say(`
 rajesh-devkit: next milestone is ${milestone.display} - its spec (${relSpec}) flags
 one or more requirements as SENSITIVE (an existing invariant, a

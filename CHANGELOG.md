@@ -13,6 +13,262 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Added
+
+- **The hooks can now tell whether another session is already live in the
+  same working tree.** Every piece of state this plugin kept answered *where
+  did the work get to* - `PROGRESS.md`'s `## In flight` block, the spec's
+  ticked criteria, `resume.json`, `git status` - and none of them answered
+  *is somebody holding it right now*. The hooks read the first as an answer
+  to the second.
+
+  What that cost, on 2026-09-22 at 21:37: `session-welcome.js` greeted a new
+  session with "picking up M28 - Expense Categories, mid-flight ... resume at
+  criterion 4" while another session, started nine minutes earlier in the
+  same tree, was already implementing M28. That session wrote
+  `ExpenseCategoryService.cs`, `ExpenseCategoryEndpoints.cs` and a 44-test
+  suite in the window, and added `app.MapExpenseCategoryEndpoints();` plus
+  its DI registration - the exact two lines the newly-greeted session had
+  independently diagnosed as missing and was about to write itself. Nothing
+  caught it. The second session happened to re-list a directory for an
+  unrelated reason and noticed a 25KB file that had not been there minutes
+  earlier; its `dotnet test` baseline was already stale when it read it.
+  `continue-loop.js` had the same blind spot and would have driven the loop
+  forward into the same collision.
+
+  Each session now publishes its presence to
+  `.claude/rajesh-devkit/session-lease.json`, beside `resume.json` and
+  gitignored by the same rule. `SessionStart` claims it, `PostToolUse` renews
+  on every edit, `Stop` renews at every pause. It holds a list rather than
+  one slot, because two sessions working *different* milestones in one tree
+  is legitimate and a single slot would make each evict the other.
+
+  Keyed on the harness's `session_id` rather than a pid - verified against a
+  live harness on `SessionStart`, `Stop` and `PostToolUse` rather than
+  assumed from documentation. A pid identifies the hook's own short-lived
+  child process, not the session, and pids are reused. `Get-Process claude`
+  was considered and rejected: Windows-only, which defeats the reason these
+  hooks are Node at all, and it cannot tell which repository a process
+  belongs to.
+
+  Liveness uses two independent signals, and a lease survives if either is
+  fresh: `renewedAt`, written by these hooks, and the mtime of the session's
+  transcript, which the harness appends to every turn. The second is the one
+  that mattered - `PostToolUse` only fires on an edit, so a session reading,
+  testing and diagnosing stops renewing, which is exactly what the session
+  that was *not* greeted had been doing.
+
+- **`sessionLeaseTtlMinutes` in `.claude/devkit.json`.** How long another
+  session's claim stays believable without a sign of life; 15 by default,
+  clamped to 1-240. A session killed by a usage limit gets no turn and so
+  never releases anything, and without expiry the fix would be worse than the
+  bug - a crashed session would lock the next one out of its own milestone
+  permanently. The clamp exists because `0` would switch detection off
+  silently and a huge value would recreate exactly that lockout.
+
+### Changed
+
+- **A detected collision surfaces evidence and asks; it never arbitrates.**
+  `session-welcome.js` withholds the "resume at criterion N" instruction and
+  prints the other session's id, branch, and how long ago it was last seen by
+  which signal. `continue-loop.js` exits 2 with the same evidence instead of
+  nudging the chain forward, and because a collision is not a nudge it burns
+  none of the eight and logs no `milestone_started`. Both end by asking the
+  owner which session owns the milestone.
+
+  Deliberately not a lock and not a verdict. Two sessions in one tree is
+  sometimes exactly what was intended - a second window reading while the
+  first builds - and from inside a hook that is indistinguishable from a
+  collision. A mechanism that guessed would be wrong in the legitimate case,
+  which is the more common one. Only one shape is treated as a conflict:
+  same worktree, same milestone, a different session, still alive. Same
+  session re-entering (a `/clear`, a `--resume`, a second `SessionStart`) is
+  not one; nor is a different git worktree, which `git rev-parse
+  --show-toplevel` makes true by construction rather than by luck; nor is a
+  different milestone in the same tree.
+
+### Fixed
+
+- **`appendTelemetry` no longer takes the Stop hook down with it.** Found by
+  writing the "state directory is unwritable" test for the lease work, in
+  code that predates it: the unguarded `fs.mkdirSync` threw straight out of
+  `continue-loop.js` when a file sat where `.claude/rajesh-devkit/` belongs,
+  so the hook exited 1 with a Node stack trace instead of 2 with its nudge -
+  silently costing the project its entire Stop loop over a state-directory
+  problem. A dropped telemetry line costs `devkit-stats` one data point; it
+  now fails open like every other write this plugin makes to its own state.
+
+
+## [0.4.0] - 2026-09-22
+
+Everything here came out of one exercise: installing this plugin into the
+project it was extracted from and trying to run a real milestone with it.
+Half of these are bugs only a real repository could have exposed, two of them
+found by deliberately killing a session mid-milestone and restarting it
+somewhere else. The fixture in `tests/helpers.js` was too tidy to catch any
+of them.
+
+### Fixed
+
+- **Milestone rows with an annotated status cell are no longer invisible.**
+  `milestoneRowPattern` required the status cell to contain the glyph and
+  nothing else, so a tracker that writes `| 28 | Expense Categories |
+  (glyph) spec Approved 2026-09-18 (...) |` had half its rows silently
+  unparsed. Measured on a real `PROGRESS.md`: 43 of 87 rows seen, and the
+  loop confidently nudged toward M42 while M28 was the actual next
+  milestone. Nothing failed loudly - it just worked on the wrong thing. The
+  annotation is now captured rather than merely tolerated, because a project
+  writes decisions in there.
+
+- **The escalation gate no longer re-fires on work already underway.** Its
+  "shown once per milestone" memory lives in OS temp, keyed by project path -
+  which does not survive either of the two cases this release exists to
+  support: picking the work up on another machine, or in a fresh session
+  after a usage limit. Found in the resume drill, on real data: a session
+  resuming M28 with 7 of its 36 criteria green was told `WRITE NO CODE YET`
+  and to go ask a human how to approach the milestone - about work a human
+  had already approved and seven passing tests already proved. Worse, it is
+  the one instruction guaranteed to stall a resumed run. A ticked criterion
+  is now taken as proof the gate's moment has passed, and unlike the temp
+  file the ticks travel with the work. An untouched sensitive milestone
+  still gates exactly as before.
+- **The session banner no longer announces a provider switch in every
+  ordinary session.** "Is this the default provider" was implemented as "is
+  `ANTHROPIC_BASE_URL` unset", and the Claude Code desktop app sets it to
+  `https://api.anthropic.com` itself - so the line printed always, which is
+  how a line earns being ignored and how a real switch goes unnoticed when
+  it happens. It now keys on what someone actually changed: a non-Anthropic
+  host, a gateway credential, or a remapped tier.
+
+- **An untouched milestone is no longer greeted as mid-flight.** 0 of 36
+  criteria ticked has a perfectly good "next criterion" - the first one -
+  so the resume banner announced "picking up M28, mid-flight" for a
+  milestone nobody had started. False, and the wrong instruction: it says
+  carry on, when the session should be running the gates that come before
+  the first line of code.
+
+- **The loop now says who closes a milestone out.** The closing step was
+  "then treat the milestone as done", which named nobody - every other step
+  hands work to a component that owns it, but this one assumed the
+  orchestrator would update the tracker on its own. When it does not,
+  nothing fails visibly: the row stays unfinished, so the Stop hook keeps
+  nudging work that is already complete, and `track-milestones` never logs
+  the "shipped" half of the telemetry pair, so `devkit-stats` can never
+  report that milestone at all. It now names the four files that make "done"
+  true, and - when `deliver` is off, which is the default - says plainly that
+  the loop does not commit, rather than leaving a session to decide that for
+  itself.
+- **`checkpointCommit` with `deliver` off is now named as the mismatch it
+  is.** The per-criterion `wip:` commits are squashed by `devkit-deliver` at
+  ship; with deliver off nothing squashes them and they accumulate on the
+  branch. Still legitimate - someone may squash by hand - so the banner names
+  it rather than refusing it, the same way it names gate stages a loop
+  switched off.
+
+- **A hook run outside the harness no longer hangs forever.** Every script here drains
+  stdin because the harness pipes a JSON payload and closes it - correct there, wrong on
+  the other path these scripts are used on. `devkit-help` runs `session-welcome.js`
+  directly, and if the invoking shell leaves stdin open the read waits for an EOF that
+  never arrives. Found by running devkit-help's own documented command while dogfooding:
+  it sat for a full two minutes and was killed. The skill said at the time that stdin was
+  "not required" and that running it with nothing piped in "is fine", which was simply
+  false. A terminal is now answered immediately, and the skill passes `< /dev/null` with
+  an explanation of why that redirect is load-bearing.
+
+### Added
+
+- **`"loop": "devkit"` in `.claude/devkit.json`**, to take the stop
+  conditions back from a project's own `spec-loop` skill. Detecting that
+  skill and standing down was right, but it was a one-way door: the project
+  this toolkit grew out of still has that skill, so installing the plugin
+  there did nothing at all, and the only way to try it was to delete the
+  fallback first. Both can now sit on disk with one of them driving.
+  `"loop": "project"` is the opposite switch. Absent, detection decides
+  exactly as before.
+- **The spec `Status:` header is now a gate, not decoration.** A project
+  whose workflow says "propose a spec and STOP for my approval" records that
+  approval in the spec's own header, and the loop walked straight past it -
+  a `Status: Draft` spec got the same implement-it nudge as an approved one.
+  Draft now produces a review-and-approve nudge and never an implementation
+  one; `Status: Implemented` under an unfinished tracker row reports a stale
+  row instead of rebuilding shipped work. A spec with no such header behaves
+  exactly as it always did. The Draft gate deliberately outranks the
+  sensitive-escalation gate, and does not consume it - there is no point
+  asking how to build something nobody has approved building.
+- **Parked rows.** A tracker that doubles as an idea list has rows that are
+  genuinely unstarted and genuinely not next: `| 29a | Expense Drafting
+  Assistant | (glyph) not spec'd - see product_vision.md |`. The loop stalled
+  on the first one forever, nudging for a spec the owner had deliberately
+  parked. They are now skipped by the loop and reported by `devkit-help` -
+  parked is not hidden, because a row skipped silently forever becomes
+  invisible debt. `parkedPattern` configures it.
+- **`sensitivePatterns`**, extra regexes ORed into the escalation gate. The
+  gate keyed on the literal `SENSITIVE:` marker `devkit-specify` writes,
+  which meant it never once fired in a project whose spec template predates
+  this plugin and flags the same five categories in prose ("Money is
+  `decimal`", "multi-tenancy", "an existing invariant"). Every money and
+  tenancy milestone there would have been auto-delegated. Configured
+  patterns can only make a fail-open gate fire more often, which is the safe
+  direction; a malformed one disables itself rather than taking the hook
+  down.
+- **`scripts/write-resume.js`, a machine-written resume checkpoint** on
+  `PostToolUse`, and the `SessionStart` banner that reads it back.
+
+  This is the one that matters for velocity. A hard usage-limit block gives
+  the session no turn at all: no `Stop` hook, no tidy-up, no summary. Until
+  now the only record of position was `PROGRESS.md`'s `## In flight` block,
+  which the *model* writes because it was told to - so its freshness assumed
+  nothing had gone wrong, which is exactly what a hard stop breaks. In
+  practice resumption also leaned on the session's own context surviving,
+  and that disappears the moment the work continues somewhere else: another
+  machine, or another provider after a limit.
+
+  `PostToolUse` is the one event that has already fired by then. Every field
+  in `resume.json` - milestone, spec, spec status, criteria ticked, next
+  criterion, branch, dirty tree, provider - is derived from the repo, so it
+  needs no cooperation from the model and can never be more than one edit
+  stale. A cold session now opens with "picking up M28, mid-flight, resume at
+  criterion 8" instead of a rediscovery pass.
+- **`profiles/`, for running the loop on another provider.** No component
+  here ever named a model - every subagent asks for a tier - so the four
+  alias variables plus `ANTHROPIC_BASE_URL` re-target the entire chain
+  without editing a single file in `agents/` or `skills/`. The profiles set
+  those variables; `profiles/check.js` verifies every configured model ID
+  still exists and prints today's price, because a stale ID does not fail at
+  launch, it fails at the first request halfway through a milestone.
+
+  Deliberately *not* added: a `model_mapping` block in config, or hooks that
+  try to switch models. A hook cannot change the provider - it is a child of
+  a process whose credentials were resolved before it existed - and a `Stop`
+  hook writing `/model X` to stderr does nothing, because that stderr is text
+  handed back to Claude, not a command the harness runs. Switching providers
+  is always: set the environment, start a new session. The resume checkpoint
+  above is what makes that cheap.
+- **`prices` in `.claude/devkit.json`**, so `devkit-stats` can cost a
+  milestone that ran on a gateway model. Without it every such token landed
+  in `unknownModelTokens` and the report read `$0.00` - a cost report that
+  says a run was free is worse than one that admits it does not know.
+- **`checkpointCommit`**, optional `wip(M<N>)` commits per green criterion,
+  squashed by `devkit-deliver` at ship. Off by default: per-criterion commits
+  are history noise. Worth it for a stop that outlasts the machine staying on
+  - a five-hour window, a laptop going home - because an uncommitted working
+  tree is a fine checkpoint right up until the machine holding it isn't
+  there.
+
+### Removed
+
+- `devkit-migration-guide.md`, a chat export that had been sitting in the
+  repo root. Its central advice was wrong in ways that would have cost a day
+  each: it proposed a Google AI Studio OpenAI-compatible endpoint (Claude
+  Code speaks the Anthropic Messages API and only that), a base URL ending in
+  `/v1` (which yields `/v1/v1/messages` and a 404 that reads like an auth
+  failure), a `model_mapping` config block duplicating a remapping mechanism
+  that already exists, and a `Stop` hook that switches models by writing
+  `/model` to stderr, which does nothing. The parts that were right are now
+  in the README, verified against the docs and against a live model
+  catalogue.
+
+
 ## [0.3.0] - 2026-09-21
 
 ### Added

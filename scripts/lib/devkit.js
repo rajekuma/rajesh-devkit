@@ -81,19 +81,84 @@ function readJsonOrNull(file) {
   }
 }
 
+// The default for a project that parks rows without saying how. Matches the
+// phrasing a tracker actually uses ("not spec'd", "not specced", "not
+// specified") rather than inventing a marker nobody would write.
+const DEFAULT_PARKED_PATTERN = "not spec(?:'?d|ced|ified)";
+
+// A regex from config is user input in a hook that must never crash: a bad
+// pattern disables itself and says so on stderr, it does not take the loop
+// down with it. Same failure direction as every other config read here.
+function compilePattern(source, label) {
+  if (typeof source !== 'string' || source.length === 0) return null;
+  try {
+    return new RegExp(source, 'u');
+  } catch (e) {
+    process.stderr.write(`devkit: ignoring malformed ${label} /${source}/ - ${e.message}\n`);
+    return null;
+  }
+}
+
+// The settings that are not the stage list, read from whichever config file
+// won. Split out so readStageConfig stays about stages and this stays about
+// everything else a project can say.
+function readExtras(cfg) {
+  const patterns = Array.isArray(cfg.sensitivePatterns)
+    ? cfg.sensitivePatterns.map((p) => compilePattern(p, 'sensitivePattern')).filter(Boolean)
+    : [];
+  return {
+    role: typeof cfg.role === 'string' ? cfg.role : null,
+    // Which loop owns this project's stop conditions. "devkit" means this
+    // plugin drives, even where a project-local loop skill exists - see
+    // ownsLoop.
+    loop: cfg.loop === 'devkit' || cfg.loop === 'project' ? cfg.loop : null,
+    checkpointCommit: cfg.checkpointCommit === true,
+    // How long another session's lease stays believable without a fresh sign
+    // of life. Left raw here and clamped in lib/lease.js, so the bounds live
+    // next to the reasoning about what a sane TTL is.
+    sessionLeaseTtlMinutes:
+      typeof cfg.sessionLeaseTtlMinutes === 'number' && Number.isFinite(cfg.sessionLeaseTtlMinutes)
+        ? cfg.sessionLeaseTtlMinutes
+        : null,
+    parked: compilePattern(
+      typeof cfg.parkedPattern === 'string' ? cfg.parkedPattern : DEFAULT_PARKED_PATTERN,
+      'parkedPattern'
+    ),
+    sensitivePatterns: patterns,
+    prices: cfg.prices && typeof cfg.prices === 'object' ? cfg.prices : {},
+  };
+}
+
 // Local overrides project, project overrides "everything on". An unreadable
 // or malformed file is treated as absent rather than fatal: a hook that
 // crashes on a typo in a config file is worse than one that runs the full
 // loop, which is the behaviour every project had before this existed.
+//
+// The stage list and the rest of the settings are read independently on
+// purpose: a config that only sets `loop` or `sensitivePatterns`, with no
+// `stages` key at all, used to be discarded wholesale because the stage
+// filter rejected it first. Saying one thing should not mean losing the
+// others.
 function readStageConfig(dir) {
+  let stageResult = null;
+  let extras = null;
+
   for (const [file, source] of [[CONFIG_LOCAL, 'local'], [CONFIG_PROJECT, 'project']]) {
     const cfg = readJsonOrNull(path.join(dir, file));
-    if (!cfg || !Array.isArray(cfg.stages)) continue;
+    if (!cfg) continue;
+    if (!extras) extras = readExtras(cfg);
+    if (stageResult) continue;
+    if (!Array.isArray(cfg.stages)) continue;
     const stages = cfg.stages.filter((s) => ALL_STAGES.includes(s));
     if (stages.length === 0) continue;
-    return { stages, source, role: typeof cfg.role === 'string' ? cfg.role : null };
+    stageResult = { stages, source };
   }
-  return { stages: [...DEFAULT_STAGES], source: 'default', role: null };
+
+  return {
+    stages: stageResult ? stageResult.stages : [...DEFAULT_STAGES],
+    source: stageResult ? stageResult.source : 'default',
+    ...(extras ?? readExtras({})),
+  };
 }
 
 function stageEnabled(config, stage) {
@@ -115,8 +180,22 @@ function skippedGates(config) {
   return GATE_STAGES.filter((s) => !stageEnabled(config, s));
 }
 
+// The harness pipes a JSON payload and closes the stream, so a blocking read
+// is correct there. It is NOT correct on the other path these scripts are
+// used: devkit-help runs session-welcome.js directly, and devkit-eval runs
+// hooks by hand. If the invoking shell leaves stdin open - an interactive
+// terminal, or a tool whose child inherits its pipe - readFileSync(0) waits
+// for an EOF that never comes, and the hook hangs until something times it
+// out. Measured, not theorised: a direct invocation sat there for the full
+// two minutes and was killed.
+//
+// A TTY can be answered immediately - nothing is ever arriving - so that case
+// returns empty rather than hanging. An inherited pipe is indistinguishable
+// from a slow harness at this level, so callers on the direct path redirect
+// from /dev/null; see the devkit-help skill.
 function readStdin() {
   try {
+    if (process.stdin.isTTY) return '';
     return fs.readFileSync(0, 'utf8');
   } catch {
     return '';
@@ -155,6 +234,19 @@ function hasOwnLoopSkill(dir) {
   return fs.existsSync(path.join(dir, '.claude', 'skills', 'spec-loop', 'SKILL.md'));
 }
 
+// Whether THIS plugin drives the loop here. Detection alone was too blunt:
+// the project this toolkit was extracted from still carries the spec-loop
+// skill it grew out of, so installing the plugin there did nothing at all -
+// every hook stood down and there was no way to say "drive anyway" short of
+// deleting the old skill and losing the fallback. `"loop": "devkit"` in
+// devkit.json is that switch, and it is opt-in: with no config, detection
+// wins exactly as before, so no existing project changes behaviour.
+function devkitOwnsLoop(dir, config) {
+  if (config && config.loop === 'devkit') return true;
+  if (config && config.loop === 'project') return false;
+  return !hasOwnLoopSkill(dir);
+}
+
 function readFileOrNull(file) {
   try {
     return fs.readFileSync(file, 'utf8');
@@ -171,15 +263,35 @@ function readLines(file) {
 
 // Matches a milestone table row against a set of status glyphs:
 //   | 13 | Blocks | <glyph> | ...
+//
+// The status cell is the glyph PLUS whatever annotation the project writes
+// after it. Requiring the glyph to stand alone was a real bug, not a nicety:
+// a tracker that writes "| 28 | Expense Categories | <glyph> spec Approved
+// 2026-09-18 (seeded system + custom) |" had half its rows silently
+// invisible to every hook here, and the loop nudged toward a milestone forty
+// rows further down. The annotation is captured (group 4) rather than
+// discarded, because "not spec'd" written there is how a project parks a row
+// the loop should skip - see findNextMilestone.
 function milestoneRowPattern(glyphs) {
   const alt = glyphs.map((g) => g).join('|');
-  return new RegExp(`^\\s*\\|\\s*([\\w.]+)\\s*\\|\\s*(.+?)\\s*\\|\\s*(${alt})\\s*(\\||$)`, 'u');
+  return new RegExp(
+    `^\\s*\\|\\s*([\\w.]+)\\s*\\|\\s*(.+?)\\s*\\|\\s*(${alt})\\s*([^|]*?)\\s*(\\||$)`,
+    'u'
+  );
 }
 
 // The first milestone that isn't finished: a table row marked not-started or
 // in-progress, or a plain `- [ ]` task line, whichever appears first.
 // Returns null when there's nothing queued, which is a normal outcome.
-function findNextMilestone(progressPath) {
+//
+// `parked` skips rows whose status annotation matches it. A tracker that
+// doubles as an idea list - "| 29a | Expense Drafting Assistant | <glyph>
+// not spec'd - see product_vision.md |" - has rows that are genuinely
+// unstarted and genuinely not next: nobody has decided to build them. The
+// loop would otherwise stall on the first such row forever, nudging toward a
+// spec for something the owner deliberately parked. They are skipped here
+// and reported by devkit-help instead, so parked is not the same as hidden.
+function findNextMilestone(progressPath, parked = null) {
   const lines = readLines(progressPath);
   if (!lines) return null;
   const rowRe = milestoneRowPattern([GLYPH.notStarted, GLYPH.hourglass]);
@@ -188,17 +300,40 @@ function findNextMilestone(progressPath) {
   for (const line of lines) {
     const row = line.match(rowRe);
     if (row) {
+      const note = (row[4] ?? '').trim();
+      if (parked && note && parked.test(note)) continue;
       const number = row[1];
       const name = row[2].trim();
-      return { number, name, display: `M${number} - ${name}` };
+      return { number, name, note, display: `M${number} - ${name}` };
     }
     const task = line.match(taskRe);
     if (task) {
       const name = task[1].trim();
-      return { number: null, name, display: name };
+      if (parked && parked.test(name)) continue;
+      return { number: null, name, note: '', display: name };
     }
   }
   return null;
+}
+
+// Every parked row, in tracker order - what findNextMilestone skipped and
+// why. Nothing acts on these; devkit-help reports them so a row that is
+// being passed over stays visible rather than becoming invisible debt.
+function findParkedMilestones(progressPath, parked) {
+  if (!parked) return [];
+  const lines = readLines(progressPath);
+  if (!lines) return [];
+  const rowRe = milestoneRowPattern([GLYPH.notStarted, GLYPH.hourglass]);
+  const out = [];
+  for (const line of lines) {
+    const row = line.match(rowRe);
+    if (!row) continue;
+    const note = (row[4] ?? '').trim();
+    if (note && parked.test(note)) {
+      out.push({ number: row[1], name: row[2].trim(), note, display: `M${row[1]} - ${row[2].trim()}` });
+    }
+  }
+  return out;
 }
 
 // Every milestone/task line with its done state, keyed so the same item is
@@ -264,10 +399,55 @@ function findSpecForMilestone(dir, milestoneNumber, milestoneName) {
   return null;
 }
 
-function isSensitiveSpec(specPath) {
+// The canonical marker, plus whatever else this project's specs use to say
+// the same thing. devkit-specify writes "SENSITIVE:", but a project with its
+// own spec template predating this plugin flags the same five categories in
+// prose - "Money is `decimal`", "multi-tenancy", "an existing invariant" -
+// and the gate silently never fired on any of it. Configured patterns are
+// ORed in rather than replacing the marker, so adding one can only make the
+// gate fire more often, never less. That is the safe direction: this gate
+// fails open, and a false positive costs one question.
+function isSensitiveSpec(specPath, config = null) {
   if (!specPath) return false;
   const text = readFileOrNull(specPath);
-  return text !== null && SENSITIVE_MARKER.test(text);
+  if (text === null) return false;
+  if (SENSITIVE_MARKER.test(text)) return true;
+  const extra = (config && config.sensitivePatterns) || [];
+  return extra.some((re) => re.test(text));
+}
+
+// A spec's own `Status: Draft | Approved | Implemented` header, if it has
+// one. Returns null when the spec uses no such convention, which is not an
+// error - most projects don't, and a loop that demanded one would refuse to
+// run in them. Only the first few lines are read, because that is where the
+// convention puts it and scanning the body would match prose.
+function readSpecStatus(specPath) {
+  const lines = specPath ? readLines(specPath) : null;
+  if (!lines) return null;
+  for (const line of lines.slice(0, 6)) {
+    const m = line.match(/\bStatus:\s*\**\s*(Draft|Approved|Implemented)\b/i);
+    if (m) return m[1].toLowerCase();
+  }
+  return null;
+}
+
+// How far through its acceptance criteria a spec is, counted from the
+// checkbox ticks the implementer writes as it goes. Returns null when the
+// spec has no checkbox list at all. This is the honest measure of progress
+// on disk: it survives a session dying mid-criterion, because the tick was
+// written the moment the test went green, not at the end.
+function countCriteria(specPath) {
+  const lines = specPath ? readLines(specPath) : null;
+  if (!lines) return null;
+  let total = 0;
+  let done = 0;
+  for (const line of lines) {
+    const m = line.match(/^\s*-\s*\[( |x|X)\]\s+\S/);
+    if (!m) continue;
+    total += 1;
+    if (m[1] !== ' ') done += 1;
+  }
+  return total === 0 ? null : { done, total };
 }
 
 // Idempotently ensures one line exists in the host project's .gitignore, so
@@ -291,12 +471,24 @@ function telemetryDir(dir) {
   return path.join(dir, TELEMETRY_SUBDIR);
 }
 
+// Best-effort, like every other write this plugin makes to its own state
+// directory. It was not, and a test written for the session-lease work found
+// it: with a file sitting where `.claude/rajesh-devkit/` belongs, the
+// unguarded mkdir threw straight out of continue-loop, which exited 1 with a
+// Node stack trace instead of 2 with its nudge - so a state-directory problem
+// silently cost the project its entire Stop loop. A dropped telemetry line
+// costs devkit-stats one data point.
 function appendTelemetry(dir, event, milestone, timestamp = new Date().toISOString()) {
-  const outDir = telemetryDir(dir);
-  fs.mkdirSync(outDir, { recursive: true });
-  ensureGitignoreEntry(dir);
-  const line = JSON.stringify({ event, milestone, timestamp });
-  fs.appendFileSync(path.join(outDir, 'telemetry.jsonl'), `${line}\n`, 'utf8');
+  try {
+    const outDir = telemetryDir(dir);
+    fs.mkdirSync(outDir, { recursive: true });
+    ensureGitignoreEntry(dir);
+    const line = JSON.stringify({ event, milestone, timestamp });
+    fs.appendFileSync(path.join(outDir, 'telemetry.jsonl'), `${line}\n`, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Nudge-counter state lives outside the repo (OS temp) so it never gets
@@ -341,11 +533,15 @@ module.exports = {
   readStdinJson,
   projectDir,
   hasOwnLoopSkill,
+  devkitOwnsLoop,
   readFileOrNull,
   readLines,
   findNextMilestone,
+  findParkedMilestones,
   readMilestoneStatuses,
   findSpecForMilestone,
+  readSpecStatus,
+  countCriteria,
   isSensitiveSpec,
   ensureGitignoreEntry,
   telemetryDir,

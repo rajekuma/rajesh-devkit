@@ -30,6 +30,45 @@ const PRICING = {
   'claude-fable-5-1': { input: 10.0, output: 50.0, cacheRead: 0.25 },
 };
 
+// A project can price models this table has never heard of - anything served
+// through a gateway - by adding a `prices` map to .claude/devkit.json:
+//
+//   "prices": { "qwen/qwen3-coder": { "input": 0.3, "output": 1.0 } }
+//
+// Same units ($ per million tokens). cacheRead defaults to a tenth of input,
+// the general convention, since most gateways do not publish one separately.
+//
+// This exists because the moment a milestone runs on a gateway, every token
+// it spent fell into unknownModelTokens and the cost line read $0.00 - and a
+// report that says a run was free is worse than one that admits it does not
+// know what the run cost. `node profiles/check.js` prints current list prices
+// to copy from.
+function readConfiguredPrices(projectDir) {
+  for (const rel of [
+    ['.claude', 'rajesh-devkit', 'devkit.local.json'],
+    ['.claude', 'devkit.json'],
+  ]) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(path.join(projectDir, ...rel), 'utf8'));
+      if (!cfg || !cfg.prices || typeof cfg.prices !== 'object') continue;
+      const out = {};
+      for (const [model, p] of Object.entries(cfg.prices)) {
+        const input = Number(p && p.input);
+        const output = Number(p && p.output);
+        // A half-specified price would produce a confidently wrong number,
+        // which is the one outcome worse than "unknown". Skip it.
+        if (!Number.isFinite(input) || !Number.isFinite(output)) continue;
+        const cacheRead = Number.isFinite(Number(p.cacheRead)) ? Number(p.cacheRead) : input * 0.1;
+        out[model] = { input, output, cacheRead };
+      }
+      return out;
+    } catch {
+      // Absent or malformed: try the next file, then fall back to none.
+    }
+  }
+  return {};
+}
+
 function parseArgs(argv) {
   const out = {};
   const alias = {
@@ -184,6 +223,8 @@ function round(n, places) {
   return Math.round(n * f) / f;
 }
 
+const CONFIGURED_PRICES = readConfiguredPrices(args.projectDir);
+
 let totalCost = 0;
 const byModel = [];
 for (const [model, r] of results) {
@@ -191,10 +232,10 @@ for (const [model, r] of results) {
   // dated-snapshot suffix (e.g. "claude-haiku-4-5-20251001") that an exact
   // match against this table's bare keys would miss - found for real: 1.9M
   // haiku tokens silently fell into unknownModelTokens before this existed.
-  let p = PRICING[model];
+  let p = PRICING[model] ?? CONFIGURED_PRICES[model];
   if (!p) {
     const stripped = model.replace(/-\d{8}$/, '');
-    if (stripped !== model) p = PRICING[stripped];
+    if (stripped !== model) p = PRICING[stripped] ?? CONFIGURED_PRICES[stripped];
   }
 
   let modelCost = null;
