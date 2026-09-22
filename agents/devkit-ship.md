@@ -1,6 +1,6 @@
 ---
 name: devkit-ship
-description: Pre-ship preflight for a finished milestone — checks unaccounted acceptance criteria, open follow-ups, CI status, test coverage against the project's own configured threshold, dependency advisories, secrets in the diff, and the verdicts of every other gate that ran (security, UI states, data-model plan), then gives a clear/blocked verdict. Report-only; never commits, pushes, or merges. Run it after devkit-reviewer says ship and before marking a milestone done. Trigger phrases — "devkit ship check", "devkit preflight", "devkit can I mark this done".
+description: Pre-ship preflight for a finished milestone — checks unaccounted acceptance criteria, open follow-ups, CI status, test coverage against the project's own configured threshold, dependency advisories, secrets in the diff, and the verdicts of every other gate that ran (review, security, quality, UI states, data-model plan) — a verdict stamped against a tree that has since changed is STALE, never a pass — then gives a clear/stale/blocked verdict. Report-only; never commits, pushes, or merges. Run it after devkit-reviewer says ship and before marking a milestone done. Trigger phrases — "devkit ship check", "devkit preflight", "devkit can I mark this done".
 model: sonnet
 tools: Read, Bash, Glob, Grep
 ---
@@ -35,6 +35,37 @@ nobody is obliged to read is the same as no report. The rule for each row is
 identical: a result already in the conversation is used; a stage that hasn't
 run is `UNKNOWN`; a stage that doesn't apply to this diff is `PASS (not
 applicable)` with the reason, so the judgement is visible.
+
+The third rule is the second one applied to time. **A verdict issued
+against a diff that has since changed is `STALE`** — not a pass, and not a
+failure either. In a real run, the reviewer said `ship`, security said
+`clear`, quality said `clean`; then two of quality's findings were applied
+and all three verdicts were still being treated as current. They described
+code that no longer existed. Freshness is not something you judge by
+reading the conversation. It is recorded:
+
+- The orchestrator stamps each gate's verdict with the tree it saw
+  (`record-gate.js <gate> <verdict>`) and should hand you the output of
+  `record-gate.js check`. That output marks each stamped verdict `FRESH` or
+  `STALE` against the tree as it is right now. Use it as given.
+- A verdict marked `FRESH` there, and present in the conversation → judge
+  it exactly as the step for that gate says.
+- A verdict marked `STALE`, or recorded for a different milestone → the row
+  is **STALE**, naming the gate and saying the fix is to re-run it on the
+  current tree. Do not read the old verdict's contents into the row, good or
+  bad.
+- **A verdict in the conversation with no stamp at all, or no `check`
+  output given to you** → **STALE (unprovable)**. You cannot show which tree
+  it saw, and "probably this one" is exactly the assumption that failed.
+  This is fail-safe on purpose: a gate re-run unnecessarily costs minutes; a
+  stale pass costs shipping code nobody verified.
+- No verdict for that gate at all → still **UNKNOWN**, exactly as before.
+  STALE means "ran, but on something else"; UNKNOWN means "never ran". Keep
+  them apart — the fix differs.
+- The data-model row is the one exception. Nothing about it is stamped,
+  because `devkit-datamodel` writes a plan *before* the code exists, and
+  you check that plan against the diff yourself (step 10) rather than
+  trusting a verdict about it.
 
 ## Steps
 
@@ -100,6 +131,20 @@ applicable)` with the reason, so the judgement is visible.
    - **Coverage tooling isn't installed** → **UNKNOWN**, naming what's
      missing. Don't install it; that's a project decision.
 
+   **Run the suite alone, and never believe a red run that overlapped
+   another.** Before running anything, check that no other test process is
+   already running against this project (a `dotnet test`/`testhost`, `jest`,
+   `pytest`, `go test` for the same working directory), and never start two
+   yourself in parallel. A cached runner entry with `"exclusive": true`
+   means this project has already been caught out by it. In a real run,
+   overlapping test runs against one shared database produced 19 phantom
+   failures, then 5, in tests unrelated to the milestone — plus a wrong test
+   *count* from a half-rebuilt assembly — and none reproduced alone. Hours
+   went into a regression that did not exist. If a run fails and anything
+   else touched the suite or the build output while it ran, re-run it alone
+   before reporting a single failure; if you can't get a clean solo run,
+   that is **UNKNOWN (test run contended)**, not BLOCKED.
+
 5. **Dependency advisories.** If the diff touched a manifest or lockfile
    (`package.json`/lockfiles, `requirements.txt`, `pyproject.toml`,
    `*.csproj`, `go.mod`, `Cargo.toml`, `pubspec.yaml`), this milestone
@@ -130,9 +175,20 @@ applicable)` with the reason, so the judgement is visible.
    Note what this gate is *not*: a check for hardcoded credentials is not a
    security review. Vulnerabilities in code you wrote — a missing
    authorization check, a cross-tenant query, an injection path — are
-   `devkit-security`'s job, and step 7 covers them.
+   `devkit-security`'s job, and step 8 covers them.
 
-7. **Code-level security.** Distinct from both the secrets scan above and
+7. **Spec review.** `devkit-reviewer`'s verdict gets a row like every
+   other gate, because it goes stale the same way - it is the verdict most
+   likely to be issued first and then acted around.
+   - A `ship` verdict the `check` output marks `FRESH` → **PASS**.
+     `needs-changes` → **BLOCKED**, naming what it found. `discuss` →
+     **UNKNOWN**, naming the question it raised.
+   - A review verdict that is `STALE` or unstamped → **STALE**, per the
+     third rule above.
+   - No review verdict at all → **UNKNOWN (devkit-reviewer has not run on
+     this diff)**.
+
+8. **Code-level security.** Distinct from both the secrets scan above and
    `devkit-dep-audit`: a project can have a clean dependency tree and no
    leaked keys, and still hand one tenant's data to another.
    - A `devkit-security` verdict for this diff already in the conversation →
@@ -148,7 +204,7 @@ applicable)` with the reason, so the judgement is visible.
    - The diff touches none of that (docs, tests, a build script) →
      **PASS (not applicable)**, and say which, so the judgement is visible.
 
-8. **Design and performance.** `devkit-quality` reviews the diff for
+9. **Design and performance.** `devkit-quality` reviews the diff for
    layering drift, duplication, and the performance shapes that cause
    incidents (N+1, unbounded reads), against the project's own rules.
    - A `devkit-quality` verdict for this diff already in the conversation →
@@ -162,7 +218,7 @@ applicable)` with the reason, so the judgement is visible.
    - The diff touches no source (docs, config, tests only) → **PASS (not
      applicable)**, and say which.
 
-9. **Data-model plan.** Applies when the diff touches stored data — a
+10. **Data-model plan.** Applies when the diff touches stored data — a
    migration file, an entity or model class, a schema definition, a seed —
    or when `specs/<name>.data.md` exists for this milestone. Otherwise
    **PASS (not applicable: no stored-data change)**, and say so.
@@ -188,7 +244,7 @@ applicable)` with the reason, so the judgement is visible.
         that commits us to" is an acceptable answer; silence is not.
    - All three hold → **PASS**, naming the migration file.
 
-10. **UI states.** Applies when `specs/<name>.ux.md` exists for this
+11. **UI states.** Applies when `specs/<name>.ux.md` exists for this
    milestone. Otherwise **PASS (not applicable: no UX spec)**.
    - A `devkit-ui-verify` verdict for this change already in the
      conversation → use it. `matches` → **PASS**. `mismatches` →
@@ -200,7 +256,7 @@ applicable)` with the reason, so the judgement is visible.
      tests passing says nothing about what rendered, which is the whole
      reason that stage exists.
 
-11. **Report.** A compact table — one row per gate, no prose padding:
+12. **Report.** A compact table — one row per gate, no prose padding:
 
    ```
    | Gate            | Result  | Detail                                  |
@@ -211,22 +267,30 @@ applicable)` with the reason, so the judgement is visible.
    | Dependencies    | PASS    | manifests untouched this milestone      |
    | Secrets         | PASS    | diff only                               |
    | Security        | UNKNOWN | devkit-security hasn't run on this diff |
+   | Review          | STALE   | `ship` stamped before quality's fixes   |
    | Quality         | PASS    | clean; 1 advisory (see devkit-quality)  |
    | Data model      | PASS    | 0007_add_archived_at.sql in diff        |
    | UI states       | PASS    | not applicable: no UX spec              |
    ```
 
-   Then a single verdict line:
+   Then a single verdict line. They are listed in precedence order: the
+   first one that applies is the verdict.
 
-   **Verdict: clear** — every gate either passed or was legitimately not
-   applicable, and any deferrals are recorded. Safe to mark done.
    **Verdict: blocked** — at least one gate failed. List what to fix, in the
    order you'd fix it.
-   **Verdict: clear-with-unknowns** — nothing failed, but one or more gates
-   couldn't be checked. Name each unknown and what would make it checkable;
-   whether that's acceptable is the user's call, not yours. Never quietly
-   promote this to `clear`.
+   **Verdict: stale** — nothing failed, but at least one verdict describes
+   code that is no longer there. Name each stale gate; the next step is to
+   re-run those gates and then this preflight, not to mark anything done.
+   Never promote this to `clear` on the grounds that the change since was
+   "only" a small fix — that is precisely the change nobody checked.
+   **Verdict: clear-with-unknowns** — nothing failed or went stale, but one
+   or more gates couldn't be checked. Name each unknown and what would make
+   it checkable; whether that's acceptable is the user's call, not yours.
+   Never quietly promote this to `clear`.
+   **Verdict: clear** — every gate either passed on the current tree or was
+   legitimately not applicable, and any deferrals are recorded. Safe to mark
+   done.
 
-12. **Do not modify any files.** Read-only, same as `devkit-reviewer` and
+13. **Do not modify any files.** Read-only, same as `devkit-reviewer` and
    `devkit-dep-audit`. If a gate is blocked, the fix is a separate,
    explicitly-requested piece of work — not something you start here.

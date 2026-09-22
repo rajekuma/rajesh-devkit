@@ -10,6 +10,7 @@
 
 const d = require('./lib/devkit');
 const lease = require('./lib/lease');
+const gates = require('./lib/gates');
 
 const NUDGE_CAP = 8;
 
@@ -24,6 +25,12 @@ if (!dir) process.exit(0);
 
 const path = require('path');
 const fs = require('fs');
+
+// Absolute, because the session has no ${CLAUDE_PLUGIN_ROOT} of its own - only
+// hooks get that - and a command it cannot locate is an instruction it will
+// quietly skip. Forward slashes so it survives being pasted into bash on
+// Windows, where a backslash inside double quotes can be eaten.
+const RECORD_GATE = path.join(__dirname, 'record-gate.js').split(path.sep).join('/');
 
 const config = d.readStageConfig(dir);
 const on = (stage) => d.stageEnabled(config, stage);
@@ -264,11 +271,32 @@ function downstream() {
         'dependencies, which is a different question);'
     );
   }
+  // The chain above read as one-way - gate, gate, gate, ship - and that was
+  // the bug, not the wording. In the M28 run three gates passed, two of
+  // quality's findings were applied, and all three verdicts rode on toward
+  // ship describing a diff that no longer existed. Say what happens after a
+  // gate's findings are acted on, and give the orchestrator a way to prove
+  // which verdicts still describe the tree (lib/gates.js).
+  const stamped = ['ui-verify', 'review', 'quality', 'security'].filter(on);
+  if (stamped.length > 0) {
+    steps.push(
+      `as each of those gates (${stamped.join(', ')}) returns, stamp its verdict against ` +
+        `the tree it just saw: \`node "${RECORD_GATE}" <gate> <verdict>\`. A verdict describes ` +
+        'the diff its gate saw, not the one you have after acting on it: if you apply any ' +
+        "gate's findings, or change code for any other reason, every verdict stamped before " +
+        'that edit is STALE - re-run those gates on the current tree instead of carrying the ' +
+        'old verdicts forward. The chain is gates, fixes, gates again, until a round passes ' +
+        `with no edits after it; \`node "${RECORD_GATE}" check\` says which are stale;`
+    );
+  }
   if (on('ship')) {
     steps.push(
       'once review returns a ship verdict, run the devkit-ship subagent as a preflight ' +
-        '(CI, coverage, advisories, secrets, open follow-ups, and a row for every other ' +
-        "gate's verdict - one it has not seen is UNKNOWN, not a pass);"
+        `and give it the output of \`node "${RECORD_GATE}" check\` (CI, coverage, ` +
+        "advisories, secrets, open follow-ups, and a row for every other gate's verdict - " +
+        'one it has not seen is UNKNOWN, and one stamped against a tree that has since ' +
+        `changed is STALE; neither is a pass), then stamp its own verdict with \`node ` +
+        `"${RECORD_GATE}" ship <verdict>\`;`
     );
   }
   if (on('docs')) {
@@ -306,6 +334,18 @@ function downstream() {
     // track-milestones never logs the "shipped" half of the telemetry pair,
     // so devkit-stats can never report this milestone at all. Say what "done"
     // actually means, in files.
+    //
+    // And check the stamps one last time first: a fix applied AFTER ship is
+    // the worst version of the stale-verdict bug, because nothing downstream
+    // re-runs anything - the milestone is simply marked done over code no
+    // gate saw.
+    if (stamped.length > 0 || on('ship')) {
+      steps.push(
+        `before closing out, run \`node "${RECORD_GATE}" check\` once more; if any verdict ` +
+          'went STALE because code changed after its gate ran, re-run that gate (and any ' +
+          'preflight after it) first, and do not mark the milestone done on a stale verdict;'
+      );
+    }
     steps.push(
       'then close the milestone out: mark its row done in PROGRESS.md (matching the ' +
         'glyph and inline-note style the other rows already use), add an entry to the ' +
@@ -398,9 +438,36 @@ if (showEscalation) {
         `resume at criterion ${criteria.done + 1} rather than starting over, and check the ` +
         'working tree for the one that was in progress.'
       : '';
+  // The half of the stale-verdict check that needs nobody to remember it.
+  // Recording a verdict is the orchestrator's job, but once one IS recorded,
+  // every stop re-judges it against the tree, so a fix applied after the
+  // gates cannot slide past unmentioned. Only computed when this milestone
+  // has stamps at all - hashing the tree on every stop of a project that
+  // never records anything would be cost with no reader. Silent on any
+  // error: devkit-ship still refuses to pass an unprovable verdict, so a
+  // failure here loses the early warning, not the gate.
+  let staleNote = '';
+  try {
+    const recorded = gates.readGates(dir);
+    if (Object.values(recorded).some((e) => e.milestone === milestone.display)) {
+      const stale = gates
+        .check(dir, { milestone: milestone.display })
+        .results.filter((r) => r.state === 'stale' && r.recordedMilestone === milestone.display)
+        .map((r) => `${r.gate} (${r.verdict})`);
+      if (stale.length > 0) {
+        staleNote =
+          ` The verdicts recorded for this milestone from ${stale.join(', ')} are STALE: ` +
+          'the tree has changed since they were issued, so they no longer vouch for this ' +
+          'code. Re-run those gates on the current tree before any preflight, and do not ' +
+          'mark the milestone done on them.';
+      }
+    }
+  } catch {
+    staleNote = '';
+  }
   message =
     `Next milestone from PROGRESS.md: ${milestone.display}. Its spec is at ${specPath}.` +
-    `${progress} ` +
+    `${staleNote}${progress} ` +
     next.join(' ');
 }
 

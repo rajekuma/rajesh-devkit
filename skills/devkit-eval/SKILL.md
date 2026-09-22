@@ -116,9 +116,15 @@ a failed case. Read each component and verify:
   strings.** `devkit-reviewer` (ship / needs-changes / discuss),
   `devkit-quality` (clean / needs-changes / discuss), `devkit-security`
   (clear / blocked / clear-with-unknowns), `devkit-ui-verify` (matches /
-  mismatches / partly-unverified) and `devkit-ship` (clear / blocked /
-  clear-with-unknowns). The orchestrator and `devkit-ship` route on these;
+  mismatches / partly-unverified) and `devkit-ship` (clear / stale / blocked
+  / clear-with-unknowns). The orchestrator and `devkit-ship` route on these;
   a reworded verdict silently breaks the routing.
+- **A stale verdict is never a pass.** `devkit-ship` must still say that a
+  verdict stamped against a tree that has since changed, or one with no
+  stamp at all, is `STALE` — and `continue-loop.js`'s `downstream()` must
+  still say that applying a gate's findings means re-running the gates.
+  Losing either puts the loop back to treating a verdict about old code as
+  current, which is how M28 nearly shipped over two unreviewed edits.
 - **The handoff chain is unbroken.** `devkit-specify` → (`devkit-ux` if
   there's a UI) → (`devkit-datamodel` if stored data changes) →
   `devkit-implementer` → (`devkit-ui-verify` if there's a UI) →

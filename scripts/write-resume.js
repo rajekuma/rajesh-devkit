@@ -36,7 +36,36 @@ const { detectProvider } = require('./lib/provider');
 const hookInput = d.readStdinJson();
 
 const dir = d.projectDir();
-if (!dir) process.exit(0);
+if (!dir) {
+  // Said out loud, where every other hook here stays silent, because this
+  // one's silence is misleading: a hand-run with no harness environment
+  // writes nothing, and the resume.json already on disk keeps reading as if
+  // it were current. That nearly produced a reading of "4/36" for a
+  // milestone that was 36/36 - `updatedAt` was the only clue, and nobody
+  // looks at a timestamp when the file looks plausible. The harness always
+  // sets CLAUDE_PROJECT_DIR, so this can only ever print on a manual run:
+  // no noise in the loop itself.
+  const lines = [
+    'write-resume: CLAUDE_PROJECT_DIR is not set (or not a directory), so nothing was written. ' +
+      'This hook is meant to run under the harness; set CLAUDE_PROJECT_DIR to run it by hand.',
+  ];
+  const guess = d.readFileOrNull(path.join(process.cwd(), '.claude', 'rajesh-devkit', 'resume.json'));
+  if (guess !== null) {
+    let when = 'an unknown time';
+    try {
+      const at = JSON.parse(guess).updatedAt;
+      if (typeof at === 'string') when = at;
+    } catch {
+      /* a corrupt checkpoint is still worth pointing at */
+    }
+    lines.push(
+      `The resume.json in this directory was NOT refreshed - it describes the tree as of ${when}, ` +
+        'not as it is now.'
+    );
+  }
+  process.stderr.write(`${lines.join('\n')}\n`);
+  process.exit(0);
+}
 
 const config = d.readStageConfig(dir);
 

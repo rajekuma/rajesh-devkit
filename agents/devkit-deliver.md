@@ -36,7 +36,11 @@ Do not start unless **all** hold. If any fails, say which and stop:
    `needs-changes` or `discuss`.
 2. **The preflight is clear.** `devkit-ship` returned `clear`, or
    `clear-with-unknowns` that a human accepted. **Never deliver on
-   `blocked`** — that gate exists precisely to stop this step.
+   `blocked`** — that gate exists precisely to stop this step. **Nor on
+   `stale`**, and nor on a `clear` issued before the last edit to the tree:
+   `record-gate.js check` saying ship's own verdict is STALE means code
+   changed after the preflight, and committing it commits something no gate
+   saw.
 3. **The working tree contains what you think it does.** `git status` and
    `git diff --stat` first. Unexpected files are somebody's in-progress work,
    not yours to sweep into a commit.

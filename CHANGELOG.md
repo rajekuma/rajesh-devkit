@@ -66,7 +66,120 @@ reader six months from now cannot recover from the diff.
   permanently. The clamp exists because `0` would switch detection off
   silently and a huge value would recreate exactly that lockout.
 
+- **A gate verdict is stamped with the tree it saw, and a stale one is never
+  a pass.** In M28 `devkit-reviewer` returned `ship`, `devkit-security`
+  `clear`, `devkit-quality` `clean`; the orchestrator then applied two of
+  quality's findings - an edit to `ExpenseCategoryService.ListAsync` and a
+  docstring - and carried on toward ship with all three verdicts treated as
+  current. They described a diff that no longer existed. `devkit-ship` caught
+  it only because it happened to re-run the suite after the edits; the same
+  fix applied after ship would have been marked done over code nothing
+  verified.
+
+  `scripts/record-gate.js <gate> <verdict>` stamps a verdict with a content
+  hash of the working tree (committed, staged, unstaged and untracked, minus
+  `.gitignore`), computed through a throwaway git index so the user's own
+  staging is never touched; `record-gate.js check` re-hashes and marks each
+  stamp FRESH or STALE. Stored in `.claude/rajesh-devkit/gates.json`,
+  gitignored with the rest. Computed on demand rather than maintained by the
+  `PostToolUse` hook, because that hook fires only on `Edit`/`Write` and an
+  edit made through Bash would slip past it.
+
+  Fails safe by construction: FRESH only when the stamp provably matches.
+  A changed tree, another milestone's verdict, no git, and - the case that
+  matters - a verdict with no stamp at all are all STALE. A gate re-run
+  unnecessarily costs minutes; a stale pass costs shipping unverified code.
+  `devkit-datamodel` is deliberately not stamped: its plan predates the
+  code, so its stamp would always read stale and teach everyone to ignore
+  the word.
+
+- **`devkit-ship` has a `STALE` result and a `stale` verdict, and a Review
+  row.** STALE is kept apart from UNKNOWN - "ran, but on something else"
+  versus "never ran" - because the fix differs. The verdict ranks below
+  `blocked` and above `clear-with-unknowns`, and is never promoted to
+  `clear` on the grounds that the change since was "only" a small fix: that
+  is precisely the change nobody checked. The reviewer's verdict now gets a
+  row like every other gate, since it is the one most likely to be issued
+  first and acted around afterwards. The UNKNOWN discipline is untouched: an
+  unrun gate is still UNKNOWN, never PASS.
+
+- **`"exclusive": true` in a `test-runners.json` entry.** Marks a suite that
+  must never run concurrently with itself, with a one-line
+  `"exclusiveReason"`. In M28 overlapping runs against one shared PostgreSQL
+  database produced 19 phantom failures, then 5, in tests the milestone never
+  touched (`MyUnitsTests`, `OccupancyTests`), plus a wrong test count from a
+  half-rebuilt assembly, and a stray `testhost.exe` stalled `dotnet build` on
+  file locks twice. None reproduced alone; hours went into a regression that
+  did not exist. `devkit-implementer` writes the flag once it learns this;
+  `devkit-onboard` seeds it when the project's own docs say so.
+
 ### Changed
+
+- **The chain says what happens after a gate's findings are applied.**
+  `continue-loop.js`'s `downstream()` read as one-way - gate, gate, gate,
+  ship - and that implication was the actual bug. It now says to stamp each
+  verdict, that any edit after a verdict makes it stale, and that the loop
+  runs gates, fixes, gates again until a round passes with no edits after
+  it; it hands `devkit-ship` the `check` output, and asks for one last
+  `check` before the milestone is closed out, which is what catches a fix
+  applied after ship. The command is named by absolute path, because the
+  session has no `${CLAUDE_PLUGIN_ROOT}` of its own.
+
+  And the Stop hook re-judges every stamp recorded for the current milestone
+  at each stop, naming any that went stale - the half that needs nobody to
+  remember anything. It hashes the tree only when the milestone has stamps,
+  so a project that never records pays nothing. `devkit-deliver` refuses a
+  `stale` preflight.
+
+- **`devkit-implementer` knows what to do with a test against a type that
+  does not exist yet.** A project rule that a compile error is not a valid
+  RED - common, and the host project's own - collides with every greenfield
+  entity, because the first test cannot compile. The resolution M28 used, now
+  taught: a skeleton that compiles and implements none of the rules, so the
+  failures are behavioural (10 failed, 4 passed there), then implement.
+  Without it an agent either fakes the RED or abandons the discipline.
+
+- **Batching RED-GREEN is allowed, under stated conditions, and always
+  disclosed.** M28's implementer wrote a 31-test endpoint surface, confirmed
+  a genuine RED (all 404), implemented the service in one pass, and said so
+  unprompted; the reviewer judged the coverage per-criterion. The outcome was
+  fine, but the prompt never said whether that was allowed, so the next run
+  might batch where it is wrong. Now: one named grain, a genuine RED for the
+  whole batch before any implementation, and every criterion ending with a
+  test that fails on its own regression - never across domain rules whose
+  tests each say something new. The disclosure is now required rather than
+  left to luck.
+
+- **Neither `devkit-implementer` nor `devkit-ship` runs two test processes
+  at once, and neither believes a red run that overlapped another.** A
+  surprising red is re-run alone before it is called a regression; ship
+  reports a suite it cannot get a clean solo run of as UNKNOWN, not BLOCKED.
+
+- **`devkit-reviewer` reviews the working tree, and re-checks each finding
+  before reporting it.** In M28 its only concrete finding was a stale `"32
+  leaves"` comment in `ExpenseCategorySeed.cs` that had been corrected in
+  the working tree before the review began - it had read a committed copy.
+  Being the only specific finding, it was the one a reader skimming the
+  verdict would have acted on, and it was not real. The change under review
+  is now stated as the committed diff plus the uncommitted working tree, and
+  every specific finding is re-read against current contents first.
+
+- **The README says Claude Code must be started *in* the project.** The whole
+  dogfooding session ran from `C:\Dev` against a plugin installed
+  `--scope project` in `C:\Dev\MyHomeMaintenance`: none of its agents,
+  skills or hooks loaded, `claude plugin list` said **enabled** throughout,
+  and hand-running the hook scripts with `CLAUDE_PROJECT_DIR` set masked it
+  for hours, until delegating to `devkit-implementer` failed with "Agent type
+  not found". Install now says so plainly, says that `plugin list` is not
+  evidence and the session's available-agents list is, and says when
+  `--scope user` is the better choice. The most expensive thing to get wrong
+  when onboarding a second machine or another person, and nothing said it.
+
+- **The `ship-unknown-not-pass` eval no longer tells ship that review
+  already passed.** Under the new rule an unstamped claim like that is
+  STALE, which would have turned an eval about UNKNOWN into one about STALE.
+  With the claim gone the review row is UNKNOWN (never ran) and the expected
+  verdict is still `clear-with-unknowns`. Not re-run since the change.
 
 - **A detected collision surfaces evidence and asks; it never arbitrates.**
   `session-welcome.js` withholds the "resume at criterion N" instruction and
@@ -97,6 +210,16 @@ reader six months from now cannot recover from the diff.
   silently costing the project its entire Stop loop over a state-directory
   problem. A dropped telemetry line costs `devkit-stats` one data point; it
   now fails open like every other write this plugin makes to its own state.
+
+- **A hand-run of `write-resume.js` no longer leaves a stale checkpoint
+  looking current.** Without `CLAUDE_PROJECT_DIR` it exited 0 silently, so a
+  manual run wrote nothing and the existing `resume.json` still read as
+  fresh; `updatedAt` was the only clue, and it nearly produced a reading of
+  "4/36" for a milestone that was 36/36. It now says on stderr that nothing
+  was written and, if there is a `resume.json` in the current directory,
+  which moment it actually describes. Still exits 0. The harness always sets
+  the variable, so this can only ever print on a manual run - no noise in
+  the loop.
 
 
 ## [0.4.0] - 2026-09-22

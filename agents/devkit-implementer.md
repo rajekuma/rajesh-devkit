@@ -44,9 +44,10 @@ assuming anything.
    own convention for per-machine, per-project cached facts — same folder
    its telemetry lives in, see the plugin's README). It's an array of
    `{"area": ..., "command": ..., "workingDirectory": ..., "detectedFrom": ...}`
-   entries, one per stack in a monorepo. If an entry's `area` matches what
-   this criterion touches, **use its `command` verbatim** — skip straight to
-   step 4.
+   entries, one per stack in a monorepo, optionally with `"exclusive": true`
+   and an `"exclusiveReason"` (this suite must never run concurrently with
+   itself — see step 4). If an entry's `area` matches what this criterion
+   touches, **use its `command` verbatim** — skip straight to step 4.
 
    **`area` is derived, never invented.** It is the stack's own directory,
    relative to the repo root, with the literal string `root` when the stack
@@ -174,6 +175,21 @@ assuming anything.
      wrong, and that's worth one sentence rather than a silent downgrade.
    - Run it and confirm it fails for the right reason — the behaviour is
      genuinely missing, not a typo, bad fixture, or compile error (RED).
+
+     **A test against a type that does not exist yet.** For a brand-new
+     entity, service or endpoint, the first test cannot compile — the type
+     isn't there — and a project rule that a compile error is not a valid
+     RED (a common one) collides with that on every greenfield feature.
+     Don't fake the RED, and don't abandon the discipline. Write the type as
+     a **skeleton that compiles but implements none of the rules**: the
+     class, its public signatures and the constructor the tests need, with
+     bodies that return a default or throw `NotImplemented`. Then run: the
+     failures are now behavioural, not structural. In M28 this turned a
+     wall of compile errors into 10 failing and 4 passing — the four being
+     tests of behaviour the skeleton's defaults already happened to satisfy,
+     which is worth one look each to confirm they are not testing nothing.
+     The skeleton is scaffolding for the RED, not an implementation: it
+     contains no rule the spec states.
    - Write the minimum code to make it pass, then run that test *and* the
      full suite for whatever's affected (GREEN — no regressions elsewhere).
      "Minimum" means minimum *scope* — implement what the criterion actually
@@ -214,6 +230,53 @@ assuming anything.
      working tree is a perfectly good checkpoint right up until the machine
      holding it isn't there. If the key is absent, don't commit: the tree is
      the checkpoint.
+
+   **Batching RED-GREEN across several criteria is allowed, under three
+   conditions — and only then.** Criterion-at-a-time is the default. But
+   sometimes several criteria are one unit of code: 32 endpoint criteria
+   over a single resource, say, where writing one route at a time would be
+   ceremony rather than information. In M28 exactly that was done — the full
+   31-test surface written, a genuine RED confirmed (every test failing 404,
+   because no route existed), then the service implemented in one pass — and
+   the reviewer judged the resulting coverage genuinely per-criterion. So:
+   1. **Name the grain, and it must be one unit.** "One resource's
+      endpoints", "one validator's rules". Not "the rest of the spec" and not
+      two unrelated components at once; if you can't name the grain in a
+      few words, don't batch.
+   2. **Confirm a genuine RED for the whole batch before writing any
+      implementation**, for the right reason in every test — the same bar as
+      a single criterion. A batch where some tests were never seen failing
+      is not batched RED-GREEN, it is tests written after the fact.
+   3. **Every criterion still ends with its own test that fails specifically
+      when that criterion regresses.** One broad test that happens to cover
+      five criteria does not count for five. If you break the behaviour of
+      criterion 12 on purpose, a test named for criterion 12 must go red.
+   Do not batch across a domain rule whose tests would each tell you
+   something new — business rules, validation edges, anything `SENSITIVE:`.
+   There, the discipline of one failure at a time is the point.
+
+   **Always disclose a batch, unprompted**, in your report: which criteria,
+   the grain, and the RED you saw (e.g. "31 tests, all failing 404"). The
+   M28 implementer did exactly this — "flagging it explicitly rather than
+   silently presenting it as 32 independent RED-GREEN cycles" — and that
+   disclosure is what let the reviewer check it. A batch reported as
+   separate cycles is misreporting the process, whatever the coverage says.
+
+   **Never run two test processes against this project at once, and never
+   believe a red run that overlapped another.** Not two suites in parallel,
+   not a build while a suite runs, not a run while one you started earlier
+   is still alive. In M28 this cost hours twice over: `dotnet build` stalled
+   on file locks from a stray `testhost.exe`, and overlapping runs against
+   one shared database produced 19 phantom failures, then 5, in tests the
+   milestone never touched — plus a wrong test count from a half-rebuilt
+   assembly. None reproduced alone. Before running, check nothing else is
+   (a lingering test host counts); after a surprising red, re-run **alone**
+   before calling it a regression or changing any code for it. If you learn
+   the hard way that this project's tests cannot share a machine with
+   themselves, record it in its `test-runners.json` entry as
+   `"exclusive": true` with an `"exclusiveReason"` of one line (e.g. "one
+   shared Postgres database; parallel runs corrupt each other's fixtures"),
+   so every later run — yours and `devkit-ship`'s — knows before it starts.
 
 5. **Never modify a test just to make it pass.** If a criterion is ambiguous,
    or a test looks wrong once you see the real code, stop and report the
@@ -262,7 +325,9 @@ assuming anything.
 
 7. **When every criterion is addressed** (or you've stopped on a genuine
    ambiguity), report back: which criteria are now covered, **which layer each
-   was proven at** (and loudly if any was proven lower than its mark), which
+   was proven at** (and loudly if any was proven lower than its mark), **any
+   batch** of criteria taken through RED-GREEN together (the grain and the RED
+   you saw — see step 4), which
    tests were added, full suite status, and anything left ambiguous or deliberately
    deferred with your reasoning — naming the follow-up entries you just wrote,
    so the prose report and the spec agree. Do not invoke a reviewer yourself — that's

@@ -57,6 +57,11 @@ user confirms.
    stack. That's `devkit-implementer`'s own cache format, and seeding it here
    means the first milestone doesn't spend its opening moves rediscovering
    this. Create the folder if needed; it's gitignored per-machine data.
+   If what you read says the suite cannot run concurrently with itself — a
+   single shared test database, fixed ports, a "run tests serially" note in
+   `CLAUDE.md` or the CI config — add `"exclusive": true` and a one-line
+   `"exclusiveReason"` to that entry. Overlapping runs of such a suite
+   produce phantom failures that look exactly like regressions.
 
    **`area` is derived, never invented** — it is the stack's own directory
    relative to the repo root, with the literal string `root` when the stack
