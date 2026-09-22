@@ -336,12 +336,60 @@ claude --plugin-dir /path/to/rajesh-devkit
 Useful for trying it against a project before committing to it, and the way
 `tests/run-evals.ps1` loads the plugin under test.
 
-**Updating.** `claude plugin marketplace update rajesh-devkit` refreshes the
-catalog; `claude plugin install` again picks up the new version. The version
-in `.claude-plugin/plugin.json` moves whenever behaviour changes, so
-`claude plugin list` tells you what you actually have.
-
 </details>
+
+### Updating — it does not happen by itself
+
+A new release pushed here does **not** reach projects that already have
+the plugin installed, unless you do something about it. Three facts
+explain why:
+
+- **Auto-update is off by default for this marketplace.** Claude Code
+  turns it on by default only for official Anthropic marketplaces and ones
+  added from claude.ai; every other third-party marketplace, this one
+  included, starts with it off.
+- **Updates are detected by `version`, not by commit.** `plugin.json`
+  declares a `version`, so Claude Code treats the plugin as unchanged until
+  that string changes: a push without a bump leaves every installed copy
+  on its cached version, forever. Every release here bumps it for exactly
+  that reason — anyone changing this repository must do the same.
+- **The installed copy lives on each machine.** `--scope project` records
+  in the repository that the plugin is *enabled*; the downloaded copy is
+  cached per machine and per user. Every person, on every machine, updates
+  separately.
+
+**To update by hand**, from inside the project:
+
+```bash
+claude plugin marketplace update rajesh-devkit
+claude plugin install rajesh-devkit@rajesh-devkit --scope project
+```
+
+Then restart Claude Code in that project, or run `/reload-plugins` in a
+session that's already open. Inside a session, `/plugin update` does the
+same job.
+
+**To have it update itself**, turn auto-update on once per machine: run
+`/plugin` in an interactive `claude` terminal, open **Marketplaces**,
+choose `rajesh-devkit`, and select **Enable auto-update**. Claude Code then
+checks in the background after a session starts (with a random delay of up
+to ten minutes), downloads any new version, and asks you to run
+`/reload-plugins`. The session you are in keeps the version it loaded at
+launch until you reload or restart. An administrator can turn it on for a
+whole organization instead with `"autoUpdate": true` on this marketplace's
+`extraKnownMarketplaces` entry in managed settings. Setting
+`DISABLE_AUTOUPDATER` switches plugin auto-updates off as well, unless
+`FORCE_AUTOUPDATE_PLUGINS=1` is also set.
+
+**To check what you are actually running**, start a session in the project
+and look for the `rajesh-devkit:devkit-*` agents. `claude plugin list`
+shows the installed version, but — as the warning above explains — not
+whether the session in front of you loaded it.
+
+Behaviour described here is as of the Claude Code docs, [Discover plugins
+→ Configure auto-updates](https://code.claude.com/docs/en/discover-plugins)
+and [Plugin marketplaces](https://code.claude.com/docs/en/plugin-marketplaces);
+check there if a command has moved.
 
 ## Getting started in a brand-new project
 
