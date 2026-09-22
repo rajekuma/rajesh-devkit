@@ -433,6 +433,18 @@ An unrun check reported as green buys false confidence at exactly the moment
 someone decides to ship. `clear-with-unknowns` is a real verdict, and it is
 never quietly promoted to `clear`.
 
+Its corollary is the same rule applied to time:
+
+> **A verdict issued against a diff that has since changed is STALE, never PASS.**
+
+The gates are not a one-way sequence. Acting on a gate's findings changes the
+code, and every verdict issued before that change describes code that no
+longer exists — so the loop runs gates, fixes, gates again, until a round
+passes with no edits after it. Each verdict is stamped with a fingerprint of
+the tree it saw (`scripts/record-gate.js`), and anything whose stamp no
+longer matches — or that was never stamped — is `STALE`. Unknown provenance
+is never a pass.
+
 ---
 
 ## What is deliberately not automated

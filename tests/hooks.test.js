@@ -922,6 +922,38 @@ test('a checkpoint for a different milestone is ignored, not followed backwards'
   });
 });
 
+test('a hand-run of write-resume without the harness says the checkpoint is stale', () => {
+  // Found in M28: a manual run with no CLAUDE_PROJECT_DIR wrote nothing and
+  // said nothing, and the old resume.json read as current - "4/36" for a
+  // milestone that was 36/36.
+  withFixture({ progress: SAMPLE_PROGRESS, specs: { 'user-login.md': PARTIAL_SPEC, 'user-login.ux.md': UX_DONE } }, (dir) => {
+    runHook('write-resume.js', dir);
+    const file = path.join(dir, '.claude', 'rajesh-devkit', 'resume.json');
+    const old = JSON.parse(fs.readFileSync(file, 'utf8'));
+    old.updatedAt = '2026-01-01T00:00:00.000Z';
+    fs.writeFileSync(file, JSON.stringify(old), 'utf8');
+
+    const env = { ...process.env };
+    delete env.CLAUDE_PROJECT_DIR;
+    const r = require('child_process').spawnSync(
+      process.execPath,
+      [path.join(PLUGIN_ROOT, 'scripts', 'write-resume.js')],
+      { cwd: dir, input: '{}', encoding: 'utf8', env }
+    );
+    assert.strictEqual(r.status, 0, 'must still never block');
+    assert.match(r.stderr, /CLAUDE_PROJECT_DIR/);
+    assert.match(r.stderr, /2026-01-01/, `did not point at the stale timestamp: ${r.stderr}`);
+    assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).updatedAt, '2026-01-01T00:00:00.000Z');
+  });
+});
+
+test('write-resume under the harness stays silent', () => {
+  withFixture({ progress: SAMPLE_PROGRESS, specs: { 'user-login.md': PARTIAL_SPEC, 'user-login.ux.md': UX_DONE } }, (dir) => {
+    const r = runHook('write-resume.js', dir);
+    assert.strictEqual(r.stderr.trim(), '', `noise in the loop: ${r.stderr}`);
+  });
+});
+
 test('a corrupt checkpoint is ignored rather than fatal', () => {
   withFixture({ progress: SAMPLE_PROGRESS, specs: { 'user-login.md': PARTIAL_SPEC, 'user-login.ux.md': UX_DONE } }, (dir) => {
     const outDir = path.join(dir, '.claude', 'rajesh-devkit');

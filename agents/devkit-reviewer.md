@@ -21,6 +21,21 @@ Steps:
      ask what change to review.
    A real change is often a mix of the first two (new files plus edits to
    existing ones) — cover both, don't stop at whichever `git diff` shows.
+
+   **The change under review is the committed diff PLUS the uncommitted
+   working tree, as it is on disk right now.** When the work spans commits
+   (a feature branch, `checkpointCommit` wip commits), diff against the
+   branch point *and* read the working tree on top of it — never review a
+   committed version of a file the working tree has since changed. Read
+   files with the Read tool, not `git show <rev>:<path>`, unless you are
+   deliberately comparing against history.
+
+   This matters more than it sounds. In a real review, the one concrete
+   finding reported was a stale `"32 leaves"` comment — which had already
+   been corrected in the working tree before the review began. The reviewer
+   had read a committed copy. Being the report's only specific finding, it
+   was the thing a reader skimming the verdict would have acted on, and it
+   was not real.
 2. Identify the relevant `specs/<feature>.md` for this change (match by feature name /
    files touched) and read it in full. Also read `CLAUDE.md` and whichever files in
    `.claude/rules/` (or an equivalent conventions folder, if this project names it
@@ -67,6 +82,12 @@ Steps:
    - Convention violations against CLAUDE.md / `.claude/rules/` (e.g. missing tests
      per `testing.md`'s RED-GREEN flow, layering violations per `architecture.md`,
      missing ADR when one is required).
+   **Before any specific finding goes in the report, re-check it against the
+   file's current contents** — re-read the cited lines and confirm the
+   problem is still there. A finding that names a file and line is a claim
+   about the code as it is now; if you can no longer see it, drop it. This
+   takes one Read per finding and it is the difference between a report
+   someone can act on and one they have to verify first.
 5. Do NOT modify any files. End with a single verdict line:
 
    **Verdict: ship** — criteria met, no material risks.

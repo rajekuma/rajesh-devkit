@@ -214,6 +214,7 @@ rajesh-devkit/
 ├── tests/
 │   ├── helpers.js              # throwaway fixtures + real-process hook runner
 │   ├── lease-fixtures.js       # stands in for the other session, in its own tree
+│   ├── gates.test.js           # stale-verdict detection, against real git repos
 │   ├── static.test.js          # well-formedness: parse, ASCII, frontmatter, hooks.json
 │   ├── hooks.test.js           # behavioural: real processes, real exit codes
 │   └── run-evals.ps1           # Windows bridge for `claude plugin eval` (see evals/)
@@ -227,14 +228,18 @@ rajesh-devkit/
 │   │   ├── devkit.js           # shared: PROGRESS.md parsing, spec lookup,
 │   │   │                         # the SENSITIVE matcher, deference, telemetry
 │   │   ├── provider.js         # which provider/model tiers this session got
-│   │   └── lease.js            # is another session already working this milestone
-│   │                             # in this working tree right now?
+│   │   ├── lease.js            # is another session already working this milestone
+│   │   │                         # in this working tree right now?
+│   │   └── gates.js            # was this gate verdict issued against the tree
+│   │                             # that is here now?
 │   ├── continue-loop.js        # Stop hook: nudge toward next milestone
 │   ├── run-verify.js           # PostToolUse hook: host's verify.js/.sh/.ps1
 │   ├── track-milestones.js     # PostToolUse hook: log milestone-shipped events
 │   ├── write-resume.js         # PostToolUse hook: the resume checkpoint, so a
 │   │                             # session killed by a usage limit loses nothing
 │   ├── session-welcome.js      # SessionStart hook: "what's next" banner
+│   ├── record-gate.js          # not a hook - stamps a gate verdict with the tree
+│   │                             # it saw; `check` says which went stale
 │   └── token-report.js         # not a hook - invoked by devkit-stats on demand;
 │                                 # scans session transcripts for real cost/tokens
 ├── profiles/                    # point the loop at another provider; nothing
@@ -263,9 +268,39 @@ claude plugin install rajesh-devkit@rajesh-devkit --scope project
 
 `--scope project` records the install in that repo's own Claude Code config,
 so it applies only there — repeat the two commands in any other project you
-want it in. Confirm it loaded with `claude plugin list`, then say
-*"how do I use this plugin"* to invoke `devkit-help`, which reports what to
-do next in that specific repository.
+want it in. Then say *"how do I use this plugin"* to invoke `devkit-help`,
+which reports what to do next in that specific repository.
+
+> **Start Claude Code *in* the project directory — not in a parent of it.**
+> A project-scoped plugin is loaded only for sessions whose working
+> directory is that project. Start `claude` one level up (in `C:\Dev`
+> rather than `C:\Dev\MyProject`) and **none of its agents, skills or
+> hooks load — silently.** Nothing errors, and nothing warns.
+>
+> **`claude plugin list` saying "enabled" is not evidence the plugin is
+> active in the session you are in.** It reports what is installed for the
+> directory you ran *it* from, not what the current session loaded. What
+> proves it is the session itself: the available-agents list (`/agents`, or
+> asking the session which subagents it can use) must include
+> `rajesh-devkit:devkit-implementer` and friends. If they are missing, the
+> plugin is not loaded, whatever the list says.
+>
+> This cost an entire dogfooding session. It ran from `C:\Dev` against a
+> plugin installed `--scope project` in `C:\Dev\MyHomeMaintenance`; the
+> hook *scripts* could still be run by hand with `CLAUDE_PROJECT_DIR` set,
+> which made the loop look like it was working for hours. It surfaced only
+> when delegating to `devkit-implementer` failed with "Agent type not
+> found".
+>
+> **When to use `--scope user` instead.** If you routinely start Claude Code
+> from a parent directory, work across many repositories, or want the loop
+> available everywhere on this machine, install once with `--scope user`.
+> The trade-off: it is then live in *every* project you open, including ones
+> that were never set up for it (the hooks stay quiet where there is no
+> `PROGRESS.md`, but the agents and skills are all offered), and the install
+> is no longer recorded in the repository for the rest of a team to see.
+> Project scope is the right default for a shared repo; user scope is the
+> right one for a personal toolbox you carry between projects.
 
 **Requirements.** Node — and you already have it, because Claude Code is a
 Node program, which is exactly why every script here is written in it.
@@ -666,16 +701,16 @@ number rather than a feeling.
 | Name | Model | Tools | Trigger | Verdict format |
 |---|---|---|---|---|
 | `devkit-ux` | `fable` | `Read, Write, Edit, Glob, Grep, Bash` | "devkit ux spec", "devkit ux pass", "devkit design this screen" | Runs between `devkit-specify` and `devkit-implementer` on anything with a user interface — the stage this toolkit previously skipped entirely, leaving every interface decision to be made implicitly, mid-implementation. Audits the existing component library and design tokens **before** designing anything, so it reuses rather than reinvents. Enumerates the states that actually break interfaces (empty, loading, partial, error, permission-denied, success, destructive-confirm) rather than only the happy path everyone builds. Reads Figma via MCP when it's configured and translates frames into the project's existing tokens instead of transcribing raw hex and pixel values; works from the feature spec alone when it isn't, which is the normal case and not a degraded one. Writes `specs/<name>.ux.md` — no component code — and **appends its accessibility criteria to the feature spec's own `## Acceptance criteria`**, which is what gives them teeth: the implementer works from criteria, and `devkit-reviewer`/`devkit-ship` gate on them. |
-| `devkit-ship` | `sonnet` | `Read, Bash, Glob, Grep` | "devkit ship check", "devkit preflight", "devkit can I mark this done" | Report-only. Asks the question `devkit-reviewer` doesn't: the diff matches its spec, but is everything *around* it shippable? Five gates — unaccounted acceptance criteria and open follow-ups, CI status (detects the CI system rather than assuming GitHub; reads it via `gh` when that's actually available), test coverage **against whatever threshold the project itself already declares** rather than one invented here, dependency advisories when the diff touched a manifest, and a secrets scan of the diff. Its central rule: **a gate it couldn't run is `UNKNOWN`, never `PASS`** — an unrun check reported as green buys false confidence at precisely the moment someone decides to ship.<br>**Verdict: clear** — every gate passed or was legitimately not applicable.<br>**Verdict: blocked** — a gate failed; lists what to fix, in order.<br>**Verdict: clear-with-unknowns** — nothing failed but something couldn't be checked; never silently promoted to `clear`. |
+| `devkit-ship` | `sonnet` | `Read, Bash, Glob, Grep` | "devkit ship check", "devkit preflight", "devkit can I mark this done" | Report-only. Asks the question `devkit-reviewer` doesn't: the diff matches its spec, but is everything *around* it shippable? Five gates — unaccounted acceptance criteria and open follow-ups, CI status (detects the CI system rather than assuming GitHub; reads it via `gh` when that's actually available), test coverage **against whatever threshold the project itself already declares** rather than one invented here, dependency advisories when the diff touched a manifest, and a secrets scan of the diff. Its central rule: **a gate it couldn't run is `UNKNOWN`, never `PASS`** — an unrun check reported as green buys false confidence at precisely the moment someone decides to ship. Its corollary: **a verdict stamped against a tree that has since changed, or not stamped at all, is `STALE`, never `PASS`** (see "Stale gate verdicts").<br>**Verdict: blocked** — a gate failed; lists what to fix, in order.<br>**Verdict: stale** — nothing failed, but a verdict describes code that is no longer there; re-run those gates, then ship again.<br>**Verdict: clear-with-unknowns** — nothing failed but something couldn't be checked; never silently promoted to `clear`.<br>**Verdict: clear** — every gate passed on the current tree or was legitimately not applicable. |
 | `devkit-docs` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "devkit docs", "devkit changelog", "devkit update the docs" | Runs after `devkit-ship` comes back clear. Two jobs, the second mattering more: write the changelog entry (from the user's point of view — "sessions now survive a restart", not "refactored the auth middleware"), and **hunt down the documentation the change just falsified** — the README example that no longer runs, the renamed flag still documented as current, the obsolete setup step. Stale docs beat missing docs for harm, because people follow them. Matches the project's existing changelog format and won't start one where none exists. Fixes what it can verify from the diff and *reports* what it can't, rather than writing a plausible-sounding correction it couldn't confirm. |
 | `devkit-datamodel` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "devkit datamodel", "devkit schema design", "devkit migration plan" | The data-side counterpart to `devkit-ux`, and the stage this plugin used to lack entirely: a `SENSITIVE:` data-model flag stopped the loop and then offered no help. Detects the project's own ORM and migration convention, then plans the change as a *sequence* rather than an event — additive versus destructive, the backfill and what it costs at production scale, what happens to writes landing mid-migration during a rolling deploy, and the rollback path or an explicit statement that there isn't one. Writes `specs/<name>.data.md` and appends criteria to the feature spec; writes no migration and no entity class. Leads its report with anything irreversible, because that is the part a human must actually agree to. |
 | `devkit-pipeline` | `sonnet` | `Read, Write, Edit, Glob, Grep, Bash` | "devkit pipeline", "devkit ci audit", "devkit what gates our merges" | Audits or scaffolds delivery. `devkit-ship` *reads* CI status and assumes a meaningful pipeline exists; this is the component that makes that true. Its framing is deliberate: not "does a workflow exist" but **"what would actually stop a bad change?"** — reporting each gate as **GATED** (failure blocks a merge), **RUNS** (executes, blocks nothing) or **MISSING**, plus **UNKNOWN** where it could not check, because the gap between GATED and RUNS is invisible from a list of green checkmarks. Never enables branch protection, never commits a workflow, and never adds a scanner nobody will read — a permanently ignored job trains a team that red means nothing. |
 | `devkit-ui-verify` | `sonnet` | `Read, Glob, Grep, Bash` | "devkit ui verify", "devkit check the screens", "devkit ui verification" | Report-only, and the only component that checks what a person actually sees. Every other gate reads code: the reviewer maps criteria to a diff, ship reads CI and coverage, the suite asserts through an API — none can tell you the empty state renders a blank screen or the loading spinner never clears. A passing suite and a broken screen coexist comfortably. Runs the app the project's own way, drives each state the `.ux.md` named, and captures the copy that actually rendered rather than a paraphrase. Its rule mirrors `devkit-ship`: **a state it could not reach is UNVERIFIED, never fine** — inducing an error state often needs a failure you have to cause, and an unchecked state reported as working is worse than no check.<br>**Verdict: matches / mismatches / partly-unverified.** |
 | `devkit-deliver` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "devkit deliver this milestone", "devkit commit and push", "devkit open the PR" | **The one component that touches git, and off unless the `deliver` stage is enabled.** Branches per Phase (`feat/phase<N>-<slug>`), commits with a message explaining *why*, pushes, and opens a PR **only at a Phase boundary** — a PR per milestone fragments review. Tracks `Branch:` in `PROGRESS.md`'s `## In flight` so an interrupted run resumes instead of redoing. Refuses to start unless review said `ship` and preflight said `clear`; **never delivers on `blocked`**. Enabling it is standing permission for the recoverable flow only — never force-push, never push to a default branch, never merge or enable auto-merge, never delete a branch or rewrite history, never `git add -A` blind, never `--no-verify`. If the situation seems to call for one of those, something is wrong that a human should look at. |
 | `devkit-security` | `sonnet` | `Read, Bash, Glob, Grep` | "devkit security review", "devkit check this for vulnerabilities", "devkit security scan" | Report-only, and deliberately **not** a generic OWASP checklist. Its highest-value move is reading the project own stated invariants first — ADRs, `.claude/rules/`, and how sibling endpoints already do it — so "check multi-tenancy" becomes the precise question *does this new entity carry the global query filter the ADR requires?* A violated invariant the project wrote down itself needs no convincing. Works the classes that actually cause breaches, in descending order of how often each is a real root cause: broken object-level authorization (BOLA/IDOR), tenant isolation, auth and session handling, injection, sensitive data exposure, mass assignment. Every finding names a file, a line and a reachable exploitation path — "potential risk" with no path is noise, and noise is how a security review gets ignored. Covers the diff; the rest of the repo is UNKNOWN, never clean.<br>**Verdict: clear / blocked / clear-with-unknowns**, matching `devkit-ship`. |
-| `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "devkit implement the spec", "devkit implement \<feature\>", "run devkit-implementer" | Not report-only — writes code and tests. Checks `.claude\rajesh-devkit\test-runners.json` for a cached test command per area first; only derives one from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) — and verifies it actually runs, not just that the marker matched — on a cache miss, writing the result back so future milestones skip re-derivation (verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation). Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
+| `devkit-implementer` | `sonnet` | `Read, Write, Edit, Bash, Glob, Grep` | "devkit implement the spec", "devkit implement \<feature\>", "run devkit-implementer" | Not report-only — writes code and tests. Checks `.claude\rajesh-devkit\test-runners.json` for a cached test command per area first; only derives one from marker files (`package.json`→`npm test`, `pytest.ini`/`pyproject.toml`→`pytest`, `*.csproj`/`*.sln`→`dotnet test`, `pubspec.yaml`→`flutter test`, `go.mod`→`go test`, `Cargo.toml`→`cargo test`) — and verifies it actually runs, not just that the marker matched — on a cache miss, writing the result back so future milestones skip re-derivation (verified: 9 tool calls to derive-and-cache vs. 2 on a cache hit, zero re-derivation). Implements one acceptance criterion at a time, RED then GREEN, never loosening a test to make it pass. For a type that doesn't exist yet it writes a compiling skeleton with none of the rules first, so the RED is behavioural rather than a compile error. It may batch several criteria through RED-GREEN only at one named grain, with a genuine RED for the whole batch and a per-criterion test that fails on that criterion's own regression, and it always discloses the batch. It never runs two test processes at once, and re-runs a surprising red alone before believing it. Checkpoints ticks into the spec and a `PROGRESS.md` `## In flight` block if the project has that convention; skips it if not. Reports back criteria covered, tests added, full-suite status, and a performance snapshot (criteria/run, suite duration, anything that cost time without progress) — never invokes the reviewer itself. |
 | `devkit-dep-audit` | `haiku` | `Read, Bash, Glob, Grep` | "devkit dep audit", "devkit audit dependencies", "devkit scan for CVEs" | Report-only. Detects whichever package ecosystems are present (npm/yarn/pnpm, PyPI, NuGet, pub/Dart, Go, Cargo, Maven, ...) from marker files, then runs `osv-scanner --recursive` as the universal pass (covers most ecosystems in one command) plus ecosystem-native fallbacks (`dotnet list package --vulnerable`, `npm audit`, `pip-audit`) only where the universal pass can't reach (e.g. NuGet without a lock file) — all backed by the GitHub Advisory Database / osv.dev, which aggregate NVD/CVE entries alongside ecosystem-specific advisories. Reports coverage (what was and wasn't scanned, and why), a findings table, then:<br>**Verdict: ship** — everything present was scanned, no Critical/High findings.<br>**Verdict: needs-changes** — a Critical/High finding exists.<br>**Verdict: discuss** — an ecosystem present couldn't be scanned (tool missing, no lock file, unrecognised ecosystem) so coverage is incomplete.<br>This checks *known-vulnerable dependency versions* only — it's not a substitute for `claude-security` or any other code-level vulnerability scan; install that separately if you want both (see "Security tooling" below). |
-| `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "devkit review the diff", "devkit review against the spec", "run devkit-reviewer" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met / **Deferred**, with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations, then ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
+| `devkit-reviewer` | `haiku` | `Read, Bash, Glob, Grep` | "devkit review the diff", "devkit review against the spec", "run devkit-reviewer" | Report-only — never edits files. Maps every acceptance criterion in the matched spec to the diff (Met / Not Met / Partially Met / **Deferred**, with file/line evidence), lists correctness risks, out-of-scope changes, and convention violations. It reviews the committed diff *plus* the uncommitted working tree as it is on disk, and re-checks every specific finding against the file's current contents before reporting it. It ends with exactly one of:<br>**Verdict: ship** — criteria met, no material risks.<br>**Verdict: needs-changes** — unmet criteria or correctness risks found.<br>**Verdict: discuss** — ambiguity needing the owner's judgment.<br>Followed by one line: files reviewed (count) and diff size (lines added/removed). |
 
 ## Hooks
 
@@ -873,6 +908,74 @@ code that predates the lease: `appendTelemetry` did an unguarded `mkdirSync`,
 so a file sitting where `.claude/rajesh-devkit/` belongs threw straight out of
 `continue-loop.js` — exit 1 with a Node stack trace instead of exit 2 with its
 nudge, silently costing the project its whole Stop loop. It's guarded now.
+
+### Stale gate verdicts — a verdict describes the diff it saw
+
+**What went wrong.** In M28, `devkit-reviewer` returned `ship`,
+`devkit-security` returned `clear`, `devkit-quality` returned `clean`. The
+orchestrator then applied two of quality's findings — an edit to
+`ExpenseCategoryService.ListAsync` and a docstring — and carried on toward
+ship with all three verdicts treated as current. They described a diff that
+no longer existed. `devkit-ship` caught it only because it re-runs the suite
+itself and happened to run *after* the edits; a fix applied after ship would
+have been marked done over code nothing verified. The chain read as one-way —
+gate, gate, gate, ship — and that was the bug.
+
+**The fix: a verdict is stamped with the tree it saw.**
+`scripts/record-gate.js` is a small command (not a hook) that the Stop
+hook's nudge tells the orchestrator to run, with its absolute path filled
+in:
+
+```bash
+node <plugin>/scripts/record-gate.js review ship    # stamp a verdict
+node <plugin>/scripts/record-gate.js check          # FRESH or STALE, per gate
+```
+
+The stamp is a content hash of the working tree — committed, staged,
+unstaged and untracked alike, minus what `.gitignore` excludes — computed
+through a throwaway git index, so the user's own staging is never touched.
+It lives in `.claude/rajesh-devkit/gates.json`, gitignored with the rest of
+the state. `check` hashes the tree again and compares. It is computed on
+demand rather than kept up to date by the `PostToolUse` hook on purpose:
+that hook fires only on `Edit`/`Write`, so an edit made through Bash (a
+formatter, `sed`, codegen) would slip past it; hashing at the moment of the
+question has no such hole.
+
+**It fails safe.** A verdict reads `FRESH` only when its stamp provably
+matches the tree now. Everything else is `STALE`: the tree changed, the
+verdict was recorded for another milestone, the project is not a git
+repository, git is missing, or — the case that matters most — a verdict
+exists in the conversation with no stamp at all. Unknown provenance is never
+a pass: a gate re-run unnecessarily costs minutes; a stale pass costs
+shipping code nobody verified.
+
+**Where it is enforced.**
+- `continue-loop.js`'s chain now says what happens after a gate's findings
+  are applied: every verdict stamped before that edit is stale, and the
+  gates run again — gates, fixes, gates, until a round passes with no edits
+  after it. It asks for one last `check` before the milestone is closed out,
+  which is what catches a fix applied *after* ship.
+- The Stop hook itself re-judges every stamp recorded for the current
+  milestone at each stop and names any that went stale — the half of this
+  that needs nobody to remember anything. (It only hashes the tree when the
+  milestone has stamps at all, so a project that never records costs
+  nothing.)
+- `devkit-ship` reports a stale verdict as **`STALE`** — not `PASS`, not
+  `BLOCKED` — with its own verdict, **`stale`**, ranked below `blocked` and
+  above `clear-with-unknowns`. It is kept distinct from `UNKNOWN`: STALE
+  means "ran, but on something else", UNKNOWN means "never ran", and the fix
+  differs. Ship now has a Review row too, since the reviewer's verdict is the
+  one most likely to be issued first and acted around afterwards.
+- `devkit-deliver` refuses to commit on a `stale` preflight.
+
+**What is not stamped.** `devkit-datamodel` produces a plan *before* the
+code exists, so its stamp would always read stale and teach everyone to
+ignore the word; ship checks that plan against the diff directly instead.
+
+**The honest limit.** Recording relies on the orchestrator running
+`record-gate`. When it forgets, nothing false happens — the verdict is
+unstamped, so ship reports it `STALE` and the gate runs again. Forgetting
+costs a re-run, never a false pass, which is the direction that matters.
 
 ### Loop stages — not everyone runs the whole chain
 
@@ -1296,7 +1399,17 @@ and the implementer derived `"tasklist"` for the same single-stack project
 (caught by the evals); the implementer's lookup would then miss a stack that
 was already cached and append a second entry for the same directory, leaving
 two answers for one question. There is one entry per `workingDirectory` —
-writers replace a matching entry rather than appending. Nothing else in the plugin writes
+writers replace a matching entry rather than appending.
+
+An entry may also carry `"exclusive": true` and a one-line
+`"exclusiveReason"`: this suite must never run concurrently with itself.
+Learned the expensive way in M28, where overlapping runs against one shared
+PostgreSQL database produced 19 phantom failures, then 5, in tests the
+milestone never touched, and a stray `testhost.exe` stalled `dotnet build`
+on file locks twice — none of it reproducible alone. `devkit-implementer`
+and `devkit-ship` both run one test process at a time regardless, and
+re-run a red result alone before believing it; the flag tells every later
+run *why*, before it starts, rather than after an afternoon of diagnosis. Nothing else in the plugin writes
 to the host project unprompted — `devkit-implementer` otherwise only writes
 what you asked it to implement, and every report-only component
 (`devkit-reviewer`, `devkit-dep-audit`, `devkit-stats`) never writes anything.
@@ -1311,12 +1424,13 @@ to one JSONL file **inside the host project**:
 `track-milestones.js`'s own bookkeeping for detecting a status flip).
 `devkit-stats` reads that file and reports duration per milestone.
 
-Two more files share that directory and the same one-line `.gitignore` rule:
-`resume.json`, the machine-written checkpoint that makes a usage limit
-survivable, and `session-lease.json`, which records which sessions are
-currently live against this working tree and on which milestone (see "Two
-sessions, one working tree"). Both are per-machine state, never shared
-history.
+Three more files share that directory and the same one-line `.gitignore`
+rule: `resume.json`, the machine-written checkpoint that makes a usage limit
+survivable; `session-lease.json`, which records which sessions are currently
+live against this working tree and on which milestone (see "Two sessions, one
+working tree"); and `gates.json`, each gate's latest verdict stamped with the
+tree it saw (see "Stale gate verdicts"). All three are per-machine state,
+never shared history.
 
 **Why in-project rather than a machine-global path.** An earlier version
 stored this at `%LOCALAPPDATA%\rajesh-devkit\telemetry\<hash>.jsonl` — the
@@ -1487,8 +1601,15 @@ agent involved, which is worth enabling regardless (Settings → Code security
   found. Rename the file or add that header line.
 - **The Stop hook never fires.** Check `$env:CLAUDE_PROJECT_DIR` is set (the
   harness sets it automatically) and that `PROGRESS.md` exists at that root,
-  not in a subfolder. Confirm the plugin is actually installed for this
-  project: `claude plugin list`.
+  not in a subfolder. Then confirm the plugin is actually *loaded in this
+  session* — not merely installed: check the session's available agents
+  include `rajesh-devkit:devkit-implementer`. `claude plugin list` saying
+  "enabled" does not prove it; the usual cause is a session started from a
+  parent directory of a `--scope project` install (see "Install").
+- **"Agent type not found" for a `devkit-*` subagent.** Same cause, every
+  time so far: the session's working directory is not the project the
+  plugin was installed into. Restart Claude Code *in* that directory, or
+  install with `--scope user`.
 - **The Stop hook keeps firing on the same milestone.** That's the 8-nudge
   cap working as intended once it stops — check
   `%TEMP%\rajesh-devkit-continue-loop\<hash>.json` for the current count, and
