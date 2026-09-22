@@ -38,6 +38,10 @@ test('complete marks done', () => {
   const s = createStore(); const t = add(s, 'a');
   assert.equal(complete(s, t.id).done, true);
 });
+test('complete throws on an unknown id', () => {
+  const s = createStore(); add(s, 'a');
+  assert.throws(() => complete(s, 99), /unknown task 99/);
+});
 EOF
 cat > specs/task-completion.md <<'EOF'
 # Spec: Task completion
