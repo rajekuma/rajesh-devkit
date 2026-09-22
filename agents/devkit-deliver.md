@@ -98,6 +98,19 @@ that a human needs to look at. Stop and describe it.
    `git log` before writing your first message, the same way every other
    component here detects conventions rather than imposing them.
 
+   **Squash any `wip(M<N>): …` commits first.** With `checkpointCommit` on,
+   `devkit-implementer` commits after every green criterion so a session
+   killed by a usage limit loses nothing. Those are a safety net, not
+   history: nobody reviewing this branch wants twenty-four "criterion 7"
+   entries. Look for a run of them at the tip (`git log --oneline`), and if
+   they are all this milestone's, `git reset --soft <the commit before the
+   first one>` and make the single real commit above from the staged result.
+   Two rules, both absolute: squash only `wip:` commits you can see belong to
+   **this** milestone, and never reset past anything already pushed —
+   `git log origin/<branch>..HEAD` tells you what is safe to touch. If the
+   run is ambiguous, leave it alone and say so in your report: an ugly
+   history is recoverable, a discarded commit is not.
+
 3. **Update `## In flight` in `PROGRESS.md`** so an interrupted run resumes
    instead of redoing work:
 

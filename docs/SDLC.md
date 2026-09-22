@@ -586,3 +586,23 @@ prompts. Copying the two or three a project actually lacks into its own
 names — is often better than installing the whole plugin beside a process
 that already works. What you lose is shared updates; what you keep is one
 coherent process per repository.
+
+**Decision models are not LLMs, and do not belong in these seats.** A new
+class of model - TypeSafe's Jev is the first public one, in early access
+since September 2026 - returns a typed value with a confidence score instead
+of text, claims it cannot hallucinate or produce a type error, and runs
+orders of magnitude cheaper and faster than a frontier LLM. It is worth
+knowing about and worth nothing here yet, for a specific reason: every seat
+in this loop is a *writing* seat. Specs, code, reviews, ADRs and changelog
+entries are all prose or source, and a model that emits no text cannot fill
+any of them.
+
+Where it could eventually fit is the deterministic edges the loop currently
+handles with regexes: the sensitivity gate (`SENSITIVE_MARKER` plus
+`sensitivePatterns`), extracting a verdict from a reviewer's report, deciding
+which stage a milestone is in. Those are classifications wearing pattern
+matches, and they are exactly the shape a typed-output model claims. Two
+reasons not to build on it now: it is early-access, and each of those regexes
+is currently *auditable* - you can read the pattern and know what fires. A
+confidence score is not auditable in the same way, and these particular gates
+fail open. That trade needs evidence before it is worth making, not novelty.

@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Which model each tier resolves to when this profile is active. Every",
+    "component in this plugin asks for a TIER (model: sonnet, model: haiku)",
+    "and never for a model ID, so changing these four lines re-targets the",
+    "whole loop - no file in agents/ or skills/ mentions a provider.",
+    "",
+    "VERIFY BEFORE USE: run `node profiles/check.js` to confirm each of these",
+    "IDs actually exists on OpenRouter right now. Model names are renamed and",
+    "retired constantly, and a stale ID here fails at the first request, in",
+    "the middle of a milestone, which is the worst possible moment to find",
+    "out. The values below are STARTING POINTS chosen for role, not",
+    "endorsements - check them, price them, and change them to suit.",
+    "",
+    "Choosing per tier, by what the tier is used for here:",
+    "  reasoning (opus/fable) - devkit-specify, devkit-adr, devkit-roadmap.",
+    "    These decide things. Weakest link to economise on; prefer waiting",
+    "    for your subscription window over running them cheap.",
+    "  coding (sonnet) - devkit-implementer and most subagents. Needs real",
+    "    tool-use and long-context reliability; a model that cannot follow a",
+    "    red-green loop will cost you more in reviewer rounds than it saves.",
+    "  cheap (haiku) - devkit-reviewer, devkit-dep-audit, and background",
+    "    work. Highest volume, lowest stakes, best place to save money."
+  ],
+  "baseUrl": "https://openrouter.ai/api",
+  "tiers": {
+    "opus": "anthropic/claude-sonnet-4.5",
+    "sonnet": "qwen/qwen3-coder",
+    "haiku": "google/gemini-2.5-flash",
+    "fable": "anthropic/claude-sonnet-4.5"
+  }
+}

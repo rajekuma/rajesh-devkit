@@ -1,5 +1,5 @@
 {
-  "description": "rajesh-devkit: nudges toward the next PROGRESS.md milestone on Stop, runs the host project's verify script after edits, and greets a new session with what's next. Node rather than PowerShell so the hooks work on macOS and Linux too - node is guaranteed present, since Claude Code itself runs on it.",
+  "description": "rajesh-devkit: nudges toward the next PROGRESS.md milestone on Stop, keeps a machine-written resume checkpoint so a session that dies mid-milestone (a usage limit, a crash, a move to another machine or provider) picks up from disk rather than from context, runs the host project's verify script after edits, and greets a new session with what's next. Node rather than PowerShell so the hooks work on macOS and Linux too - node is guaranteed present, since Claude Code itself runs on it.",
   "hooks": {
     "SessionStart": [
       {
@@ -43,6 +43,13 @@
             "command": "node",
             "args": [
               "${CLAUDE_PLUGIN_ROOT}/scripts/track-milestones.js"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/write-resume.js"
             ]
           }
         ]

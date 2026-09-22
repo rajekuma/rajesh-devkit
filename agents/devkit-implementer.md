@@ -195,6 +195,26 @@ assuming anything.
      the next criterion, not the one just finished. If the project has no
      such file or convention, skip this — don't create one it doesn't use.
 
+     (You don't have to maintain a separate machine-readable checkpoint:
+     this plugin's `write-resume` hook derives one from the spec's ticks and
+     the working tree after every edit you make. Ticking the criterion *is*
+     the checkpoint — which is why it happens the moment the test goes green
+     rather than at the end of the milestone.)
+   - **Commit the criterion too, if `checkpointCommit` is on.** Read
+     `.claude/devkit.json` (or `.claude/rajesh-devkit/devkit.local.json`)
+     once at the start; if it says `"checkpointCommit": true`, then after
+     each criterion goes green, `git add -A` and commit on the current
+     feature branch with `wip(M<N>): <criterion summary>`. Never push it.
+
+     This is off by default because a `wip` commit per criterion is history
+     noise that `devkit-deliver` then has to clean up. It earns that noise in
+     exactly one situation, which is why it exists: a stop that outlasts the
+     machine staying on — a usage window that resets in five hours, a laptop
+     that goes home, work picked up tomorrow somewhere else. An uncommitted
+     working tree is a perfectly good checkpoint right up until the machine
+     holding it isn't there. If the key is absent, don't commit: the tree is
+     the checkpoint.
+
 5. **Never modify a test just to make it pass.** If a criterion is ambiguous,
    or a test looks wrong once you see the real code, stop and report the
    ambiguity instead of resolving it yourself or loosening the test.
