@@ -1,0 +1,11 @@
+# Every file in this repository is text, stored and checked out with LF
+# endings on every OS - whatever core.autocrlf says on the machine.
+#
+# Why: on Windows, autocrlf=true checked these files out with CRLF. The Node
+# scripts didn't care, but tooling that edits them did: exact-match edits on
+# multi-line text silently missed, and one script that split on "\n" and
+# re-joined mangled a whole file. The eval scaffolds are bash, which reads a
+# CRLF line's trailing "\r" as part of the command. And a checkout that
+# differs by OS makes "the same file" hash differently on two machines.
+# PowerShell 5.1 and Windows editors read LF without complaint.
+* text=auto eol=lf
