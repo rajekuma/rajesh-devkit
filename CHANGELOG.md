@@ -171,14 +171,18 @@ reader six months from now cannot recover from the diff.
   `-JudgeModel` in the Windows bridge was declared and never passed to
   `claude`; it is now.
 
-  First result: `openrouter-lean` scored 3/9 on `implementer-red-green`, for
-  about $0.07. The code worked, but the session model never invoked the
-  plugin's `devkit-implementer`: it spawned generic agents told "you are the
-  devkit-implementer agent", so none of the implementer's discipline ran - no
-  RED before GREEN, no criteria ticked, no runner cached. It stays a candidate,
-  not a default. (The eval summary's own cost figure said $1.06: Claude Code
-  prices a model it does not know as if it were Claude. OpenRouter's key
-  usage is the real number.)
+  Results on `implementer-red-green`: Claude login 9/9; `openrouter`
+  (`qwen/qwen3-coder`) 8/9 for about $0.21 - it did RED before GREEN for
+  every criterion but didn't say so in its report; `openrouter-lean`
+  (`qwen/qwen3-coder-next`) 3/9 for about $0.07. The lean session model did
+  invoke `devkit-implementer`, but would not wait for a background subagent:
+  it stopped it mid-work three times, then did the milestone itself, so no
+  criteria were ticked and no runner cached. (An earlier version of this
+  entry said it "never invoked devkit-implementer" and used generic agents -
+  that came from reading a truncated trace, and was wrong.) The eval
+  summary's own cost figures overstate gateway runs: Claude Code prices a
+  model it does not know as if it were Claude. OpenRouter's key usage is the
+  real number.
 
 - **`node profiles/check.js [profile]` checks any profile, and fails a model
   without tool calling.** Prompted by model advice from an AI search summary
