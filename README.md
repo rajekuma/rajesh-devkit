@@ -955,6 +955,18 @@ milestone itself, so none of the implementer's discipline ran (no criteria
 ticked, no runner cached). Keep it as a candidate to re-measure, not a
 default.
 
+**Read fallback reports more carefully.** `devkit-implementer` now has to
+*show* the RED for each criterion — the test's name and the failure it
+printed — rather than claim it. With that rule, Claude kept 9/9 and produced
+exactly that table. `qwen/qwen3-coder` stayed at 8/9: on a second run it did
+the work correctly again (batched RED-GREEN, criteria ticked, runner cached)
+but wrote a generic "all criteria met" report — no RED evidence, no batch
+disclosure, no performance snapshot — and created a `PROGRESS.md` the project
+never had, which the prompt says not to do. It follows the *doing* part of a
+long prompt well and the *reporting and don't-do-this* rules less reliably,
+and it varies run to run. On the fallback, check the code and the ticks, not
+the prose.
+
 **Model suggestions from elsewhere — check them first.** Advice found online
 (including AI search summaries) has recommended, for this exact loop, a model
 the catalogue lists with **no tool calling** (`qwen/qwen-2.5-coder-32b-instruct`

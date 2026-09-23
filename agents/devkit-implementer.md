@@ -336,6 +336,25 @@ assuming anything.
    updating a milestone tracker's Phase table, and committing are the
    orchestrator's, once a review ships this.
 
+   **Show the RED, don't just claim it.** For every criterion, include one
+   line of evidence from the run that failed before you wrote the code: the
+   test's name and the failure it actually printed (e.g. `add … "high" —
+   AssertionError: undefined == 'high'`), then that it passed after. A
+   criterion whose test passed on first run, because an earlier criterion's
+   general implementation already covered it, says exactly that instead —
+   it's a legitimate outcome, but it must be named, not folded in. A small
+   table works well:
+
+   | Criterion | RED (first run) | GREEN |
+   |---|---|---|
+   | <criterion> | `<test name>` — `<failure message>` | pass |
+
+   Why this is required, not optional: in a measured run a model did genuine
+   test-first work on every criterion — the trace shows fail→pass each time
+   — and reported only "implemented, tests pass". Nobody reading that report
+   can tell test-first from tests-after, so the reviewer, the eval and the
+   owner all have to take it on trust. Pasting the failure costs one line.
+
    Include a **performance snapshot** in that same report, so time/cost stays
    visible across runs:
    - Criteria addressed this run, and how many full-suite runs that produced.
