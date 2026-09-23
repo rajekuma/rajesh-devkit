@@ -936,11 +936,24 @@ Any `profiles/<name>.json` you add works the same way. Read the real cost on
 OpenRouter's Activity page: the eval summary prices a model Claude Code
 doesn't know as if it were Claude, and overstated one run about fifteen-fold.
 
-**Measured so far (2026-09-23):** `openrouter-lean` scored **3/9** on
-`implementer-red-green`, for about $0.07. Its code worked; its process didn't.
-The session model never invoked `devkit-implementer` — it spawned generic
-agents told to act like it — so there was no RED before GREEN, no criteria
-ticked and no test runner cached. Not a default.
+**Measured (2026-09-23/24), `implementer-red-green`, same case, three setups:**
+
+| | Claude login | `openrouter` | `openrouter-lean` |
+|---|---|---|---|
+| Score | **9/9** | **8/9** | **3/9** |
+| Real cost | subscription | ~$0.21 | ~$0.07 |
+| Ran `devkit-implementer` to completion | yes | yes | no — stopped it mid-work three times, then did the job itself |
+| RED before GREEN | yes, and reported it | yes (fail→pass per criterion in the trace), but didn't report it | no |
+
+`openrouter` is a real fallback for implementation: its one miss is that its
+report didn't *say* what its trace shows it did. `openrouter-lean` fails for
+a reason price doesn't predict: in this Claude Code build a subagent starts
+in the background and the session is notified when it finishes, and
+`qwen3-coder-next` wouldn't wait — it stopped the implementer, relaunched it,
+messaged it "are you done yet?", stopped it again, and finished the
+milestone itself, so none of the implementer's discipline ran (no criteria
+ticked, no runner cached). Keep it as a candidate to re-measure, not a
+default.
 
 **Model suggestions from elsewhere — check them first.** Advice found online
 (including AI search summaries) has recommended, for this exact loop, a model
