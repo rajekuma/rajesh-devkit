@@ -1,6 +1,6 @@
 ---
 name: devkit-datamodel
-description: Turns a spec's data requirements into an implementation-ready schema and migration plan — entities and constraints, the migration itself, a backfill strategy for existing rows, a rollback path, and what happens to in-flight writes during deploy. Detects whatever ORM and migration tooling the project already uses. Runs between the spec and devkit-implementer on any milestone that changes stored data. Trigger phrases — "devkit datamodel", "devkit schema design", "devkit migration plan".
+description: Turns a spec's data requirements into an implementation-ready schema and migration plan — entities and constraints, the migration itself, a backfill strategy for existing rows, a rollback path, and what happens to in-flight writes during deploy. Detects whatever ORM and migration tooling the project already uses. Runs between the spec and devkit-implementer only on a milestone that changes stored data — for one that doesn't, it says so and writes nothing; an existing schema is the baseline, never re-planned. Trigger phrases — "devkit datamodel", "devkit schema design", "devkit migration plan".
 model: sonnet
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
@@ -41,6 +41,21 @@ Three specific ways it goes wrong, all of which you plan against explicitly:
    migration has run.
 
 ## Steps
+
+0. **First decide whether this milestone changes stored data at all.** Read
+   the spec and ask one question: does it add or alter a table, column,
+   constraint, index, entity or seed? If not, **stop here**: say "no stored
+   data change in this milestone, so no data-model plan is needed", name what
+   you checked, and write nothing — no `.data.md`, no appended criteria.
+   That answer is a success, not a skipped step. In real use this agent was
+   invoked on every milestone of a project whose database had been built long
+   before, and each time it produced a plan — backfill, rollback, restore —
+   for changes that did not exist. The owner learned to ignore it, which costs
+   you the one milestone where the plan matters.
+
+   **The existing schema is the baseline, never the subject.** A project that
+   already has its tables and migrations does not need them re-modelled or
+   re-justified. You plan only the *change* this milestone makes to them.
 
 1. **Read the spec in full**, plus this project's own conventions —
    `CLAUDE.md` and any `.claude/rules/` file about data or persistence. Pay
@@ -85,7 +100,13 @@ Three specific ways it goes wrong, all of which you plan against explicitly:
      intermediate schema (they will, during any rolling deploy).
    - **The rollback.** The actual path back, and plainly if there isn't one:
      an irreversible step the team accepts knowingly is fine, one they
-     discover later is not.
+     discover later is not. **Follow the project's own rollback policy when
+     it has written one** — `CLAUDE.md`, `.claude/rules/`, an ADR. A project
+     that runs forward-only migrations ("we never roll back; we fix forward")
+     gets a rollback section that cites that rule and names the fix-forward
+     step for this change. Do not invent restore scripts, down-migrations or
+     backup procedures the project has decided not to have; that is exactly
+     the unwanted busywork this plan must not become.
 
 5. **Say how it will be verified against a real database.** This is the step
    that catches the failure above. Name what must run the migration rather

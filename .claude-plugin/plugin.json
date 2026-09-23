@@ -1,6 +1,6 @@
 {
   "name": "rajesh-devkit",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Personal dev-loop toolkit covering the SDLC from onboarding to shipped docs: skills for onboarding a project (devkit-onboard), proposing the next milestones from what shipped and what production says (devkit-roadmap), drafting specs (devkit-specify) and recording decisions (devkit-adr); subagents for UX (devkit-ux), test-first implementation (devkit-implementer), spec review (devkit-reviewer), pre-ship preflight (devkit-ship), dependency audit (devkit-dep-audit), documentation (devkit-docs), design and performance review (devkit-quality), code-level security review (devkit-security) and releases (devkit-release, which never tags); plus hooks that nudge an unattended session toward the next PROGRESS.md milestone, escalate sensitive ones, and run a host project's verify script after edits.",
   "author": {
     "name": "Rajesh",

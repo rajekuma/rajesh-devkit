@@ -22,6 +22,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const lease = require('./lib/lease');
+const arm = require('./lib/arm');
 const { detectProvider, describeProvider } = require('./lib/provider');
 
 const hookInput = d.readStdinJson();
@@ -129,6 +130,19 @@ const stageLine =
       gateNote +
       orphanCheckpointNote;
 
+// How the loop gets going from here. Under the default keyword start the
+// banner must not read as an instruction to begin - it once did ("Read that
+// spec and continue from criterion N"), and a session opened for other work
+// set off on the milestone. It says what is next and how to start it, and
+// the session stays the user's until they do.
+const loopHint =
+  config.loopStart === 'always'
+    ? 'Just keep working - the Stop hook will nudge toward whatever this loop does next when ' +
+      'the session pauses.'
+    : 'Nothing starts on its own: say "devkit continue" when you want the loop to take this ' +
+      'milestone ("devkit continue all" to run the whole queue unattended), and "devkit pause" ' +
+      'to stop it. Until then this session is free for anything else.';
+
 const milestone = d.findNextMilestone(progressPath, config.parked);
 if (!milestone) {
   // An empty queue used to be a dead end - "add a row when you have one".
@@ -176,10 +190,14 @@ function branchName() {
   return (r.stdout ?? '').trim() || null;
 }
 
-// Claimed whether or not a conflict was found. Standing down silently would
-// make this session invisible to the next one to arrive, which just moves the
-// same collision one session along.
-if (sessionId) {
+// Claimed whether or not a conflict was found, but only by a session that is
+// actually driving the loop. Standing down silently would make a driving
+// session invisible to the next one to arrive; claiming from a session that
+// merely opened in this tree is what made unrelated sessions report each
+// other as collisions at every stop - see lib/arm.js. Under the default
+// keyword start a brand-new session is never driving yet, so it claims
+// nothing until `devkit continue`.
+if (sessionId && arm.isDriving(dir, config, sessionId, milestone.display)) {
   lease.renew(
     dir,
     { sessionId, milestone: milestone.display, worktree, branch: branchName(), transcript },
@@ -244,7 +262,7 @@ const resume = (() => {
 
 if (resume && resume.started && resume.nextCriterion) {
   const parts = [
-    `rajesh-devkit: picking up ${resume.milestone}, mid-flight.`,
+    `rajesh-devkit: ${resume.milestone} is mid-flight.`,
     ``,
     `  spec        ${resume.spec ?? '(none)'}${resume.specStatus ? ` (${resume.specStatus})` : ''}`,
     `  criteria    ${resume.criteria} ticked - resume at criterion ${resume.nextCriterion}`,
@@ -252,9 +270,11 @@ if (resume && resume.started && resume.nextCriterion) {
     `  tree        ${resume.dirty === null ? 'unknown' : resume.dirty ? 'dirty - uncommitted work from the last run' : 'clean'}`,
     `  checkpoint  ${resume.updatedAt}, on ${resume.provider}`,
     ``,
-    `Read that spec and continue from criterion ${resume.nextCriterion}. Do not restart the`,
-    `milestone or re-run finished criteria - the ticks and the working tree are`,
-    `the record of what is already done.${stageLine}`,
+    `When the loop picks it up, it continues from criterion ${resume.nextCriterion}: do not`,
+    `restart the milestone or re-run finished criteria - the ticks and the working`,
+    `tree are the record of what is already done.`,
+    ``,
+    `${loopHint}${stageLine}`,
   ].filter((l) => l !== null);
   say(parts.join('\n'));
   process.exit(0);
@@ -265,7 +285,7 @@ if (specStatus === 'draft' && on('implement')) {
 rajesh-devkit: next milestone is ${milestone.display} - its spec (${relSpec}) is
 still Status: Draft, so nothing should be built from it yet. Go through the
 spec with the owner and get it marked Approved (or changed) first; the loop
-picks up by itself once the header says Approved.${stageLine}
+can take it once the header says Approved.${stageLine}
 `);
 } else if (specStatus === 'implemented') {
   say(`
@@ -291,9 +311,9 @@ the same decision.${stageLine}
   say(`
 rajesh-devkit: next milestone is ${milestone.display} - no spec yet.
 Let's start creating the first spec: say "devkit spec this feature: ${milestone.name}"
-to draft one with devkit-specify. Once it exists, just keep working - the
-Stop hook will nudge toward whatever this loop does next when the session
-pauses.${stageLine}
+to draft one with devkit-specify.
+
+${loopHint}${stageLine}
 `);
 } else if (!specPath) {
   // This loop doesn't own the spec stage, so there's nothing to suggest
@@ -309,13 +329,15 @@ queued here until one exists.${stageLine}
 rajesh-devkit: next milestone is ${milestone.display} - spec ready at ${relSpec},
 but there's no UX spec for it yet. Say "devkit ux spec" to invoke devkit-ux before
 implementation starts, so the screens and their empty/loading/error states
-are decided deliberately rather than mid-build.${stageLine}
+are decided deliberately rather than mid-build.
+
+${loopHint}${stageLine}
 `);
 } else {
   say(`
 rajesh-devkit: next milestone is ${milestone.display} - spec ready at ${relSpec}.
-Just keep working - the Stop hook will nudge toward whatever this loop does
-next when the session pauses.${stageLine}
+
+${loopHint}${stageLine}
 `);
 }
 

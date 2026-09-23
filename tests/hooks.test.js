@@ -402,6 +402,26 @@ test('no config at all still means the full chain', () => {
   });
 });
 
+test('the data-model step is conditional on the milestone changing stored data', () => {
+  // Found in real use: a project whose schema was long built was asked for a
+  // backfill/rollback/restore plan on every milestone, because the nudge
+  // read "invoke devkit-datamodel" as a standing order.
+  withFixture({ progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC, 'user-login.ux.md': '# UX\n' } }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    const step = r.stderr.slice(Math.max(0, r.stderr.indexOf('devkit-datamodel') - 200), r.stderr.indexOf('devkit-datamodel') + 400);
+    assert.match(step, /changes stored data/, `datamodel asked for unconditionally: ${step}`);
+    assert.match(step, /skip/i);
+  });
+});
+
+test('devkit-datamodel stops and writes nothing when no stored data changes', () => {
+  const body = read(PLUGIN_ROOT, 'agents', 'devkit-datamodel.md');
+  // \s+ because prompt prose wraps wherever it wraps.
+  assert.match(body, /no\s+stored\s+data\s+change/i);
+  assert.match(body, /write\s+nothing/i);
+  assert.match(body, /forward-only/i, 'lost the project-rollback-policy rule');
+});
+
 test('a nudge never names a component whose stage is disabled', () => {
   // Not just the instructions - the explanatory asides too. A backend loop's
   // datamodel step once described itself as "the data-side counterpart to
@@ -1129,8 +1149,15 @@ const leaseLib = require('../scripts/lib/lease');
 
 const MINE = 'my-session-9999';
 
+// Every session here is one that is DRIVING the loop - that is the only kind
+// that claims a milestone since 0.7 (see lib/arm.js and the arming tests
+// below). "loopStart": "always" says so without an arm step in every test;
+// any config a test brings is merged over it.
 function withLeaseFixture(fn, opts = {}) {
-  return withFixture({ progress: SAMPLE_PROGRESS, specs: leaseSpecs(), ...opts }, fn);
+  const own = opts.files && opts.files['.claude/devkit.json'];
+  const cfg = { loopStart: 'always', ...(own ? JSON.parse(own) : {}) };
+  const files = { ...(opts.files ?? {}), '.claude/devkit.json': JSON.stringify(cfg) };
+  return withFixture({ progress: SAMPLE_PROGRESS, specs: leaseSpecs(), ...opts, files }, fn);
 }
 
 test('a live lease from another session withholds the resume instruction', () => {

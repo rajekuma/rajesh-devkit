@@ -113,6 +113,11 @@ function readExtras(cfg) {
     // ownsLoop.
     loop: cfg.loop === 'devkit' || cfg.loop === 'project' ? cfg.loop : null,
     checkpointCommit: cfg.checkpointCommit === true,
+    // Whether a session drives the loop only after `devkit continue`
+    // ("keyword", the default) or from the moment it starts ("always", the
+    // pre-0.7 behaviour, for a project that runs unattended on purpose).
+    // Anything unrecognised is the default - see lib/arm.js.
+    loopStart: cfg.loopStart === 'always' ? 'always' : 'keyword',
     // How long another session's lease stays believable without a fresh sign
     // of life. Left raw here and clamped in lib/lease.js, so the bounds live
     // next to the reasoning about what a sane TTL is.
