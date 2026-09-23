@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "A cheaper alternative to openrouter.json, as a CANDIDATE to measure, not",
+    "a recommendation. Use it with: node profiles/devkit.js openrouter-lean",
+    "Check it with:                 node profiles/check.js openrouter-lean",
+    "",
+    "Chosen 2026-09-23 from OpenRouter's live catalogue: every model here",
+    "supports tool calling (Claude Code cannot work without it) and costs",
+    "less than the default profile's model for the same tier. A 'tools'",
+    "flag in the catalogue is necessary but not sufficient - a free backend",
+    "once rejected Claude Code's tool schemas despite claiming support - so",
+    "send one pong through this profile, and ideally run the",
+    "implementer-red-green eval under it, before relying on it.",
+    "",
+    "What each tier actually carries in a fallback session:",
+    "  sonnet - the session itself (the launcher starts there), every skill",
+    "    it runs, devkit-implementer and ten other agents. The one that",
+    "    matters: it must hold a red-green loop.",
+    "  haiku  - devkit-reviewer and devkit-dep-audit.",
+    "  opus / fable - reached only with --model opus. Spec, ADR and roadmap",
+    "    work is better left for the Claude subscription window anyway."
+  ],
+  "baseUrl": "https://openrouter.ai/api",
+  "keyEnv": "OPENROUTER_API_KEY",
+  "tiers": {
+    "opus": "deepseek/deepseek-v4-pro",
+    "sonnet": "qwen/qwen3-coder-next",
+    "haiku": "google/gemini-2.5-flash-lite",
+    "fable": "deepseek/deepseek-v4-pro"
+  }
+}

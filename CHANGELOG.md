@@ -22,6 +22,20 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- **`profiles/openrouter-lean.json`, a cheaper candidate profile.** Same
+  tiers, cheaper models with tool support: `qwen/qwen3-coder-next` for
+  sonnet, `google/gemini-2.5-flash-lite` for haiku, `deepseek/deepseek-v4-pro`
+  for opus/fable - roughly half to a fifth of the default profile's list
+  prices. Shipped as something to measure, not a new default: cheaper is
+  only cheaper if the model can hold a red-green loop.
+
+- **A VS Code task for the fallback, documented.** VS Code's "New session
+  with Claude / Copilot" picker is owned by extensions, so a plugin cannot
+  add OpenRouter to it; a `.vscode/tasks.json` entry running
+  `node profiles/devkit.js openrouter` is one click from Terminal > Run Task,
+  and the README now gives it, with why `"type": "process"` and why the file
+  should stay uncommitted.
+
 - **`node profiles/devkit.js <profile> [claude args...]` - one provider
   launcher for Windows, macOS and Linux.** Setting up the OpenRouter profile
   on a real Windows 11 work machine failed at every step, none of it this
@@ -147,6 +161,17 @@ reader six months from now cannot recover from the diff.
   `devkit-onboard` seeds it when the project's own docs say so.
 
 ### Changed
+
+- **`node profiles/check.js [profile]` checks any profile, and fails a model
+  without tool calling.** Prompted by model advice from an AI search summary
+  that, checked against the live catalogue, included
+  `qwen/qwen-2.5-coder-32b-instruct` for the implementer - listed with no
+  tool support, so Claude Code could not run on it at all - alongside a
+  "completely free" model that is paid and a $10 / $50 per million model
+  recommended "within a $10 credit". Existence alone was never the bar;
+  tool calling is the minimum, and the check now says so. The README warns
+  about the pattern, and `openrouter.json`'s comment no longer claims the
+  opus tier serves `devkit-specify` - skills run on the session's model.
 
 - **Data modelling runs only for a milestone that changes stored data.** In
   real use, a project whose database had long been built was asked for a
