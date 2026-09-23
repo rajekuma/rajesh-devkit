@@ -162,6 +162,24 @@ reader six months from now cannot recover from the diff.
 
 ### Changed
 
+- **`node tests/run-evals.js --profile <name>` runs the evals on a provider
+  profile.** A `pong` proves the wiring and nothing about a red-green loop,
+  so choosing a cheaper model needed the real cases run under it. The
+  environment comes from the launcher's own `profileEnv()`, so an eval tests
+  exactly what a fallback session gets; the judge that grades the run stays
+  on the Claude login, because grading a model with itself measures nothing.
+  `-JudgeModel` in the Windows bridge was declared and never passed to
+  `claude`; it is now.
+
+  First result: `openrouter-lean` scored 3/9 on `implementer-red-green`, for
+  about $0.07. The code worked, but the session model never invoked the
+  plugin's `devkit-implementer`: it spawned generic agents told "you are the
+  devkit-implementer agent", so none of the implementer's discipline ran - no
+  RED before GREEN, no criteria ticked, no runner cached. It stays a candidate,
+  not a default. (The eval summary's own cost figure said $1.06: Claude Code
+  prices a model it does not know as if it were Claude. OpenRouter's key
+  usage is the real number.)
+
 - **`node profiles/check.js [profile]` checks any profile, and fails a model
   without tool calling.** Prompted by model advice from an AI search summary
   that, checked against the live catalogue, included
@@ -336,6 +354,17 @@ reader six months from now cannot recover from the diff.
   different milestone in the same tree.
 
 ### Fixed
+
+- **A profile started from inside a Claude session used that session's
+  login.** Running an eval under `openrouter-lean` from the desktop app's
+  shell failed every request with `authentication_failed`, while the same
+  `pong` from a plain terminal worked. The app hands child processes its own
+  session variables (`CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`,
+  `CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH`, `USE_LOCAL_OAUTH`, ...), so the
+  `claude` it started believed it was the app's child and sent the app's
+  login to OpenRouter. `profileEnv()` now strips a host session's variables,
+  keeping a few `CLAUDE_CODE_*` settings that are the user's own intent;
+  verified live from the desktop app's shell.
 
 - **`appendTelemetry` no longer takes the Stop hook down with it.** Found by
   writing the "state directory is unwritable" test for the lease work, in

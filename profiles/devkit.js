@@ -53,6 +53,19 @@ const MANAGED = [
   'ANTHROPIC_DEFAULT_FABLE_MODEL',
 ];
 
+// Variables a running Claude session (the desktop app, an SDK host, a
+// session's own tool shell) hands its child processes so they act as part of
+// it - its entry point, its session ids, its host-side OAuth refresh. A
+// `claude` started with them believes it is that session's child and uses the
+// host's login, whatever ANTHROPIC_AUTH_TOKEN says. Found by running an eval
+// under a gateway profile from the desktop app's shell: every request came
+// back authentication_failed, while the same pong from a plain terminal
+// worked; stripping these made it answer. A profile starts an independent
+// session, so they never pass through. A few user-set CLAUDE_CODE_* knobs
+// are kept, because they are the user's intent rather than a host's plumbing.
+const HOST_SESSION = /^(CLAUDECODE|CLAUDE_CODE_.*|CLAUDE_AGENT_SDK_.*|CLAUDE_PID|USE_LOCAL_OAUTH|USE_STAGING_OAUTH)$/;
+const USER_KNOBS = /^CLAUDE_CODE_(MAX_CONTEXT_TOKENS|MAX_OUTPUT_TOKENS|DISABLE_NONESSENTIAL_TRAFFIC|DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT)$/;
+
 const TIER_VARS = {
   opus: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
   sonnet: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
@@ -100,10 +113,10 @@ function loadProfile(name) {
   try {
     cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch (e) {
-    fail(`cannot read profile '${name}' (${file}): ${e.message}`);
+    throw new Error(`cannot read profile '${name}' (${file}): ${e.message}`);
   }
   if (typeof cfg.baseUrl !== 'string' || !cfg.tiers || typeof cfg.tiers !== 'object') {
-    fail(`profile '${name}' needs a baseUrl and a tiers object`);
+    throw new Error(`profile '${name}' needs a baseUrl and a tiers object`);
   }
   return cfg;
 }
@@ -113,8 +126,8 @@ function loadProfile(name) {
 // never from an argument, which would land in shell history. The file exists
 // for Windows, where setting a variable per window is exactly the friction
 // this launcher removes; it is outside every repo, so nothing can commit it.
-function readKey(envName) {
-  const fromEnv = process.env[envName];
+function readKey(envName, baseEnv = process.env) {
+  const fromEnv = baseEnv[envName];
   if (fromEnv && fromEnv.trim()) return { key: fromEnv.trim(), source: `$${envName}` };
   const file = path.join(os.homedir(), '.devkit', `${envName.toLowerCase()}.txt`);
   try {
@@ -171,36 +184,33 @@ function mask(key) {
   return key.length <= 8 ? '****' : `${key.slice(0, 4)}...${key.slice(-4)}`;
 }
 
-// --- main -----------------------------------------------------------------
+// The environment a profile gives claude, built from `baseEnv` without
+// touching it. Exported so the eval runner can put a profile under test with
+// exactly the variables a real fallback session gets - two copies of this
+// would drift, and an eval that measured a different setup than the one
+// people run would be measuring nothing. Throws with a user-facing message.
+function profileEnv(name, baseEnv = process.env) {
+  // A profile is a file in this folder, named by a plain word - never a path.
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new Error(`not a profile name: ${name}`);
+  const env = { ...baseEnv };
+  for (const v of MANAGED) delete env[v];
+  for (const v of Object.keys(env)) if (HOST_SESSION.test(v) && !USER_KNOBS.test(v)) delete env[v];
 
-const argv = process.argv.slice(2);
-if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') usage();
+  if (name === 'claude') {
+    return { env, gateway: false, lines: ['devkit: profile claude - your subscription login, Anthropic models.'] };
+  }
 
-const name = argv[0];
-// A profile is a file in this folder, named by a plain word - never a path.
-if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) usage();
-const rest = argv.slice(1);
-const dryRun = rest.includes('--dry-run');
-const claudeArgs = rest.filter((a) => a !== '--dry-run');
-
-const env = { ...process.env };
-for (const v of MANAGED) delete env[v];
-
-const lines = [];
-if (name === 'claude') {
-  lines.push('devkit: profile claude - your subscription login, Anthropic models.');
-} else {
   const cfg = loadProfile(name);
   const keyEnv = typeof cfg.keyEnv === 'string' ? cfg.keyEnv : `${name.toUpperCase()}_API_KEY`;
-  const { key, source, file, doubled } = readKey(keyEnv);
+  const { key, source, file, doubled } = readKey(keyEnv, baseEnv);
   if (!key && doubled) {
-    fail(
+    throw new Error(
       `found ${doubled} - one ".txt" too many (Windows hides extensions, so Notepad added its ` +
         `own). Rename it to ${path.basename(file)} and run this again.`
     );
   }
   if (!key) {
-    fail(
+    throw new Error(
       `no API key for profile '${name}'. Either set ${keyEnv} in this terminal, or put the key ` +
         `alone on one line in ${file} (outside every repository, so it can never be committed).`
     );
@@ -212,9 +222,8 @@ if (name === 'claude') {
   for (const [tier, variable] of Object.entries(TIER_VARS)) {
     if (typeof cfg.tiers[tier] === 'string') env[variable] = cfg.tiers[tier];
   }
-  if (!claudeArgs.some((a) => a === '--model' || a.startsWith('--model='))) claudeArgs.unshift('--model', DEFAULT_SESSION_TIER);
 
-  lines.push(`devkit: profile ${name} - ${cfg.baseUrl}, key from ${source} (${mask(key)})`);
+  const lines = [`devkit: profile ${name} - ${cfg.baseUrl}, key from ${source} (${mask(key)})`];
   for (const tier of Object.keys(TIER_VARS)) {
     if (cfg.tiers[tier]) lines.push(`  ${tier.padEnd(7)}-> ${cfg.tiers[tier]}`);
   }
@@ -222,27 +231,56 @@ if (name === 'claude') {
     'Billed per token to this provider, NOT to your Claude subscription. Set a hard spend ' +
       "cap on the key in the provider's dashboard - nothing here can enforce one."
   );
+  return { env, gateway: true, lines };
 }
 
-const target = resolveClaude();
-if (!target) {
-  fail(
-    'cannot find claude on PATH. Install Claude Code, or set DEVKIT_CLAUDE_BIN to the full ' +
-      'path of the claude executable.'
-  );
+// --- main -----------------------------------------------------------------
+
+function main() {
+  const argv = process.argv.slice(2);
+  if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') usage();
+
+  const name = argv[0];
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) usage();
+  const rest = argv.slice(1);
+  const dryRun = rest.includes('--dry-run');
+  const claudeArgs = rest.filter((a) => a !== '--dry-run');
+
+  let built;
+  try {
+    built = profileEnv(name);
+  } catch (e) {
+    fail(e.message);
+  }
+  const { env, lines } = built;
+  if (built.gateway && !claudeArgs.some((a) => a === '--model' || a.startsWith('--model='))) {
+    claudeArgs.unshift('--model', DEFAULT_SESSION_TIER);
+  }
+
+  const target = resolveClaude();
+  if (!target) {
+    fail(
+      'cannot find claude on PATH. Install Claude Code, or set DEVKIT_CLAUDE_BIN to the full ' +
+        'path of the claude executable.'
+    );
+  }
+  lines.push(`devkit: starting ${target.command} ${claudeArgs.join(' ')}`.trimEnd());
+  process.stderr.write(`${lines.join('\n')}\n`);
+
+  if (dryRun) process.exit(0);
+
+  const args = [...target.prefix, ...claudeArgs];
+  const child = target.shell
+    ? spawn(`"${target.command}" ${args.map(quoteForCmd).join(' ')}`, { stdio: 'inherit', env, shell: true })
+    : spawn(target.command, args, { stdio: 'inherit', env });
+
+  // Ctrl+C belongs to claude, which shares this console; the launcher only
+  // waits and hands back claude's exit code.
+  process.on('SIGINT', () => {});
+  child.on('error', (e) => fail(`could not start claude: ${e.message}`));
+  child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
 }
-lines.push(`devkit: starting ${target.command} ${claudeArgs.join(' ')}`.trimEnd());
-process.stderr.write(`${lines.join('\n')}\n`);
 
-if (dryRun) process.exit(0);
+module.exports = { profileEnv, DEFAULT_SESSION_TIER, MANAGED };
 
-const args = [...target.prefix, ...claudeArgs];
-const child = target.shell
-  ? spawn(`"${target.command}" ${args.map(quoteForCmd).join(' ')}`, { stdio: 'inherit', env, shell: true })
-  : spawn(target.command, args, { stdio: 'inherit', env });
-
-// Ctrl+C belongs to claude, which shares this console; the launcher only
-// waits and hands back claude's exit code.
-process.on('SIGINT', () => {});
-child.on('error', (e) => fail(`could not start claude: ${e.message}`));
-child.on('exit', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+if (require.main === module) main();

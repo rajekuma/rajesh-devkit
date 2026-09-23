@@ -3,7 +3,11 @@ param(
     [string]$Case = '*',
     [switch]$KeepTemp,
     [switch]$SkipLlm,
-    [string]$JudgeModel = 'haiku'
+    [string]$JudgeModel = 'haiku',
+    # The session model for the run under test. Set by `node tests/run-evals.js
+    # --profile <name>`, which also puts the profile's gateway variables in this
+    # process's environment; see that script.
+    [string]$Model = ''
 )
 
 # Windows runner for the behavioral evals under evals/.
@@ -156,7 +160,9 @@ function Invoke-Claude {
     $args = @('-p', '--output-format', 'stream-json', '--verbose', '--no-session-persistence')
     if ($Judge) {
         $args += '--disable-slash-commands'
+        if ($JudgeModel) { $args += @('--model', $JudgeModel) }
     } else {
+        if ($Model) { $args += @('--model', $Model) }
         # --allowedTools alone is NOT enough in --print mode: a subagent's
         # Write came back denied while Edit succeeded, so cases silently
         # graded a component that had never been allowed to create a file.
@@ -189,9 +195,28 @@ function Invoke-Claude {
         if (-not $claude) { throw "claude.cmd not found - is Claude Code installed via npm?" }
         $script:ClaudeCmd = $claude
     }
-    $p = Start-Process -FilePath $claude -ArgumentList $args -WorkingDirectory $WorkDir `
-        -RedirectStandardInput $promptFile -RedirectStandardOutput $OutFile -RedirectStandardError $errFile `
-        -NoNewWindow -PassThru
+    # Under --profile, this process carries a gateway's variables so the run
+    # under test goes to that provider. The JUDGE must not: it is the
+    # measuring instrument, and grading a cheap model with the same cheap
+    # model measures nothing. Its child gets the variables stripped, and they
+    # are put back for the next run.
+    $gatewayVars = @('ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY',
+        'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL',
+        'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL')
+    $saved = @{}
+    if ($Judge) {
+        foreach ($v in $gatewayVars) {
+            $saved[$v] = [Environment]::GetEnvironmentVariable($v, 'Process')
+            [Environment]::SetEnvironmentVariable($v, $null, 'Process')
+        }
+    }
+    try {
+        $p = Start-Process -FilePath $claude -ArgumentList $args -WorkingDirectory $WorkDir `
+            -RedirectStandardInput $promptFile -RedirectStandardOutput $OutFile -RedirectStandardError $errFile `
+            -NoNewWindow -PassThru
+    } finally {
+        foreach ($v in $saved.Keys) { [Environment]::SetEnvironmentVariable($v, $saved[$v], 'Process') }
+    }
     $null = $p.Handle
     if (-not $p.WaitForExit($TimeoutSec * 1000)) {
         try { $p.Kill() } catch {}

@@ -77,6 +77,32 @@ test('a stray ANTHROPIC_API_KEY never reaches claude under a gateway profile', (
   });
 });
 
+test('a host session\'s plumbing never reaches the claude a profile starts', () => {
+  // Found live: launched from the desktop app's shell, claude inherited the
+  // app's session variables, used the app's login instead of the gateway key,
+  // and every request came back authentication_failed.
+  withFakeClaude(({ dir, fake, report }) => {
+    launch(['openrouter'], {
+      home: dir,
+      env: {
+        DEVKIT_CLAUDE_BIN: fake,
+        OPENROUTER_API_KEY: KEY,
+        CLAUDECODE: '1',
+        CLAUDE_CODE_ENTRYPOINT: 'claude-desktop',
+        CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH: '1',
+        CLAUDE_CODE_OAUTH_SCOPES: 'user:inference',
+        USE_LOCAL_OAUTH: '1',
+        CLAUDE_CODE_MAX_CONTEXT_TOKENS: '262144',
+      },
+    });
+    const env = report().env;
+    for (const v of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH', 'CLAUDE_CODE_OAUTH_SCOPES', 'USE_LOCAL_OAUTH']) {
+      assert.ok(!(v in env), `${v} leaked into the profile session`);
+    }
+    assert.strictEqual(env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '262144', "dropped the user's own setting");
+  });
+});
+
 test('the claude profile clears every gateway variable left in the shell', () => {
   withFakeClaude(({ dir, fake, report }) => {
     launch(['claude'], {
