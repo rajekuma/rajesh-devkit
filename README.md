@@ -243,8 +243,8 @@ rajesh-devkit/
 │   └── token-report.js         # not a hook - invoked by devkit-stats on demand;
 │                                 # scans session transcripts for real cost/tokens
 ├── profiles/                    # point the loop at another provider; nothing
-│   ├── devkit-env.ps1          # in agents/ or skills/ names a model, so these
-│   ├── devkit-env.sh           # four files re-target the whole chain
+│   ├── devkit.js               # in agents/ or skills/ names a model, so this
+│   │                             # launcher re-targets the whole chain, any OS
 │   ├── openrouter.json         # tier -> model, edited rather than coded
 │   └── check.js                # verifies those IDs still exist, with prices
 └── README.md
@@ -302,18 +302,48 @@ which reports what to do next in that specific repository.
 > Project scope is the right default for a shared repo; user scope is the
 > right one for a personal toolbox you carry between projects.
 
-**Requirements.** Node — and you already have it, because Claude Code is a
-Node program, which is exactly why every script here is written in it.
-**The whole plugin runs on Windows, macOS and Linux alike**: the four hooks,
-the cost scanner `devkit-stats` uses, and the regression suite (`node --test`,
-built in — no Pester, no npm install).
+**Requirements.** Node — and you almost certainly have it already, because
+Claude Code needs it. **Everything you run is a Node script, and the same
+command works on Windows, macOS and Linux:** the hooks, the provider
+launcher (`node profiles/devkit.js`), the model check, the cost scanner
+`devkit-stats` uses, and the regression suite (`node --test`, built in — no
+npm install). Nothing here asks you to run a PowerShell or bash script.
 
-One file stays PowerShell, deliberately: `tests/run-evals.ps1` exists
-*because* of a Windows-specific bug — `claude plugin eval` passes scaffold
-paths to `bash -c` unescaped there, so `C:\Dev\...` arrives mangled and every
-scaffolded case dies before Claude starts. On macOS and Linux the official
-runner works, and that's what you should use. Porting a Windows workaround to
-other platforms would be a contradiction.
+### On Windows
+
+Windows adds three traps that have nothing to do with this plugin but will
+hit you while using it. All three were hit, in one sitting, on a real
+Windows 11 work machine:
+
+- **"…cannot be loaded… is not digitally signed."** Your PowerShell
+  execution policy is `AllSigned` (common on managed machines; check with
+  `Get-ExecutionPolicy -List`), so PowerShell refuses every unsigned `.ps1`.
+  Node scripts are not affected — the policy governs `.ps1` files only — which
+  is why every command in this README is `node …`. You do not need to change
+  the policy, and you never need `sudo` or an admin window for anything here.
+- **Typing `claude` in PowerShell gives that same error.** An npm install of
+  Claude Code creates three launchers — `claude`, `claude.cmd` and an
+  unsigned `claude.ps1` — and PowerShell picks the `.ps1`. Type
+  **`claude.cmd`** instead, or use Command Prompt or Git Bash, where plain
+  `claude` works. `node profiles/devkit.js` sidesteps it entirely: it starts
+  the real `claude.exe` behind those launchers directly.
+- **PowerShell and Command Prompt take different syntax.** `$env:NAME = 'x'`
+  is PowerShell; in Command Prompt (the prompt looks like `C:\...>` with no
+  `PS` in front) the same line fails with *"The filename, directory name, or
+  volume label syntax is incorrect"* — and then `claude` runs without the
+  variable, silently. That is precisely how a "successful" OpenRouter test
+  once went to the Claude subscription instead. The launcher removes the need
+  to set these variables by hand at all.
+
+What is still shell-based, and why you never run it directly:
+`tests/run-evals.ps1` is the Windows bridge for this repo's own behavioral
+evals — it works around a Windows bug in `claude plugin eval` (scaffold paths
+reach `bash -c` unescaped, so `C:\Dev\...` arrives mangled). Always start it
+through **`node tests/run-evals.js`**, which passes it a per-process policy
+exception, so it runs under `AllSigned` without changing anything. The eval
+fixtures (`evals/*/scaffold.sh`) are bash, run by the eval runner via Git
+Bash, which comes with Git for Windows. A host project's own
+`.claude/verify.ps1`, if it chooses to have one, is that project's choice.
 
 <details>
 <summary>Other install routes</summary>
@@ -390,6 +420,57 @@ Behaviour described here is as of the Claude Code docs, [Discover plugins
 → Configure auto-updates](https://code.claude.com/docs/en/discover-plugins)
 and [Plugin marketplaces](https://code.claude.com/docs/en/plugin-marketplaces);
 check there if a command has moved.
+
+## When you hit the usage limit
+
+Nothing switches automatically, and nothing can: the provider is fixed when
+`claude` starts, and at the limit no hook gets a turn to run. It doesn't need
+to. Every edit updates `.claude/rajesh-devkit/resume.json`, so a new session
+under another provider picks up exactly where the old one stopped.
+
+1. **Don't save anything.** The spec's ticks, the working tree and
+   `resume.json` are already current. Exit the limited session with `/exit`
+   (or Ctrl+C twice). If it's open in another terminal tab, exit it there
+   first — otherwise the plugin sees two live sessions on one milestone and
+   stops to ask which owns it.
+2. **Open a terminal in the project folder** — not a parent of it, or the
+   plugin doesn't load (see Install). In VS Code, the built-in terminal
+   already starts there, as long as you opened the project folder itself.
+3. **Start the fallback session:**
+   ```bash
+   node <plugin>/profiles/devkit.js openrouter
+   ```
+   The same command in PowerShell, Command Prompt, Git Bash, VS Code's
+   terminal, macOS and Linux. `<plugin>` is your clone of this repository,
+   e.g. `C:\Dev\rajesh-devkit`.
+4. **Check the banner** says you're on OpenRouter and where to resume, then
+   say `continue`.
+5. **When the limit resets**, `/exit` and start `claude` again in the
+   project — on Windows in PowerShell or VS Code's default terminal, type
+   `claude.cmd` (see "On Windows"). It resumes from the same file.
+
+- **Never `claude --continue` or `--resume` across the switch.** It replays
+  the whole old conversation to the new provider, billed as fresh input.
+- **Only implement, review and ship on the fallback.** Wait for Claude for
+  specs, ADRs, roadmap work and any milestone marked `SENSITIVE:` — a weaker
+  model there produces plausible mistakes everything downstream then trusts.
+- **The Claude Code panel in VS Code, and the desktop app, always use your
+  Claude login.** The launcher can't change that; the fallback runs in a
+  terminal, which can sit right beside the panel.
+- **Keep a spend cap on the OpenRouter key.** Nothing here can enforce one.
+
+**One-time setup:** put your OpenRouter key alone on one line in
+`~/.devkit/openrouter_api_key.txt` (`C:\Users\<you>\.devkit\…` on Windows —
+watch for Notepad saving it as `.txt.txt`), add credit to the OpenRouter
+account, then check with
+`node <plugin>/profiles/devkit.js openrouter --dry-run`.
+
+**Keep the two copies in step.** The launcher runs from your clone; the
+agents, skills and hooks in your project come from the *installed* copy,
+which only moves when you update it — see "Updating" above.
+
+The detail behind every step is in "Running on another provider, and
+surviving a usage limit" below.
 
 ## Getting started in a brand-new project
 
@@ -633,17 +714,70 @@ report (`prices` in `.claude/devkit.json` — see Telemetry).
 
 ### The profiles
 
-```powershell
-. <plugin>\profiles\devkit-env.ps1   # once per shell
-Use-DevkitProfile openrouter          # then: claude
-Use-DevkitProfile claude              # back to the subscription
-```
+One command, identical in PowerShell, Command Prompt, Git Bash, bash and
+zsh. `<plugin>` is wherever this repository is on your machine
+(e.g. `C:\Dev\rajesh-devkit`):
 
 ```bash
-source <plugin>/profiles/devkit-env.sh
-devkit_profile openrouter   # then: claude
-devkit_profile claude
+node <plugin>/profiles/devkit.js openrouter
 ```
+
+That starts a normal interactive `claude` session with OpenRouter as the
+provider. Anything after the profile name goes straight to `claude`, so a
+one-request smoke test is:
+
+```bash
+node <plugin>/profiles/devkit.js openrouter -p "Reply with the single word: pong"
+```
+
+and `--dry-run` shows what would run — base URL, tier mapping, which
+`claude` it found, a masked key — without starting anything. To use the
+subscription again, just run `claude` as usual (or `node
+<plugin>/profiles/devkit.js claude`, which also strips any gateway variables
+left in your shell by an earlier experiment).
+
+**Why a launcher.** The variables only matter to one process — the `claude`
+you are about to start — so the launcher sets them on that process and
+nowhere else. Nothing is left behind in your shell, there is no "switch
+back" step to forget, and no `.ps1` or `source`-able script is involved. It
+replaced `devkit-env.ps1` / `devkit-env.sh`, which edited the current shell
+instead and failed on a locked-down Windows machine in every way described
+under "On Windows" above.
+
+**The API key** comes from the `OPENROUTER_API_KEY` environment variable if
+it is set, and otherwise from a one-line file:
+`~/.devkit/openrouter_api_key.txt` (on Windows,
+`C:\Users\<you>\.devkit\openrouter_api_key.txt`). The file is the easy
+option on Windows — write it once, never set a variable again. Watch the
+name: with Windows' default of hiding extensions, Notepad saves
+`openrouter_api_key.txt` as `openrouter_api_key.txt.txt` while Explorer
+shows one `.txt`. The launcher says so if it finds the doubled name. It lives in
+your home folder, outside every repository, so it cannot be committed; it is
+a plain-text secret, so keep it as private as any other. The key is never
+passed as an argument (that would land in shell history) and never printed
+in full. **Credit is not the same as a key limit:** raising a key's credit
+limit in the OpenRouter dashboard adds no money; paid models need a balance
+on the account (its Credits page), and the key's limit then caps what that
+key may spend from it — set one.
+
+**The session's model.** A gateway session starts on the `sonnet` tier
+unless you pass `--model`. Found live: without an explicit model, Claude
+Code carried its default alias's `[1m]` context suffix onto the gateway ID
+(`qwen/...:free[1m]`), which OpenRouter rejects. `sonnet` rather than `opus`
+because a fallback session is for orchestration and implementation; spec and
+ADR work should wait for the subscription (see "Which stages to run cheap"
+below). `--model opus` overrides it.
+
+**Free models are for proving the wiring, not for work.** OpenRouter's
+`:free` models need no credit, but allow 50 requests a day (1,000 once $10
+has ever been purchased) and 20 a minute, and their providers throttle hard
+— expect `429 · Provider returned error`. Claude Code retries a 429 by
+itself, so one command can spend several of the 50. Some free backends also
+cannot parse Claude Code's tool definitions at all (seen:
+`grammar rejected: tool "DesignSync" … unsupported schema keyword
+"minLength"`). A `pong` through Claude Code is 20,000+ input tokens, because
+every request carries its system prompt and tool list — about a cent on
+`qwen/qwen3-coder`, about ten cents on `anthropic/claude-sonnet-4.5`.
 
 `profiles/openrouter.json` holds the tier→model mapping, so changing which
 model does the coding is a one-line edit, not a code change. **Run
@@ -692,15 +826,17 @@ provider — opens with *"picking up M28, mid-flight: criteria 7/24, resume at
 criterion 8, branch feat/phase5-expenses, tree dirty"* instead of
 rediscovering the project from scratch.
 
-So the handoff is:
+So the handoff is (the short checklist is "When you hit the usage limit",
+near the top):
 
 1. Work normally. `resume.json` is current at every instant; nothing to do.
 2. The limit hits mid-criterion. Nothing is lost — ticked criteria are in the
    spec, the code is in the working tree, the position is in `resume.json`.
-3. New shell, `Use-DevkitProfile openrouter`, `claude`. The banner says where
-   you were. Carry on.
-4. When the window resets: `Use-DevkitProfile claude`, new session, same
-   path. Nothing depends on which provider did which criterion.
+3. In the project folder, `node <plugin>/profiles/devkit.js openrouter`. The
+   banner says where you were. Carry on.
+4. When the window resets: exit that session and start plain `claude` (or
+   `claude.cmd` in PowerShell) — a new session, same path. Nothing depends on
+   which provider did which criterion.
 
 **Do not use `claude --continue` across a provider switch.** Resuming replays
 the entire transcript to the new provider as fresh input tokens — there is no
@@ -739,7 +875,7 @@ number rather than a feeling.
 |---|---|---|---|
 | `devkit-onboard` | "devkit onboard this project", "set up devkit here", "get this repo on the devkit loop" | `fable`, `effort: high` | Gets a project — brand-new or with years of history — to the state the loop needs. Inventories what already exists first and never clobbers it (`CLAUDE.md`, `specs/`, a tracker under any name, other `.claude` assets, a `spec-loop`-shaped skill that would suppress the `Stop` hook), detects the stack and **seeds `test-runners.json` with a command it actually ran**, reconstructs product intent from what's already written rather than a blank page, then proposes a `PROGRESS.md` (offering the lightweight and thorough options honestly instead of choosing for you) and a shortlist of load-bearing ADRs to backfill. Ends by running the real `session-welcome.js` check to prove the loop can parse what it just built. |
 | `devkit-adr` | "devkit adr", "devkit write an ADR", "devkit record this decision" | `fable`, `effort: high` | Writes `docs/adr/<NNNN>-<kebab-title>.md`, closing the gap where `devkit-specify` *reads* decision records but nothing ever wrote one. Detects the project's existing convention (folder name, numbering, section shape) from the most recent records and matches it. Refuses to write an ADR for a non-decision, and interviews for the parts that carry the value and are never inferable — the alternatives actually rejected, the forces in tension, the consequences accepted including the bad ones, and what would make you revisit it. Never invents a rationale. Links the record back into the spec and updates any ADR it supersedes. |
-| `devkit-eval` | "run the devkit tests", "devkit eval", "devkit regression" | `sonnet` | This plugin's own regression check, for editing *this repo* rather than a host project. Runs `tests/run-tests.ps1` (below), then checks the half no script can assert: that report-only components still declare themselves report-only, that nothing has quietly gained permission to commit, that verdict strings the orchestrator routes on are unchanged, that the handoff chain in the prompts still matches the chain in `continue-loop.js`'s nudge messages, and that the README hasn't drifted from the code. |
+| `devkit-eval` | "run the devkit tests", "devkit eval", "devkit regression" | `sonnet` | This plugin's own regression check, for editing *this repo* rather than a host project. Runs `node --test tests/*.test.js` (below), then checks the half no script can assert: that report-only components still declare themselves report-only, that nothing has quietly gained permission to commit, that verdict strings the orchestrator routes on are unchanged, that the handoff chain in the prompts still matches the chain in `continue-loop.js`'s nudge messages, and that the README hasn't drifted from the code. |
 | `devkit-specify` | "devkit spec this feature", "devkit specify \<feature\>", "draft a devkit spec for \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. Marks any requirement touching an existing invariant, a security/auth boundary, a data-model change, an external integration, or a backward-compatibility break with `🔒 SENSITIVE:` — the marker the escalation gate (see "Hooks" below) keys off of — and leads its final report with those flags if any exist. |
 | `devkit-help` | "devkit help", "how do I use devkit", "getting started with devkit" | `haiku` | Runs the same state check as the `SessionStart` hook (below) and relays it conversationally — the verified on-demand fallback for the automatic banner. Read-only. |
 | `devkit-stats` | "devkit stats", "devkit cost report", "devkit milestone timing" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.js`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
@@ -1366,11 +1502,16 @@ a judge's impression of the transcript. `evals/README.md` lists every case
 and the invariant it locks in.
 
 ```bash
-claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --max-cost-usd 15
+node tests/run-evals.js
+node tests/run-evals.js --case 'ship-*' --keep-temp
 ```
 
-**On Windows, use `tests\run-evals.ps1` instead** — it runs the identical
-case files. The official runner currently passes each scaffold path to
+One command on every OS. On macOS and Linux it runs the official runner
+(`claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1
+--max-cost-usd 15`); on Windows it runs `tests\run-evals.ps1`, the same case
+files through a bridge, with a per-process policy exception so an
+`AllSigned` machine doesn't refuse it — never start that `.ps1` by hand.
+The bridge exists because the official runner currently passes each scaffold path to
 `bash -c` unescaped, so `C:\Dev\...` arrives as `C:Devrajesh-devkit...` and
 every scaffolded case fails before Claude starts. The bridge script also
 works around two machine-level traps found while getting it running: a
@@ -1689,13 +1830,19 @@ agent involved, which is worth enabling regardless (Settings → Code security
   without putting `node` on your `PATH`. `node --version` in the same shell
   you launch Claude from is the quick check; if that fails, install Node or
   add it to `PATH`.
-- **PowerShell execution policy errors.** No longer applicable to the hooks —
-  they're Node now. It can still bite `scripts/token-report.js` (invoked by
-  `devkit-stats`) and this repo's own `tests/run-*.ps1`. Related and worth
-  knowing if you install Claude Code via npm: the `claude.ps1` shim npm
-  creates is unsigned, so a default execution policy refuses it with *"cannot
-  be loaded... not digitally signed"* — call `claude.cmd` directly rather than
-  relaxing the policy machine-wide.
+- **"…cannot be loaded… is not digitally signed" (Windows).** PowerShell's
+  execution policy, refusing an unsigned `.ps1`. Nothing you need to run in
+  this plugin is a `.ps1` — use the `node …` commands as written. If it's
+  `claude` itself that fails this way, PowerShell picked npm's `claude.ps1`
+  shim: type `claude.cmd`, or use Command Prompt or Git Bash. Don't relax the
+  policy machine-wide, and don't reach for `sudo` or an admin window; see
+  "On Windows" under Install.
+- **An OpenRouter test answered, but nothing shows on OpenRouter's Activity
+  page.** It went to your Claude subscription: the variables never reached
+  `claude`. The classic cause is `$env:` lines typed into Command Prompt,
+  where they fail and `claude` runs anyway. Use `node
+  <plugin>/profiles/devkit.js openrouter`, which sets them on the `claude` it
+  starts, and check with `--dry-run` first.
 - **`devkit-stats` says no telemetry exists yet.** Either the Stop hook has
   never fired for this project (check `PROGRESS.md` exists and has a
   recognisable milestone line), or the milestone in question was implemented

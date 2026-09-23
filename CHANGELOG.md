@@ -13,7 +13,40 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Removed
+
+- **`profiles/devkit-env.ps1` and `profiles/devkit-env.sh`** (`Use-DevkitProfile`,
+  `devkit_profile`). Replaced by `node profiles/devkit.js <profile>`, below.
+  Breaking for anyone who scripted the old functions; the replacement is one
+  command on every OS.
+
 ### Added
+
+- **`node profiles/devkit.js <profile> [claude args...]` - one provider
+  launcher for Windows, macOS and Linux.** Setting up the OpenRouter profile
+  on a real Windows 11 work machine failed at every step, none of it this
+  plugin's logic: a `LocalMachine` execution policy of `AllSigned` refused the
+  unsigned `devkit-env.ps1`; `sudo` then tried to open it as an application;
+  `claude` itself resolved to npm's unsigned `claude.ps1` shim and was refused
+  the same way; and hand-typed `$env:` lines in what turned out to be a
+  `cmd.exe` window all failed, after which `claude -p` answered `pong` from
+  the Claude subscription while looking like a successful gateway test. The
+  shell-function design needed the user to know which shell they were in,
+  how to dot-source, and how to get past a policy - and it needed two copies
+  kept in step.
+
+  The launcher sets the provider variables on the `claude` it starts and
+  nowhere else, since that is the only process that reads them: no script
+  policy applies to `node`, nothing is left in the shell, and there is no
+  "switch back" step. On Windows it starts the native `claude.exe` behind
+  npm's three shims directly, so the `.ps1` shim never runs. The key comes
+  from `OPENROUTER_API_KEY` or, failing that, a one-line file at
+  `~/.devkit/openrouter_api_key.txt`, outside every repository - never an
+  argument, never printed in full. A gateway session names the `sonnet` tier
+  unless told otherwise, because without an explicit `--model` Claude Code
+  sent `qwen/qwen3.8-27b:free[1m]` and OpenRouter rejected the id.
+  `--dry-run` shows everything it would do. Profiles gain an optional
+  `keyEnv` field.
 
 - **The hooks can now tell whether another session is already live in the
   same working tree.** Every piece of state this plugin kept answered *where
@@ -114,6 +147,25 @@ reader six months from now cannot recover from the diff.
   `devkit-onboard` seeds it when the project's own docs say so.
 
 ### Changed
+
+- **The README has an "On Windows" section**, covering the three traps
+  above - execution policy, the `claude.ps1` shim (`claude.cmd` works), and
+  PowerShell versus Command Prompt syntax - and states that nothing in the
+  plugin needs a `.ps1` run by hand, `sudo`, or an admin window. It also
+  explains free OpenRouter models (50 requests a day, provider 429s,
+  backends that reject Claude Code's tool schemas), that a key's credit
+  limit is not credit, and what a single request through Claude Code
+  actually costs. The eval instructions now say `node tests/run-evals.js`
+  on every OS, and never to start `tests/run-evals.ps1` directly; a stale
+  pointer to a `tests/run-tests.ps1` that no longer exists is gone, as is a
+  troubleshooting claim that execution policy could affect
+  `token-report.js` (a Node script, which it cannot).
+
+  And a short "When you hit the usage limit" checklist now sits right after
+  Install, including the VS Code terminal, because the same steps were
+  buried two-thirds of the way down, and the question at the moment of a
+  limit was simply "does it switch by itself?" (No - and why it doesn't need
+  to.)
 
 - **The chain says what happens after a gate's findings are applied.**
   `continue-loop.js`'s `downstream()` read as one-way - gate, gate, gate,

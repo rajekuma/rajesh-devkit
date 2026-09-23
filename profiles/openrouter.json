@@ -23,6 +23,7 @@
     "    work. Highest volume, lowest stakes, best place to save money."
   ],
   "baseUrl": "https://openrouter.ai/api",
+  "keyEnv": "OPENROUTER_API_KEY",
   "tiers": {
     "opus": "anthropic/claude-sonnet-4.5",
     "sonnet": "qwen/qwen3-coder",

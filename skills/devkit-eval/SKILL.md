@@ -65,12 +65,11 @@ flag set:
 claude plugin eval . --scaffold --allow-tools Bash Write Edit --runs 1 --max-cost-usd 15
 ```
 
-```powershell
-# The Windows bridge, called directly: same case files, driven through
-# `claude -p --plugin-dir` with its own isolation instead of the sandbox.
-powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-evals.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-evals.ps1 -Case 'ship-*' -KeepTemp
-```
+On Windows, never start `tests\run-evals.ps1` by hand: a machine with an
+`AllSigned` execution policy refuses it outright. `node tests/run-evals.js`
+is the only entry point you need there — it passes the bridge a per-process
+policy exception, and every flag the bridge takes (`--case`, `--keep-temp`,
+`--judge-model`) is accepted by the Node entry point too.
 
 Every run is a real Claude session on the user's credential — say so before
 starting, and use `-Case` to run only what the edit could have affected.
