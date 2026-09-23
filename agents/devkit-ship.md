@@ -241,7 +241,11 @@ reading the conversation. It is recorded:
      3. **`## Rollback` says something.** A plan whose rollback section is
         empty, or says "revert the migration" for a destructive step, →
         **BLOCKED**, quoting the section. "There isn't one, and here is what
-        that commits us to" is an acceptable answer; silence is not.
+        that commits us to" is an acceptable answer; silence is not. So is a
+        section that cites the project's own written forward-only policy
+        (`CLAUDE.md`, `.claude/rules/`, an ADR) and names the fix-forward
+        step — check the cited rule actually exists, then accept it; don't
+        ask for a restore script the project decided not to have.
    - All three hold → **PASS**, naming the migration file.
 
 11. **UI states.** Applies when `specs/<name>.ux.md` exists for this

@@ -148,6 +148,64 @@ reader six months from now cannot recover from the diff.
 
 ### Changed
 
+- **Data modelling runs only for a milestone that changes stored data.** In
+  real use, a project whose database had long been built was asked for a
+  data-model plan - backfill, rollback, restore script - on milestones that
+  touched no stored data at all. The Stop hook's chain read "invoke
+  devkit-datamodel" as a standing order for every milestone, and the agent
+  itself had no "not applicable" exit. The chain now says to invoke it only
+  if the milestone adds or alters a table, column, constraint, index, entity
+  or seed, and to skip it otherwise; the agent's first step is to decide that
+  and, when nothing changes, say so and write nothing. An existing schema is
+  the baseline, never re-planned. And both `devkit-datamodel` and
+  `devkit-ship` now follow a project's own written rollback policy - a
+  forward-only rule in `CLAUDE.md`, `.claude/rules/` or an ADR satisfies the
+  rollback section, instead of a restore script the project decided not to
+  have.
+
+- **The README says how to customize the plugin, near the top.** A new
+  "Customize it for your project" section lists all six places - stages in
+  `.claude/devkit.json`, a personal `devkit.local.json`, the project's own
+  `CLAUDE.md` / `.claude/rules/` / ADRs (the most powerful and previously
+  never presented as customization), a verify script, the test-runner cache
+  and the fallback's model mapping - each with an example. Until now the
+  config keys were documented around line 1000, under "Hooks". The OpenRouter
+  section gains a per-component model table (which tier each agent asks for,
+  and what that becomes on the subscription and in the fallback), and
+  "Starting and stopping the loop" says any session can `devkit continue`,
+  each starts idle, repeating it is harmless, and an old window should be
+  paused or exited first.
+
+- **The loop starts when you say `devkit continue`, and `devkit pause`
+  stops it.** Breaking: until now the `Stop` hook drove every session in a
+  project with an unfinished milestone, and every session claimed that
+  milestone in `session-lease.json` just by existing - `SessionStart`
+  claimed it, every edit and every stop renewed it. Found in real use: after
+  a milestone ended, a new session opened for unrelated work was told at
+  every stop that another session held the next milestone and asked which
+  owned it. The user answered "neither"; the hook, which cannot hear an
+  answer, asked again at the next stop, and the session's own advice was to
+  switch the plugin's hook off.
+
+  A new `UserPromptSubmit` hook, `scripts/loop-command.js`, reads the two
+  keywords at the start of a prompt and records them per session in
+  `.claude/rajesh-devkit/loop-arm.json` (`scripts/lib/arm.js`). The `Stop`
+  hook drives only an armed session, and checks that before the collision
+  check - an idle session is not working the milestone, so it cannot
+  collide over it. Only a driving session claims a lease, in all three hooks
+  that used to claim unconditionally, so an idle session also stops being
+  reported to anyone else as "the other session". `devkit pause` releases
+  the claim. `devkit continue` hands the session the Stop hook's current
+  instruction as its first step, rather than a second copy of the chain.
+
+  An arm covers one milestone: when it ships the loop stops and waits, which
+  is the point a person looks at what shipped. `devkit continue all` covers
+  the whole queue for an unattended run, and `"loopStart": "always"` in
+  `.claude/devkit.json` restores the pre-0.7 behaviour for a project that
+  wants every session driven. The start-up banner now says what is next and
+  how to start it, instead of "Read that spec and continue from criterion
+  N", which a session opened for other work would act on.
+
 - **The README has an "On Windows" section**, covering the three traps
   above - execution policy, the `claude.ps1` shim (`claude.cmd` works), and
   PowerShell versus Command Prompt syntax - and states that nothing in the

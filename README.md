@@ -230,9 +230,13 @@ rajesh-devkit/
 │   │   ├── provider.js         # which provider/model tiers this session got
 │   │   ├── lease.js            # is another session already working this milestone
 │   │   │                         # in this working tree right now?
-│   │   └── gates.js            # was this gate verdict issued against the tree
-│   │                             # that is here now?
-│   ├── continue-loop.js        # Stop hook: nudge toward next milestone
+│   │   ├── gates.js            # was this gate verdict issued against the tree
+│   │   │                         # that is here now?
+│   │   └── arm.js              # is THIS session driving the loop?
+│   ├── continue-loop.js        # Stop hook: nudge toward next milestone, in a
+│   │                             # session that said "devkit continue"
+│   ├── loop-command.js         # UserPromptSubmit hook: "devkit continue" /
+│   │                             # "devkit pause" start and stop the loop
 │   ├── run-verify.js           # PostToolUse hook: host's verify.js/.sh/.ps1
 │   ├── track-milestones.js     # PostToolUse hook: log milestone-shipped events
 │   ├── write-resume.js         # PostToolUse hook: the resume checkpoint, so a
@@ -421,6 +425,75 @@ Behaviour described here is as of the Claude Code docs, [Discover plugins
 and [Plugin marketplaces](https://code.claude.com/docs/en/plugin-marketplaces);
 check there if a command has moved.
 
+## Customize it for your project
+
+Everything the plugin does can be shaped per project without touching the
+plugin itself. Six places, in order of how much they change:
+
+**1. Which steps the loop runs — `.claude/devkit.json`** (committed, so the
+team shares it). `devkit-onboard` asks and writes it during setup; edit it any
+time:
+
+```json
+{
+  "stages": ["specify", "implement", "review", "quality", "security", "ship", "docs"],
+  "loopStart": "keyword"
+}
+```
+
+Leave a stage out and the loop never asks for it. Every stage is on by
+default except `deliver`: `specify`, `ux`, `datamodel`, `implement`,
+`ui-verify`, `review`, `quality`, `security`, `ship`, `docs`, `release`,
+`pipeline`. No UI? Drop `ux` and `ui-verify`. The other keys — `loopStart`,
+`loop`, `checkpointCommit`, `parkedPattern`, `sensitivePatterns`,
+`sessionLeaseTtlMinutes`, `prices` — are explained in "The rest of
+`.claude/devkit.json`".
+
+**2. Just for you — `.claude/rajesh-devkit/devkit.local.json`.** Same shape,
+gitignored, and it wins over the committed file, so you can run a narrower
+loop than the team without changing it for anyone.
+
+**3. How the agents do the work — your project's own rules.** This is the
+most powerful one, and it needs no plugin settings at all. Every agent reads
+`CLAUDE.md`, `.claude/rules/*.md` and your ADRs (`docs/adr/`) before it does
+anything, and follows what's written there over its own defaults. Write your
+conventions down once and every milestone obeys them:
+
+```markdown
+<!-- .claude/rules/data.md -->
+- Migrations are EF Core, in src/Infrastructure/Persistence/Migrations.
+- We never roll back a migration; we fix forward. No down-migrations,
+  restore scripts or backup steps in plans.
+- Integration tests run against a real Postgres via docker compose.
+```
+
+With that file, `devkit-datamodel` cites the forward-only rule instead of
+asking for a rollback, and `devkit-ship` accepts it.
+
+**Data modelling runs only when a milestone changes stored data.** An
+existing schema is the baseline, never re-planned; a milestone that adds no
+table, column, constraint, index, entity or seed skips the data-model step
+and writes no `.data.md`. If your project never changes its schema through
+this loop, drop `datamodel` from `stages` altogether.
+
+**4. A check after every edit — `.claude/verify.js`** (or `.sh`, `.ps1`).
+Whatever it does — a build, a lint, a fast test subset — runs after every
+edit Claude makes, and a failure is fed straight back. See "Hooks".
+
+**5. How tests are run — `.claude/rajesh-devkit/test-runners.json`.** Written
+automatically the first time the implementer (or `devkit-onboard`) finds a
+working test command; edit it if the command changes. `"exclusive": true` on
+an entry marks a suite that must never run twice at once.
+
+**6. Which models the fallback uses — `profiles/openrouter.json`** in your
+clone of this repository. One line per tier; see "Which model each component
+runs on in the fallback".
+
+**The quickest route for a new project** is to say `devkit onboard this
+project`: it inventories what exists, writes `PROGRESS.md`, seeds the test
+command, asks which stages you want, and writes `.claude/devkit.json` — then
+point it at your conventions in `.claude/rules/`.
+
 ## When you hit the usage limit
 
 Nothing switches automatically, and nothing can: the provider is fixed when
@@ -444,7 +517,7 @@ under another provider picks up exactly where the old one stopped.
    terminal, macOS and Linux. `<plugin>` is your clone of this repository,
    e.g. `C:\Dev\rajesh-devkit`.
 4. **Check the banner** says you're on OpenRouter and where to resume, then
-   say `continue`.
+   say `devkit continue`.
 5. **When the limit resets**, `/exit` and start `claude` again in the
    project — on Windows in PowerShell or VS Code's default terminal, type
    `claude.cmd` (see "On Windows"). It resumes from the same file.
@@ -521,26 +594,26 @@ depends on them.
 
 ## Creating the first spec, then starting the dev loop
 
-Once the milestone queue exists, there is no separate "start the loop"
-command — the `Stop` hook nudges automatically the next time a session
-pauses. The one thing worth doing deliberately first:
+Once the milestone queue exists, **the loop starts when you say so**:
+`devkit continue`. Until then a session is yours for anything else, and the
+`Stop` hook stays out of it (see "Starting and stopping the loop"). The one
+thing worth doing deliberately first:
 
 1. **Say "spec this feature: `<milestone name>`"** (or just "spec this
    feature" and name it when asked) — invokes `devkit-specify`, which reads
    the repo and `CLAUDE.md` first, interviews you for anything it can't
    infer, and writes `specs/<kebab-case-feature>.md`.
-2. **Once the spec exists, either say "implement it"** (invokes
-   `devkit-implementer` directly), **or just keep working and let the
-   session pause naturally** — `continue-loop.js` checks for that spec
-   before nudging, so from here on it tells you to implement with strict
-   TDD and then invokes `devkit-reviewer`, rather than nudging toward a spec
-   that doesn't exist yet.
-3. **From here it's genuinely a loop**, not a one-shot: once `devkit-
-   reviewer` gives a `ship` verdict and `PROGRESS.md`'s row flips to `✅`,
-   the next session pause nudges toward the *next* milestone — spec first
-   if it needs one, implement directly if it already has one. Run
-   `devkit-stats` any time to see real duration/cost and the heuristic
-   effort comparison so far.
+2. **Once the spec exists, say `devkit continue`.** The loop takes the
+   milestone and the `Stop` hook drives each step from there — implement
+   with strict TDD, then the review, quality, security and ship gates —
+   pushing on every time the session pauses. `devkit pause` stops it at any
+   point; the ticks and `resume.json` keep the place.
+3. **When the milestone ships, the loop stops and waits for you.** That is
+   the moment to look at what shipped. `devkit continue` again takes the
+   *next* milestone — spec first if it needs one. For a deliberately
+   unattended run through the whole queue, say `devkit continue all`
+   instead. Run `devkit-stats` any time to see real duration/cost and the
+   heuristic effort comparison so far.
 
 ## Adding to an existing project (already has code, or cloned from GitHub)
 
@@ -779,6 +852,30 @@ cannot parse Claude Code's tool definitions at all (seen:
 every request carries its system prompt and tool list — about a cent on
 `qwen/qwen3-coder`, about ten cents on `anthropic/claude-sonnet-4.5`.
 
+#### Which model each component runs on in the fallback
+
+Every component asks for a tier, and `profiles/openrouter.json` maps each
+tier to one OpenRouter model. With the shipped mapping:
+
+| Component | Tier | On your Claude subscription | In the OpenRouter fallback |
+|---|---|---|---|
+| The session itself — the orchestrator that follows the loop | the session's | the model you picked | `qwen/qwen3-coder` (the launcher starts on `sonnet`); `--model opus` gives `anthropic/claude-sonnet-4.5` |
+| Skills: `devkit-specify`, `devkit-adr`, `devkit-roadmap`, `devkit-onboard`, `devkit-help`, `devkit-stats`, `devkit-eval` | inherit the session | the session's model | the session's model — `qwen/qwen3-coder` by default |
+| `devkit-implementer`, `devkit-ship`, `devkit-docs`, `devkit-ux`, `devkit-ui-verify`, `devkit-datamodel`, `devkit-quality`, `devkit-security`, `devkit-pipeline`, `devkit-release`, `devkit-deliver` | `sonnet` | Claude Sonnet | `qwen/qwen3-coder` |
+| `devkit-reviewer`, `devkit-dep-audit` | `haiku` | Claude Haiku | `google/gemini-2.5-flash` |
+| *(`opus` / `fable` tiers)* | — | — | `anthropic/claude-sonnet-4.5`, only reached with `--model opus` |
+
+Three consequences worth knowing:
+
+- **Nearly the whole loop runs on one model** in the fallback, security and
+  quality review included. That is the trade you make for staying unblocked;
+  see "Which stages to run cheap" for what to hold back.
+- **The mapping is per tier, not per component.** Changing the `sonnet` line
+  changes all eleven agents above at once; there is no per-agent override.
+- **Spec, ADR and roadmap work would run on the session's model too** — so
+  wait for your Claude window for those rather than pay for
+  `--model opus` through the gateway.
+
 `profiles/openrouter.json` holds the tier→model mapping, so changing which
 model does the coding is a one-line edit, not a code change. **Run
 `node profiles/check.js` before relying on it**: it verifies every ID still
@@ -901,10 +998,63 @@ number rather than a feeling.
 | Event | Matcher | Script | Trigger condition | Blocking behaviour |
 |---|---|---|---|---|
 | `SessionStart` | *(none supported)* | `scripts/session-welcome.js` | Fires when a genuine new session starts (`source: "startup"` — skips resume/clear/compact to avoid repetitive noise mid-project). | Never blocks — always exits 0. Prints contextual guidance: the bootstrap checklist if `PROGRESS.md` doesn't exist, an escalation notice if the next milestone's spec is `🔒 SENSITIVE:`-flagged, "let's spec this" if it has no spec, "implement it" if it does, or "nothing queued" if none are unstarted. Before any of those, it checks whether another live session already holds this milestone in this working tree; if so it withholds the "resume at criterion N" instruction and prints the conflict with its evidence instead (see "Two sessions, one working tree"). Its exact on-screen behavior via the harness is unverified (see Troubleshooting) — `devkit-help` is the tested fallback. |
-| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.js` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2**. Checked first, above the nudge counter and the telemetry append: if another live session already holds this milestone in this working tree, it surfaces that with its evidence and asks who owns the milestone, rather than nudging the chain forward — a collision is not a nudge, so it burns none of the eight and logs no `milestone_started`. Failing that, three possible instructions to stderr, checked in order: (1) if the milestone's spec is `🔒 SENSITIVE:`-flagged and hasn't been escalated yet this milestone, stop and ask the user whether to implement directly at higher reasoning instead of delegating — shown once per milestone, not on every repeat nudge (see "Sensitive-milestone escalation" below); (2) if no spec exists yet, draft one with `devkit-specify` first; (3) otherwise implement test-first (RED-GREEN) and invoke `devkit-reviewer` on the diff. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
+| `Stop` | *(none — Stop doesn't support matchers)* | `scripts/continue-loop.js` | Fires on every session stop. No-ops (exit 0) if: the harness reports `stop_hook_active` (already mid-continuation); the host project has its own `.claude/skills/spec-loop/SKILL.md` (deferred to entirely — see below); no `PROGRESS.md` exists; no not-started milestone is found; **this session never said `devkit continue`, or said it for a milestone that has since shipped** (silently, and before the collision check — an idle session is not working the milestone, so it cannot collide over it; see "Starting and stopping the loop"); or the same milestone has already been nudged 8 times (runaway-loop guard, counter kept in `%TEMP%\rajesh-devkit-continue-loop`, keyed per project + milestone). | Otherwise **exit 2**. Checked first, above the nudge counter and the telemetry append: if another live session already holds this milestone in this working tree, it surfaces that with its evidence and asks who owns the milestone, rather than nudging the chain forward — a collision is not a nudge, so it burns none of the eight and logs no `milestone_started`. Failing that, three possible instructions to stderr, checked in order: (1) if the milestone's spec is `🔒 SENSITIVE:`-flagged and hasn't been escalated yet this milestone, stop and ask the user whether to implement directly at higher reasoning instead of delegating — shown once per milestone, not on every repeat nudge (see "Sensitive-milestone escalation" below); (2) if no spec exists yet, draft one with `devkit-specify` first; (3) otherwise implement test-first (RED-GREEN) and invoke `devkit-reviewer` on the diff. Exit 2 on a Stop hook blocks the stop and feeds that stderr text back to Claude as the reason to keep going. |
 | `PostToolUse` | `Edit\|Write` | `scripts/run-verify.js` | Fires after every Edit or Write tool call. | If no verify script (`.claude/verify.js`, `.sh` or `.ps1`) exists in the host project, exits 0 silently (no-op). If it exists, runs it and **exits with whatever code it returned** — no remapping. The verify script's own exit-code convention is what decides whether Claude sees the failure (see the contract below). |
 | `PostToolUse` | `Edit\|Write` | `scripts/track-milestones.js` | Fires after every Edit or Write tool call, alongside `run-verify.js` (same matcher, both run). | Never blocks — always exits 0. Re-parses `PROGRESS.md`'s milestone statuses, diffs against a stored snapshot, and appends a `milestone_shipped` telemetry event for anything that just flipped to done. No-ops silently if there's no `PROGRESS.md` or no recognisable milestone lines. |
 | `PostToolUse` | `Edit|Write` | `scripts/write-resume.js` | Fires after every Edit or Write tool call, alongside the other two. | Never blocks - always exits 0. Rewrites `.claude/rajesh-devkit/resume.json` with where the loop actually is: milestone, spec, spec status, criteria ticked, next criterion, branch, dirty tree, provider. Every field is derived from the repo, so it needs no cooperation from the model and can never be more than one edit stale. This is the hook that makes a usage limit survivable - it is the only one that has already run when a session is blocked mid-criterion and gets no further turn. `SessionStart` reads it back. It also renews this session's entry in `session-lease.json` on every edit, which is the most frequent sign of life the plugin can publish. Defers to a project own loop skill like every other writing hook. |
+
+| `UserPromptSubmit` | *(none)* | `scripts/loop-command.js` | Fires on every prompt; acts only when the prompt *starts with* `devkit continue`, `devkit continue all` or `devkit pause`. | Never blocks — always exits 0. `continue` records that this session drives the next milestone (or, with `all`, the whole queue) and hands the session the Stop hook's current instruction as its first step; `pause` removes that and drops the session's claim on the milestone. Everything else passes through untouched. |
+
+### Starting and stopping the loop
+
+```
+devkit continue       take the next milestone; the loop drives it until it ships, then waits
+devkit continue all   the same for the whole queue - an unattended run
+devkit pause          stop driving this session and drop its claim
+```
+
+Type them as the whole message, or at least at the start of it; mentioning
+them mid-sentence ("why did devkit continue stop?") changes nothing.
+
+**Any session can continue the loop** — the window where the milestone
+started, a new one, another machine, or the OpenRouter fallback. Progress
+lives on disk (the spec's ticks, the working tree, `resume.json`), not in the
+window, so a brand-new session that says `devkit continue` resumes at the
+next unticked criterion rather than starting over.
+
+- **Each session starts idle** and needs its own `devkit continue`. That is
+  what keeps a window opened for other work from being driven.
+- **Saying it again is harmless.** If a session stops being nudged and you
+  are not sure why — after `/clear`, say — just say `devkit continue`.
+- **Don't let two windows drive the same milestone.** If the old window is
+  still open and driving, the new one reports a collision and asks which
+  should own it. Say `devkit pause` there, or `/exit` it, first. A window
+  that has already closed, crashed or hit a usage limit needs nothing: its
+  claim expires on its own about 15 minutes after its last activity.
+
+**Why the loop waits to be asked.** Until 0.7 the `Stop` hook drove *every*
+session in a project with an unfinished milestone, and every session claimed
+that milestone just by existing — `SessionStart` claimed it, every edit and
+every stop renewed it. Found in real use: after a milestone ended, a new
+session opened for unrelated work was told at every stop that another
+session held the next milestone and asked which one owned it. The user
+answered "neither"; the hook, which cannot hear answers, asked again at the
+next stop. That session's own advice was to switch the plugin's hook off —
+the opposite of what a loop plugin should teach.
+
+Now a session is driven only after `devkit continue`, and only a driving
+session claims a milestone, so an idle session is never nudged, never asked
+about collisions, and never reported to anyone else as "the other session".
+The start-up banner still says what's next and how to start it. The state
+lives in `.claude/rajesh-devkit/loop-arm.json`, keyed by session id, next to
+the rest of the gitignored state; `devkit continue` in a fresh session
+resumes from `resume.json` exactly as before.
+
+**The loop stops at every shipped milestone** unless you said `all`. That is
+deliberate: it is the point at which a person looks at what shipped before
+the next thing starts. A project that genuinely wants every session driven
+unattended can set `"loopStart": "always"` in `.claude/devkit.json` to get the
+pre-0.7 behaviour back.
 
 ### Why the Stop hook defers to a project's own loop skill
 
@@ -1235,6 +1385,7 @@ behaviour that existed before it:
   "role": "full-stack-developer",
   "stages": ["specify", "ux", "implement", "review", "security", "ship", "docs"],
   "loop": "devkit",
+  "loopStart": "keyword",
   "parkedPattern": "not spec'd",
   "checkpointCommit": true,
   "sessionLeaseTtlMinutes": 15,
@@ -1250,6 +1401,11 @@ behaviour that existed before it:
   from still has the skill it grew out of, so installing the plugin there
   did nothing at all, and the only way to try it was to delete the fallback
   first. Now both can sit on disk and one of them drives.
+- **`loopStart`** — `"keyword"` (the default) means a session is driven by
+  the loop only after the user says `devkit continue`; `"always"` drives
+  every session from the moment it starts, which was the behaviour before
+  0.7 and is right for a project that runs unattended on purpose. See
+  "Starting and stopping the loop".
 - **`parkedPattern`** — a regex matched against the *annotation* in a
   milestone row's status cell. A row that matches is skipped by the loop and
   reported by `devkit-help` instead. Defaults to "not spec'd" and its
@@ -1613,12 +1769,13 @@ to one JSONL file **inside the host project**:
 `track-milestones.js`'s own bookkeeping for detecting a status flip).
 `devkit-stats` reads that file and reports duration per milestone.
 
-Three more files share that directory and the same one-line `.gitignore`
-rule: `resume.json`, the machine-written checkpoint that makes a usage limit
+Four more files share that directory and the same one-line `.gitignore`
+rule: `loop-arm.json`, which sessions the user started the loop in (see
+"Starting and stopping the loop"); `resume.json`, the machine-written checkpoint that makes a usage limit
 survivable; `session-lease.json`, which records which sessions are currently
 live against this working tree and on which milestone (see "Two sessions, one
 working tree"); and `gates.json`, each gate's latest verdict stamped with the
-tree it saw (see "Stale gate verdicts"). All three are per-machine state,
+tree it saw (see "Stale gate verdicts"). All four are per-machine state,
 never shared history.
 
 **Why in-project rather than a machine-global path.** An earlier version

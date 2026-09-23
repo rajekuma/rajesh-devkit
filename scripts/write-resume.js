@@ -28,6 +28,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const lease = require('./lib/lease');
+const arm = require('./lib/arm');
 const { detectProvider } = require('./lib/provider');
 
 // Drains the harness payload, and reads the session identity out of it. This
@@ -142,7 +143,12 @@ const resume = {
 // failures and returns false, so an unwritable state directory cannot take
 // this edit down with it.
 const sessionId = hookInput && typeof hookInput.session_id === 'string' ? hookInput.session_id : null;
-if (sessionId) {
+// Only a session actually driving this milestone claims it. An edit in a
+// session doing other work is not a sign of life on the milestone, and
+// publishing it as one is what made unrelated sessions report each other as
+// collisions - see lib/arm.js. The checkpoint below is still written: where
+// the work got to is true whoever is in the tree.
+if (sessionId && arm.isDriving(dir, config, sessionId, milestone.display)) {
   lease.renew(
     dir,
     {

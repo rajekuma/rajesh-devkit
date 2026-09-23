@@ -11,6 +11,7 @@
 const d = require('./lib/devkit');
 const lease = require('./lib/lease');
 const gates = require('./lib/gates');
+const arm = require('./lib/arm');
 
 const NUDGE_CAP = 8;
 
@@ -76,6 +77,17 @@ if (!specPath && !on('specify')) process.exit(0);
 // this session is being told not to start.
 const sessionId =
   hookInput && typeof hookInput.session_id === 'string' ? hookInput.session_id : null;
+
+// Only a session the user has put on the loop is driven by it - see
+// lib/arm.js. Checked before the collision check, not after, because an idle
+// session is not working this milestone and so cannot collide over it: in
+// real use a session opened for unrelated work after a milestone ended was
+// asked at every stop which of two sessions owned the next one. Silent, and
+// it claims nothing, so it also stops being the "other session" someone
+// else's hook reports. A milestone this session armed for having shipped
+// lands here too, which is what makes the next one wait for the user.
+if (!arm.isDriving(dir, config, sessionId, milestone.display)) process.exit(0);
+
 const ttl = lease.ttlMs(config);
 const worktree = lease.worktreeId(dir);
 
@@ -235,11 +247,18 @@ if (count === 1) {
 // names a stage its owner switched off - the whole point of stage config.
 function downstream() {
   const steps = [];
+  // Conditional, not a standing step. It used to read as an order for every
+  // milestone, and in real use a project whose schema had long been built
+  // was asked for a data-model plan - backfill, rollback, restore - on
+  // milestones that touched no stored data at all. The stage exists for the
+  // milestones that change the schema; everything else skips it.
   if (on('datamodel')) {
     steps.push(
-      'invoke the devkit-datamodel subagent for the schema and migration plan (a ' +
-        'data-model change without a backfill and rollback story is how a migration ships ' +
-        'broken);'
+      'ONLY IF this milestone changes stored data (a new or altered table, column, ' +
+        'constraint, index, entity or seed), invoke the devkit-datamodel subagent for a plan ' +
+        'of that change against the existing schema - a schema change without a backfill and ' +
+        'rollback story is how a migration ships broken; if it changes no stored data, skip ' +
+        'this step entirely and do not create a .data.md;'
     );
   }
   if (on('implement')) {
