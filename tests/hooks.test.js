@@ -422,6 +422,14 @@ test('devkit-datamodel stops and writes nothing when no stored data changes', ()
   assert.match(body, /forward-only/i, 'lost the project-rollback-policy rule');
 });
 
+test('devkit-implementer must show the RED it saw, not just claim it', () => {
+  // Measured: a model did real fail->pass on every criterion and reported
+  // only "implemented, tests pass", so nobody could tell it from tests-after.
+  const body = read(PLUGIN_ROOT, 'agents', 'devkit-implementer.md');
+  assert.match(body, /Show\s+the\s+RED/);
+  assert.match(body, /failure\s+(message|it\s+actually\s+printed)/i);
+});
+
 test('a nudge never names a component whose stage is disabled', () => {
   // Not just the instructions - the explanatory asides too. A backend loop's
   // datamodel step once described itself as "the data-side counterpart to

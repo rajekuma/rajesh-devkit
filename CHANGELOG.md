@@ -162,6 +162,18 @@ reader six months from now cannot recover from the diff.
 
 ### Changed
 
+- **`devkit-implementer` must show the RED it saw, not just claim it.** Its
+  report now carries one line per criterion: the test's name and the failure
+  it actually printed, then that it passed - or, for a criterion an earlier
+  one already covered, that it passed on first run and why. Prompted by a
+  measured `qwen/qwen3-coder` run whose trace showed genuine fail-then-pass on
+  every criterion while its report said only "implemented, tests pass":
+  nobody reading that can tell test-first from tests-after. Claude kept 9/9
+  with the rule and produced exactly the table; qwen3-coder stayed 8/9, doing
+  the work right again but ignoring the reporting rules (and creating a
+  `PROGRESS.md` the project did not have), so the README now says to check
+  the code and the ticks on the fallback, not the prose.
+
 - **`node tests/run-evals.js --profile <name>` runs the evals on a provider
   profile.** A `pong` proves the wiring and nothing about a red-green loop,
   so choosing a cheaper model needed the real cases run under it. The
