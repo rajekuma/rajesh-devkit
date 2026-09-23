@@ -165,6 +165,22 @@ test('a profile name cannot be a path', () => {
   });
 });
 
+test('every profile is well-formed and maps all four tiers', () => {
+  // A profile is selected by name at the worst possible moment - right after
+  // a usage limit - so a malformed one must fail here, not then.
+  const dir = path.join(PLUGIN_ROOT, 'profiles');
+  const names = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
+  assert.ok(names.includes('openrouter.json') && names.includes('openrouter-lean.json'));
+  for (const f of names) {
+    const cfg = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    assert.match(cfg.baseUrl, /^https:\/\/\S+[^/]$/, `${f}: baseUrl`);
+    assert.doesNotMatch(cfg.baseUrl, /\/v1$/, `${f}: base URL must not end in /v1 - claude appends it`);
+    for (const tier of ['opus', 'sonnet', 'haiku', 'fable']) {
+      assert.strictEqual(typeof cfg.tiers[tier], 'string', `${f}: tier ${tier} missing`);
+    }
+  }
+});
+
 test('the shell-specific profile scripts are gone, not shadowed', () => {
   // Two ways to do one thing is the drift this plugin keeps warning about,
   // and the .ps1 one is the one that fails on a locked-down Windows machine.

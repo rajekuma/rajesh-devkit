@@ -16,7 +16,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const profilePath = path.join(__dirname, 'openrouter.json');
+// Any profile in this folder, by name: `node profiles/check.js openrouter-lean`.
+// Defaults to the original one. A plain word only, never a path.
+const profileName = process.argv[2] || 'openrouter';
+if (!/^[a-z0-9][a-z0-9-]*$/.test(profileName)) {
+  console.error('usage: node profiles/check.js [profile-name]');
+  process.exit(1);
+}
+const profilePath = path.join(__dirname, `${profileName}.json`);
 
 function loadTiers() {
   try {
@@ -73,17 +80,33 @@ async function main() {
       continue;
     }
     const p = model.pricing || {};
-    console.log(
-      `  ok       ${tier.padEnd(7)} ${id}  in ${perMillion(p.prompt)} / out ${perMillion(p.completion)}`
-    );
+    const price = `in ${perMillion(p.prompt)} / out ${perMillion(p.completion)}`;
+    // Claude Code sends tool definitions with every request, so a model
+    // without tool calling fails at the first message. A suggestion to use
+    // qwen/qwen-2.5-coder-32b-instruct for the implementer was exactly that
+    // case: it exists, it is cheap, and the catalogue lists no tool support.
+    if (!(model.supported_parameters || []).includes('tools')) {
+      bad += 1;
+      console.log(`  NO TOOLS ${tier.padEnd(7)} ${id}  ${price} - Claude Code cannot run on it`);
+      continue;
+    }
+    console.log(`  ok       ${tier.padEnd(7)} ${id}  ${price}`);
   }
 
   console.log('');
   if (bad > 0) {
-    console.log(`${bad} of ${wanted.length} model IDs do not exist. Fix ${profilePath} before using this profile.`);
+    console.log(
+      `${bad} of ${wanted.length} models are missing or cannot call tools. Fix ${profilePath} ` +
+        'before using this profile.'
+    );
     process.exit(1);
   }
-  console.log(`All ${wanted.length} model IDs exist. Prices above are OpenRouter's list prices today.`);
+  console.log(
+    `All ${wanted.length} model IDs exist and support tool calling. Prices above are ` +
+      "OpenRouter's list prices today. That is necessary, not sufficient: send one pong " +
+      `through it (node profiles/devkit.js ${profileName} -p "Reply with the single word: pong") ` +
+      'before relying on it.'
+  );
 }
 
 main();

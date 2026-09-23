@@ -538,6 +538,38 @@ watch for Notepad saving it as `.txt.txt`), add credit to the OpenRouter
 account, then check with
 `node <plugin>/profiles/devkit.js openrouter --dry-run`.
 
+**One click in VS Code.** VS Code's agent-session picker ("New session in
+<project> with Claude / Copilot") is owned by VS Code extensions, and a
+Claude Code plugin cannot add an OpenRouter entry to it. A task gets you the
+next best thing — **Terminal → Run Task → devkit: OpenRouter session** —
+running the same launcher in a terminal inside the project. Put this in the
+project's `.vscode/tasks.json`, with the path pointing at your clone:
+
+```json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "devkit: OpenRouter session",
+      "type": "process",
+      "command": "node",
+      "args": ["C:/Dev/rajesh-devkit/profiles/devkit.js", "openrouter"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "focus": true, "panel": "dedicated" },
+      "problemMatcher": []
+    }
+  ]
+}
+```
+
+`"type": "process"` runs `node` directly, with no shell in between, so the
+Windows execution policy never comes into it. The path is machine-specific:
+keep `.vscode/` gitignored (or the file uncommitted) so it doesn't land on
+someone else's machine pointing at a folder they don't have. The session runs
+in the task's terminal, not the Claude chat panel, which always uses your
+Claude login. A second task with `"--dry-run"` added to `args` is a handy
+check that the key and mapping are right before you need them.
+
 **Keep the two copies in step.** The launcher runs from your clone; the
 agents, skills and hooks in your project come from the *installed* copy,
 which only moves when you update it — see "Updating" above.
@@ -875,6 +907,34 @@ Three consequences worth knowing:
 - **Spec, ADR and roadmap work would run on the session's model too** — so
   wait for your Claude window for those rather than pay for
   `--model opus` through the gateway.
+
+#### A second, cheaper profile — to measure, not to trust
+
+`profiles/openrouter-lean.json` maps the same tiers to cheaper models, chosen
+from the live catalogue for tool support and price:
+
+| Tier | `openrouter` | `openrouter-lean` |
+|---|---|---|
+| sonnet | `qwen/qwen3-coder` — $0.30 / $1.00 | `qwen/qwen3-coder-next` — $0.12 / $0.80 |
+| haiku | `google/gemini-2.5-flash` — $0.30 / $2.50 | `google/gemini-2.5-flash-lite` — $0.10 / $0.40 |
+| opus / fable | `anthropic/claude-sonnet-4.5` — $3 / $15 | `deepseek/deepseek-v4-pro` — $0.95 / $1.90 |
+
+(Per million input / output tokens, OpenRouter list prices on 2026-09-23;
+`node profiles/check.js <profile>` prints today's.) Use it with
+`node profiles/devkit.js openrouter-lean`. It is a candidate: cheaper is only
+cheaper if the model can hold a red-green loop, and a model that can't costs
+more in reviewer rounds than it saves. Send one `pong` through it, and ideally
+run the `implementer-red-green` eval under it, before making it your default.
+Any `profiles/<name>.json` you add works the same way.
+
+**Model suggestions from elsewhere — check them first.** Advice found online
+(including AI search summaries) has recommended, for this exact loop, a model
+the catalogue lists with **no tool calling** (`qwen/qwen-2.5-coder-32b-instruct`
+— Claude Code cannot run on it at all), a "completely free" model that is
+paid (`google/gemini-2.5-flash`), and a reasoning model at $10 / $50 per
+million "within a $10 credit" — when a single Claude Code request carries
+20,000+ tokens of system prompt and tool definitions. `node profiles/check.js`
+now fails any model without tool support, and prints real prices.
 
 `profiles/openrouter.json` holds the tier→model mapping, so changing which
 model does the coding is a one-line edit, not a code change. **Run
