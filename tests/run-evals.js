@@ -21,12 +21,13 @@ const { spawnSync } = require('child_process');
 const path = require('path');
 
 function parseArgs(argv) {
-  const out = { case: '*', keepTemp: false, judgeModel: null, rest: [] };
+  const out = { case: '*', keepTemp: false, judgeModel: null, profile: null, rest: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--case') out.case = argv[++i];
     else if (a === '--keep-temp') out.keepTemp = true;
     else if (a === '--judge-model') out.judgeModel = argv[++i];
+    else if (a === '--profile') out.profile = argv[++i];
     else out.rest.push(a);
   }
   return out;
@@ -35,6 +36,35 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const pluginRoot = path.resolve(__dirname, '..');
 const isWindows = process.platform === 'win32';
+
+// --profile <name>: run the cases on a provider profile instead of the Claude
+// login - the only honest way to know whether a cheaper model can actually do
+// the work, since a pong proves the wiring and nothing about a red-green loop.
+// The environment comes from the launcher's own profileEnv, so an eval
+// measures exactly the setup a real fallback session gets. The judge that
+// grades the run stays on the Claude login (run-evals.ps1 strips the gateway
+// variables for it): grading a model with itself measures nothing.
+let childEnv = process.env;
+let sessionModel = null;
+if (args.profile) {
+  const { profileEnv, DEFAULT_SESSION_TIER } = require('../profiles/devkit.js');
+  try {
+    const built = profileEnv(args.profile);
+    childEnv = built.env;
+    if (built.gateway) sessionModel = DEFAULT_SESSION_TIER;
+    process.stderr.write(`${built.lines.join('\n')}\n`);
+  } catch (e) {
+    console.error(`run-evals: ${e.message}`);
+    process.exit(1);
+  }
+  if (!isWindows) {
+    console.error(
+      'run-evals: note - on macOS/Linux the official runner is used, and it is given the ' +
+        "profile's environment but not a --model, so the session starts on Claude Code's default " +
+        'alias. The Windows bridge passes --model explicitly.'
+    );
+  }
+}
 
 let command, cmdArgs;
 if (isWindows) {
@@ -46,6 +76,7 @@ if (isWindows) {
   ];
   if (args.keepTemp) cmdArgs.push('-KeepTemp');
   if (args.judgeModel) cmdArgs.push('-JudgeModel', args.judgeModel);
+  if (sessionModel) cmdArgs.push('-Model', sessionModel);
   cmdArgs.push(...args.rest);
 } else {
   command = 'claude';
@@ -60,7 +91,7 @@ if (isWindows) {
   cmdArgs.push(...args.rest);
 }
 
-const result = spawnSync(command, cmdArgs, { stdio: 'inherit', cwd: pluginRoot });
+const result = spawnSync(command, cmdArgs, { stdio: 'inherit', cwd: pluginRoot, env: childEnv });
 
 if (result.error) {
   console.error(`\nCould not launch ${command}: ${result.error.message}`);

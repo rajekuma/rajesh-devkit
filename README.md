@@ -924,8 +924,23 @@ from the live catalogue for tool support and price:
 `node profiles/devkit.js openrouter-lean`. It is a candidate: cheaper is only
 cheaper if the model can hold a red-green loop, and a model that can't costs
 more in reviewer rounds than it saves. Send one `pong` through it, and ideally
-run the `implementer-red-green` eval under it, before making it your default.
-Any `profiles/<name>.json` you add works the same way.
+run the `implementer-red-green` eval under it, before making it your default:
+
+```bash
+node tests/run-evals.js --case implementer-red-green --profile openrouter-lean
+```
+
+`--profile` runs the case with exactly the environment the launcher gives a
+fallback session, and keeps the judge that grades it on your Claude login.
+Any `profiles/<name>.json` you add works the same way. Read the real cost on
+OpenRouter's Activity page: the eval summary prices a model Claude Code
+doesn't know as if it were Claude, and overstated one run about fifteen-fold.
+
+**Measured so far (2026-09-23):** `openrouter-lean` scored **3/9** on
+`implementer-red-green`, for about $0.07. Its code worked; its process didn't.
+The session model never invoked `devkit-implementer` — it spawned generic
+agents told to act like it — so there was no RED before GREEN, no criteria
+ticked and no test runner cached. Not a default.
 
 **Model suggestions from elsewhere — check them first.** Advice found online
 (including AI search summaries) has recommended, for this exact loop, a model
