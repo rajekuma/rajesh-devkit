@@ -30,9 +30,9 @@ Claude, and has overstated a gateway run fifteen-fold.
 | 2026-09-23 | `openrouter-lean` | `qwen/qwen3-coder-next` | **3/9** | ~$0.07 | Invoked the implementer but wouldn't wait for a background subagent: stopped it mid-work three times, then did the milestone itself. No ticks, no cached runner, no RED. |
 | 2026-09-24 | `openrouter-nemotron-free` | `nvidia/nemotron-3-ultra-550b-a55b:free` | **8/9** | **$0** | Matches qwen3-coder at no cost: waited for the implementer, runner cached, criteria ticked, code right — and, like qwen, a report with no RED evidence. No 429s on this run, but free-tier limits (1,000 requests/day, 20/minute, provider throttling) still apply. |
 | 2026-09-24 | `openrouter-luna` | `openai/gpt-6-luna` | **2/9** (misleading) | ~$0.02 | The session launched the implementer with `isolation: "worktree"` — a throwaway copy of the repo. The work in that copy was good: 4/4 criteria ticked, runner cached, and a proper RED-then-GREEN report (the one grader that reads the report passed). None of it reached the project, so every file-based grader failed. It also first tried to call the implementer as a *skill*. Cheapest per token by far; needs the orchestration fixed before it can be judged. |
-
 | 2026-09-24 | `openrouter-luna`, after telling it "in this working tree, never with worktree isolation, let it finish" (implementer description + loop nudge) | `openai/gpt-6-luna` | **2/9** | ~$0.02 | Obeyed the word, not the intent: switched to `isolation: "remote"` — another isolated copy. The implementer's report again passed the RED grader; its work again never reached the project. |
 | 2026-09-24 | `openrouter-lean`, same instruction | `qwen/qwen3-coder-next` | **2/9** | ~$0.03 | Now waited for the implementer (`run_in_background: false`) — the instruction helped there — but used `isolation: "worktree"` anyway, so again nothing reached the project. |
+| 2026-09-24 | **`openrouter-hybrid`** — session on `qwen/qwen3-coder` (`sessionTier: opus`), every agent on `openai/gpt-6-luna` | qwen3-coder / **gpt-6-luna** | **9/9** | **~$0.07** | Matches Claude. qwen made one plain call to `devkit-implementer` — no isolation, no background stops — and Luna did all the work in the real project: 4 criteria ticked, runner cached, and a report with four separate RED→GREEN cycles and their real failure messages. Driving the loop and doing the work are different skills; this profile gives each to the model that has it. |
 
 **Verdict on the orchestration fix:** a prompt sentence does not reliably
 override how a model drives Claude Code's `Agent` tool. `gpt-6-luna` and
@@ -92,3 +92,8 @@ An AI search summary recommended, for this loop:
    Luna's 2/9 hides good work in the wrong place.
 7. **Free can be competitive.** Nemotron-free matched qwen3-coder's 8/9 at $0
    on this case; its limits, not its quality, are what to watch.
+8. **Split the roles when one model can't do both.** A profile's
+   `sessionTier` puts the session (the orchestrator) on one tier and the
+   agents on another: `openrouter-hybrid` (qwen3-coder driving, Luna working)
+   scored 9/9 where Luna alone scored 2/9. One run so far — re-measure before
+   treating it as settled.

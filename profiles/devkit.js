@@ -242,16 +242,25 @@ function profileEnv(name, baseEnv = process.env) {
     }
   }
 
+  // Which tier the session itself (the orchestrator) runs on. Separate from
+  // the tiers the subagents ask for, because driving the loop and doing the
+  // work turned out to be different skills: gpt-6-luna did good implementer
+  // work but, as the session model, isolated the implementer so its changes
+  // never reached the project. A profile can put a model that orchestrates
+  // well on one tier and a cheap worker on the subagents' tier.
+  const sessionTier = TIER_VARS[cfg.sessionTier] ? cfg.sessionTier : DEFAULT_SESSION_TIER;
+
   const lines = [`devkit: profile ${name} - ${cfg.baseUrl}, key from ${source} (${mask(key)})`];
   for (const tier of Object.keys(TIER_VARS)) {
     if (cfg.tiers[tier]) lines.push(`  ${tier.padEnd(7)}-> ${cfg.tiers[tier]}`);
   }
   if (ceilingNote) lines.push(ceilingNote);
+  if (sessionTier !== DEFAULT_SESSION_TIER) lines.push(`  session-> ${sessionTier} tier (${cfg.tiers[sessionTier]})`);
   lines.push(
     'Billed per token to this provider, NOT to your Claude subscription. Set a hard spend ' +
       "cap on the key in the provider's dashboard - nothing here can enforce one."
   );
-  return { env, gateway: true, lines };
+  return { env, gateway: true, lines, sessionTier };
 }
 
 // --- main -----------------------------------------------------------------
@@ -306,7 +315,7 @@ async function main() {
   }
   const { env, lines } = built;
   if (built.gateway && !claudeArgs.some((a) => a === '--model' || a.startsWith('--model='))) {
-    claudeArgs.unshift('--model', DEFAULT_SESSION_TIER);
+    claudeArgs.unshift('--model', built.sessionTier || DEFAULT_SESSION_TIER);
   }
 
   const target = resolveClaude();

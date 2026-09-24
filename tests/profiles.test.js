@@ -103,6 +103,21 @@ test('a host session\'s plumbing never reaches the claude a profile starts', () 
   });
 });
 
+test('a profile can put the session on a different tier from its agents', () => {
+  // Measured: gpt-6-luna does good implementer work but, as the session
+  // model, isolated the implementer; qwen3-coder orchestrates well. The
+  // hybrid profile runs the session on opus (qwen) and the agents on sonnet
+  // (Luna) - it scored 9/9.
+  withFakeClaude(({ dir, fake, report }) => {
+    launch(['openrouter-hybrid'], { home: dir, env: { DEVKIT_CLAUDE_BIN: fake, OPENROUTER_API_KEY: KEY } });
+    const got = report();
+    assert.strictEqual(got.argv[got.argv.indexOf('--model') + 1], 'opus');
+    const cfg = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, 'profiles', 'openrouter-hybrid.json'), 'utf8'));
+    assert.strictEqual(got.env.ANTHROPIC_DEFAULT_OPUS_MODEL, cfg.tiers.opus);
+    assert.strictEqual(got.env.ANTHROPIC_DEFAULT_SONNET_MODEL, cfg.tiers.sonnet);
+  });
+});
+
 test('a profile context ceiling reaches claude, and a user setting wins', () => {
   // Measured: 192 requests re-sending the whole conversation cost ~$8.50 on
   // a gateway. The ceiling makes Claude Code compact sooner.

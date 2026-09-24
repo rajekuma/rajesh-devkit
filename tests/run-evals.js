@@ -51,7 +51,7 @@ if (args.profile) {
   try {
     const built = profileEnv(args.profile);
     childEnv = built.env;
-    if (built.gateway) sessionModel = DEFAULT_SESSION_TIER;
+    if (built.gateway) sessionModel = built.sessionTier || DEFAULT_SESSION_TIER;
     process.stderr.write(`${built.lines.join('\n')}\n`);
   } catch (e) {
     console.error(`run-evals: ${e.message}`);

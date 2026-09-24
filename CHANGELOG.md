@@ -22,6 +22,19 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- **`sessionTier` in a profile, and `openrouter-hybrid`: 9/9 for about
+  $0.07.** Measurement showed driving the loop and doing the work are
+  different skills: `gpt-6-luna` did good implementer work but, as the session
+  model, isolated the implementer in a worktree or a remote copy (2/9), while
+  `qwen3-coder` orchestrates properly. A profile's `sessionTier` now names the
+  tier the session itself runs on - the launcher and `run-evals --profile`
+  both pass it as `--model` - so `openrouter-hybrid` runs the session on
+  qwen3-coder (opus tier) and every agent asking for sonnet on Luna. On
+  `implementer-red-green` it scored 9/9, matching Claude: one plain call to
+  the implementer, all work in the real project, four RED-to-GREEN cycles
+  reported with their failure messages. One run so far; the README calls it
+  the front-runner, not settled.
+
 - **The loop says how to run `devkit-implementer`, not only that it runs.**
   Its description and the Stop hook's implement step now say: in this
   working tree, never with worktree isolation, and let it finish - no

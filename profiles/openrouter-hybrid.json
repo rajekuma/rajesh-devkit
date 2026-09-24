@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "CANDIDATE, added 2026-09-24 to measure - not a recommendation. See docs/model-learnings.md.",
+    "Use:  node profiles/devkit.js openrouter-hybrid",
+    "Eval: node tests/run-evals.js --case implementer-red-green --profile openrouter-hybrid",
+    "",
+    "A good orchestrator driving a cheap worker. Measured separately: qwen/qwen3-coder drives",
+    "the loop properly (waits for the implementer, in this working tree), while gpt-6-luna did",
+    "good implementer work but, as the session model, isolated the implementer so none of it",
+    "reached the project. So the SESSION runs on the opus tier (sessionTier) = qwen3-coder, and",
+    "every subagent that asks for sonnet - devkit-implementer and ten others - gets Luna, at",
+    "$0.10 in / $0.01 cached / $0.50 out."
+  ],
+  "baseUrl": "https://openrouter.ai/api",
+  "keyEnv": "OPENROUTER_API_KEY",
+  "maxContextTokens": 100000,
+  "sessionTier": "opus",
+  "tiers": {
+    "opus": "qwen/qwen3-coder",
+    "sonnet": "openai/gpt-6-luna",
+    "haiku": "google/gemini-2.5-flash",
+    "fable": "qwen/qwen3-coder"
+  }
+}
