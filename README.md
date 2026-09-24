@@ -249,8 +249,13 @@ rajesh-devkit/
 ├── profiles/                    # point the loop at another provider; nothing
 │   ├── devkit.js               # in agents/ or skills/ names a model, so this
 │   │                             # launcher re-targets the whole chain, any OS
-│   ├── openrouter.json         # tier -> model, edited rather than coded
-│   └── check.js                # verifies those IDs still exist, with prices
+│   ├── openrouter.json         # tier -> model, edited rather than coded (the fallback)
+│   ├── openrouter-*.json       # candidates to measure: lean, luna, nemotron-free
+│   ├── catalogue.js            # which gateway models are new since you last looked
+│   └── check.js                # verifies those IDs still exist, with prices; --new
+├── docs/
+│   ├── SDLC.md                 # the loop, explained without the plugin
+│   └── model-learnings.md      # every model tried: score, real cost, lesson
 └── README.md
 ```
 
@@ -940,6 +945,31 @@ Three consequences worth knowing:
 - **Spec, ADR and roadmap work would run on the session's model too** — so
   wait for your Claude window for those rather than pay for
   `--model opus` through the gateway.
+
+#### Exploring models — and keeping score in `docs/model-learnings.md`
+
+The fallback is also where you try new models, cheaply and on purpose.
+**[docs/model-learnings.md](docs/model-learnings.md) is the running record**:
+every model tried, its eval score, what it really cost, what went wrong and
+the lesson — including the $8.50 session and the free-tier dead ends. Add a
+row every time; a result nobody wrote down gets paid for twice.
+
+- **What's new:** `node profiles/check.js --new` lists the tool-capable
+  models the gateway added since this machine last looked, with fresh,
+  cached and output prices. The first run just records a baseline.
+- **A nudge, not an interruption:** starting a gateway session prints one
+  line, at most once a week, when there are new tool-capable models. Never
+  during the loop — a milestone isn't the place for a shortlist.
+  `DEVKIT_NO_MODEL_NOTICE=1` turns it off.
+- **Trying one:** copy a profile, put the model's id on the `sonnet` line,
+  run `node profiles/check.js <name>`, then
+  `node tests/run-evals.js --case implementer-red-green --profile <name>`,
+  and record the result. Candidate profiles ship for `openrouter-lean`,
+  `openrouter-luna` (GPT-6 Luna, with a 10× cache discount) and
+  `openrouter-nemotron-free`.
+- **Look at the cached-input price**, not only the list price: in a long
+  session most input is re-sent context. `qwen/qwen3-coder` discounts it 3×;
+  many others 10×.
 
 #### A second, cheaper profile — to measure, not to trust
 

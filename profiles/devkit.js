@@ -256,7 +256,39 @@ function profileEnv(name, baseEnv = process.env) {
 
 // --- main -----------------------------------------------------------------
 
-function main() {
+// One line, at most once a week, when starting a gateway session: the only
+// moment you are both online and choosing a model. Never during the loop -
+// a milestone is not the place for a model shortlist. Short timeout and
+// silent on any failure, because this runs in front of someone trying to get
+// back to work after a usage limit. It only counts; `check.js --new` lists
+// and records. DEVKIT_NO_MODEL_NOTICE=1 turns it off (the tests do).
+async function weeklyModelNotice(baseUrl) {
+  if (process.env.DEVKIT_NO_MODEL_NOTICE === '1') return;
+  try {
+    const cat = require('./catalogue');
+    const state = cat.readState();
+    const last = Date.parse(state.lastNotice || '');
+    if (Number.isFinite(last) && Date.now() - last < cat.WEEK_MS) return;
+    const catalogue = await cat.fetchCatalogue(baseUrl, 2500);
+    const now = new Date().toISOString();
+    if (!state.seen) {
+      cat.writeState({ seen: catalogue.map((m) => m.id), seenAt: now, lastNotice: now });
+      return;
+    }
+    const fresh = cat.newToolModels(catalogue, state.seen);
+    cat.writeState({ ...state, lastNotice: now });
+    if (fresh.length > 0) {
+      process.stderr.write(
+        `devkit: ${fresh.length} new tool-capable model(s) on this gateway since ${state.seenAt.slice(0, 10)} ` +
+          '- see them with: node profiles/check.js --new (candidates to measure, not to trust)\n'
+      );
+    }
+  } catch {
+    /* offline, slow or odd catalogue: say nothing, start claude */
+  }
+}
+
+async function main() {
   const argv = process.argv.slice(2);
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') usage();
 
@@ -288,6 +320,7 @@ function main() {
   process.stderr.write(`${lines.join('\n')}\n`);
 
   if (dryRun) process.exit(0);
+  if (built.gateway) await weeklyModelNotice(env.ANTHROPIC_BASE_URL);
 
   const args = [...target.prefix, ...claudeArgs];
   const child = target.shell
@@ -303,4 +336,4 @@ function main() {
 
 module.exports = { profileEnv, DEFAULT_SESSION_TIER, MANAGED };
 
-if (require.main === module) main();
+if (require.main === module) main();  // async; the child process keeps node alive

@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "CANDIDATE, added 2026-09-24 to measure - not a recommendation. See docs/model-learnings.md.",
+    "Use:  node profiles/devkit.js openrouter-luna",
+    "Eval: node tests/run-evals.js --case implementer-red-green --profile openrouter-luna",
+    "",
+    "Why try it: openai/gpt-6-luna lists at $0.10 in / $0.01 cached / $0.50 out per million -",
+    "cheaper than qwen/qwen3-coder on every line, with a 10x cache discount where qwen gets 3x.",
+    "Re-sent context is what cost $8.50 in one session, so the cache price matters most.",
+    "opus/fable (reached only with --model opus) go to gpt-6-sol at $2 / $0.20 / $10."
+  ],
+  "baseUrl": "https://openrouter.ai/api",
+  "keyEnv": "OPENROUTER_API_KEY",
+  "maxContextTokens": 100000,
+  "tiers": {
+    "opus": "openai/gpt-6-sol",
+    "sonnet": "openai/gpt-6-luna",
+    "haiku": "openai/gpt-6-luna",
+    "fable": "openai/gpt-6-sol"
+  }
+}

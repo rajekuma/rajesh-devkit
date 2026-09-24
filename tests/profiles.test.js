@@ -44,7 +44,7 @@ function launch(args, { env = {}, home } = {}) {
   for (const k of Object.keys(base)) if (k.startsWith('ANTHROPIC_') || k === 'OPENROUTER_API_KEY') delete base[k];
   const r = spawnSync(process.execPath, [LAUNCHER, ...args], {
     encoding: 'utf8',
-    env: { ...base, HOME: home, USERPROFILE: home, ...env },
+    env: { ...base, HOME: home, USERPROFILE: home, DEVKIT_NO_MODEL_NOTICE: "1", ...env },
   });
   return { exitCode: r.status, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
@@ -229,4 +229,34 @@ test('the shell-specific profile scripts are gone, not shadowed', () => {
   // and the .ps1 one is the one that fails on a locked-down Windows machine.
   const strays = fs.readdirSync(path.join(PLUGIN_ROOT, 'profiles')).filter((f) => /\.(ps1|sh)$/.test(f));
   assert.deepStrictEqual(strays, []);
+});
+
+// ---------------------------------------------------------------------------
+// New models on the gateway: listed on demand, noticed at most weekly, and
+// only ever the tool-capable ones - Claude Code cannot run on anything else.
+// ---------------------------------------------------------------------------
+const catalogue = require('../profiles/catalogue');
+
+test('only unseen, tool-capable models count as new', () => {
+  const cat = [
+    { id: 'old/model', supported_parameters: ['tools'] },
+    { id: 'new/coder', supported_parameters: ['tools', 'temperature'] },
+    { id: 'new/no-tools', supported_parameters: ['temperature'] },
+  ];
+  assert.deepStrictEqual(catalogue.newToolModels(cat, ['old/model']).map((m) => m.id), ['new/coder']);
+});
+
+test('with no record yet, nothing is reported as new', () => {
+  // The first look records a baseline; calling the whole catalogue "new"
+  // would bury the one model worth trying under hundreds.
+  assert.deepStrictEqual(catalogue.newToolModels([{ id: 'a', supported_parameters: ['tools'] }], null), []);
+});
+
+test('a new model is described with its real prices, cache included', () => {
+  const line = catalogue.describe({
+    id: 'x/y',
+    context_length: 262144,
+    pricing: { prompt: '0.0000003', completion: '0.000001', input_cache_read: '0.0000001' },
+  });
+  assert.match(line, /in \$0\.30 \(cached \$0\.10\) \/ out \$1\.00/);
 });

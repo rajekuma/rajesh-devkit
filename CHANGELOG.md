@@ -22,6 +22,28 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- **`docs/model-learnings.md`, the running record of every model tried** -
+  eval score, real cost, what went wrong and the lesson - seeded with every
+  measurement so far, the $8.50 session, the free-tier dead ends and the
+  unchecked advice from an AI search summary. The README points to it and
+  asks for a row every time.
+
+- **`node profiles/check.js --new`, and a weekly one-line notice.** Lists the
+  tool-capable models the gateway added since this machine last looked,
+  with fresh, cached and output prices (`profiles/catalogue.js`; state in
+  `~/.devkit/`, outside every repository). Starting a gateway session prints
+  one line at most once a week when there are new ones - never during the
+  loop, where a model shortlist would interrupt a milestone. Short timeout,
+  silent on failure; `DEVKIT_NO_MODEL_NOTICE=1` turns it off.
+
+- **Two more candidate profiles, measured.** `openrouter-nemotron-free`
+  scored 8/9 on `implementer-red-green` at $0, matching `qwen/qwen3-coder`.
+  `openrouter-luna` (GPT-6 Luna, $0.10 / $0.01 cached / $0.50) scored 2/9
+  for about $0.02 - misleadingly: its session ran `devkit-implementer` with
+  `isolation: "worktree"`, and the implementer's good work (4/4 ticked,
+  runner cached, a proper RED report) stayed in a throwaway worktree the
+  project never saw.
+
 - **`maxContextTokens` in a profile.** The launcher passes it to Claude Code
   as `CLAUDE_CODE_MAX_CONTEXT_TOKENS` unless the user already set one, so the
   conversation is compacted sooner and each late request costs less. Both

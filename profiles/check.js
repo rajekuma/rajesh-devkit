@@ -18,9 +18,14 @@ const path = require('path');
 
 // Any profile in this folder, by name: `node profiles/check.js openrouter-lean`.
 // Defaults to the original one. A plain word only, never a path.
-const profileName = process.argv[2] || 'openrouter';
+//
+// `--new` lists instead the tool-capable models the gateway has added since
+// this machine last looked, then records them as seen - see catalogue.js.
+const argv = process.argv.slice(2);
+const listNew = argv.includes('--new');
+const profileName = argv.find((a) => a !== '--new') || 'openrouter';
 if (!/^[a-z0-9][a-z0-9-]*$/.test(profileName)) {
-  console.error('usage: node profiles/check.js [profile-name]');
+  console.error('usage: node profiles/check.js [profile-name] [--new]');
   process.exit(1);
 }
 const profilePath = path.join(__dirname, `${profileName}.json`);
@@ -42,7 +47,48 @@ function perMillion(value) {
   return `$${(n * 1e6).toFixed(2)}/MTok`;
 }
 
+async function showNew() {
+  const cat = require('./catalogue');
+  let baseUrl = 'https://openrouter.ai/api';
+  try {
+    baseUrl = JSON.parse(fs.readFileSync(profilePath, 'utf8')).baseUrl || baseUrl;
+  } catch {
+    /* the default gateway is fine for a listing */
+  }
+  let catalogue;
+  try {
+    catalogue = await cat.fetchCatalogue(baseUrl);
+  } catch (e) {
+    console.error(`check: could not reach the model list - ${e.message}`);
+    process.exit(1);
+  }
+  const state = cat.readState();
+  const now = new Date().toISOString();
+  if (!state.seen) {
+    cat.writeState({ ...state, seen: catalogue.map((m) => m.id), seenAt: now, lastNotice: now });
+    console.log(
+      `First look: recorded ${catalogue.length} models as the baseline. From now on, ` +
+        '`node profiles/check.js --new` lists only what the gateway adds after today.'
+    );
+    return;
+  }
+  const fresh = cat.newToolModels(catalogue, state.seen);
+  if (fresh.length === 0) {
+    console.log(`No new tool-capable models since ${state.seenAt}.`);
+  } else {
+    console.log(`${fresh.length} new tool-capable model(s) since ${state.seenAt}:\n`);
+    for (const m of fresh) console.log(`  ${cat.describe(m)}`);
+    console.log(
+      '\nCandidates, not recommendations. To try one: copy a profile, put its id on the ' +
+        '`sonnet` line, then `node tests/run-evals.js --case implementer-red-green --profile ' +
+        '<name>`, and record the result in docs/model-learnings.md.'
+    );
+  }
+  cat.writeState({ ...state, seen: catalogue.map((m) => m.id), seenAt: now, lastNotice: now });
+}
+
 async function main() {
+  if (listNew) return showNew();
   const tiers = loadTiers();
   const wanted = Object.entries(tiers);
   if (wanted.length === 0) {
