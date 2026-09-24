@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "CANDIDATE, added 2026-09-24 to measure - not a recommendation. See docs/model-learnings.md.",
+    "Use:  node profiles/devkit.js openrouter-nemotron-free",
+    "Eval: node tests/run-evals.js --case implementer-red-green --profile openrouter-nemotron-free",
+    "",
+    "Free: no charge per token. The limits are the catch - 1,000 requests a day once $10 of",
+    "credit has ever been bought (50 before), 20 a minute, and free providers throttle hard",
+    "(429 Provider returned error). One real fallback session made 192 requests, so a",
+    "day of allowance is a few sessions at most. Every tier on the one free model."
+  ],
+  "baseUrl": "https://openrouter.ai/api",
+  "keyEnv": "OPENROUTER_API_KEY",
+  "maxContextTokens": 100000,
+  "tiers": {
+    "opus": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "sonnet": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "haiku": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "fable": "nvidia/nemotron-3-ultra-550b-a55b:free"
+  }
+}
