@@ -18,10 +18,16 @@
     "    matters: it must hold a red-green loop.",
     "  haiku  - devkit-reviewer and devkit-dep-audit.",
     "  opus / fable - reached only with --model opus. Spec, ADR and roadmap",
-    "    work is better left for the Claude subscription window anyway."
+    "    work is better left for the Claude subscription window anyway.",
+    "",
+    "maxContextTokens: Claude Code compacts the conversation as it nears this, so it",
+    "caps what each late request costs - every request re-sends the whole context,",
+    "and one long fallback session once spent about $8.50 that way. Lower is cheaper",
+    "but summarises older detail sooner. Your own CLAUDE_CODE_MAX_CONTEXT_TOKENS wins."
   ],
   "baseUrl": "https://openrouter.ai/api",
   "keyEnv": "OPENROUTER_API_KEY",
+  "maxContextTokens": 100000,
   "tiers": {
     "opus": "deepseek/deepseek-v4-pro",
     "sonnet": "qwen/qwen3-coder-next",

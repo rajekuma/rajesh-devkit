@@ -81,6 +81,41 @@ if (!milestone) {
   );
 }
 
+// Refuse to start on a milestone another live session already holds. Found
+// in real use: `devkit continue` armed a fallback session for M29 while a
+// Claude session was already working it, so every stop raised the collision
+// question; the user answered "other work", the hook could not hear it, and
+// asked again at the next stop - each time forcing another 100k-token turn
+// through a paid gateway. Nothing is armed here, so there is nothing to
+// repeat: the user decides, and says `devkit continue` again when it's free.
+let conflict = null;
+try {
+  conflict = lease.findConflict({
+    dir,
+    sessionId,
+    milestone: milestone.display,
+    worktree: lease.worktreeId(dir),
+    ttl: lease.ttlMs(config),
+  });
+} catch {
+  conflict = null;
+}
+if (conflict) {
+  say(
+    [
+      `rajesh-devkit: loop NOT started - another session is already working ${milestone.display} ` +
+        'in this working tree:',
+      ...lease.describeConflict(conflict),
+      '',
+      'Nothing was started in this session, and it claims nothing, so you will not be asked ' +
+        'about this again. Tell the user, then do whatever else they want. To hand the ' +
+        `milestone to this session instead: say "devkit pause" (or /exit) in the other one, ` +
+        'then "devkit continue" here. A session that died frees its claim by itself within ' +
+        `${Math.round(lease.ttlMs(config) / 60000)} minutes.`,
+    ].join('\n')
+  );
+}
+
 arm.arm(dir, sessionId, command.all ? arm.ALL : milestone.display);
 
 // What to do first is exactly what the Stop hook would say at this moment,

@@ -531,6 +531,39 @@ under another provider picks up exactly where the old one stopped.
   Claude login.** The launcher can't change that; the fallback runs in a
   terminal, which can sit right beside the panel.
 - **Keep a spend cap on the OpenRouter key.** Nothing here can enforce one.
+- **Keep fallback sessions short and scoped** — see "What a fallback session
+  really costs" below.
+
+### What a fallback session really costs
+
+Every request re-sends the whole conversation, and a gateway bills all of
+it. Before any work starts, each request already carries about **45,000
+tokens** — Claude Code's own instructions, its tool definitions, your
+`CLAUDE.md` and the plugin's agent and skill listings. On your Claude
+subscription those repeats are cached and cost little; through a gateway they
+cost much more.
+
+Measured on a real fallback session: **26 minutes on `qwen/qwen3-coder`, 192
+requests, 18.6 million input tokens, 14 thousand output tokens — about
+$8.50**, which emptied a $10 balance and ended in `402 … exceed your
+available credits`. It was an open-ended task ("look at the app and suggest
+mobile UI work"): lots of reading, several background agents, and a context
+that grew past 120k tokens per request.
+
+- **Scope each fallback session to one milestone step**, then `/exit` and
+  relaunch. `resume.json` makes the restart cheap; the cost grows with how
+  long one conversation runs, not with how many you start.
+- **Do open-ended exploration on your subscription**, not on the gateway.
+- **The profiles cap the context at 100k tokens** (`maxContextTokens`), so
+  Claude Code compacts sooner and late requests cost less. Lower is cheaper
+  but summarises older detail sooner; your own
+  `CLAUDE_CODE_MAX_CONTEXT_TOKENS` wins if you set one.
+- **A 402 is the account balance, not the key's limit.** The key's credit
+  limit only caps what that key may spend of the balance, and OpenRouter
+  reserves each running request's worst-case cost up front — so several
+  requests at once can be refused while the balance is still above zero.
+  Add credit on OpenRouter's Credits page, and watch its Activity page during
+  a session.
 
 **One-time setup:** put your OpenRouter key alone on one line in
 `~/.devkit/openrouter_api_key.txt` (`C:\Users\<you>\.devkit\…` on Windows —
@@ -1126,11 +1159,21 @@ next unticked criterion rather than starting over.
   what keeps a window opened for other work from being driven.
 - **Saying it again is harmless.** If a session stops being nudged and you
   are not sure why — after `/clear`, say — just say `devkit continue`.
-- **Don't let two windows drive the same milestone.** If the old window is
-  still open and driving, the new one reports a collision and asks which
-  should own it. Say `devkit pause` there, or `/exit` it, first. A window
-  that has already closed, crashed or hit a usage limit needs nothing: its
-  claim expires on its own about 15 minutes after its last activity.
+- **Two windows can't drive the same milestone.** `devkit continue` checks
+  first: if another live session already holds the milestone, the loop is
+  *not* started — you're told which session holds it, and asked nothing
+  again. To move the milestone, say `devkit pause` (or `/exit`) in the other
+  window, then `devkit continue` in this one. A window that has already
+  closed, crashed or hit a usage limit needs nothing: its claim expires on
+  its own about 15 minutes after its last activity.
+- **If a collision turns up later** (another session starts the same
+  milestone after this one did), the next pause reports it **once**, pauses
+  the loop in this session and releases its claim. It never repeats the
+  question. That repetition was a real cost: a hook can't hear "I'll do other
+  work", so it used to ask at every stop, and each time forced another turn
+  with the whole conversation attached — on a paid gateway, 80–100k tokens a
+  time. (Under `"loopStart": "always"` there is no loop to pause, so there it
+  still repeats.)
 
 **Why the loop waits to be asked.** Until 0.7 the `Stop` hook drove *every*
 session in a project with an unfinished milestone, and every session claimed

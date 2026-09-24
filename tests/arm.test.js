@@ -117,6 +117,33 @@ test('devkit pause stops the loop and drops the claim', () => {
   });
 });
 
+test('devkit continue refuses a milestone another live session holds', () => {
+  // Found in real use: it armed anyway, and the collision question then came
+  // back at every stop, each time forcing another full-context paid turn.
+  withProject((dir) => {
+    writeLease(dir);
+    const r = say(dir, 'devkit continue');
+    assert.match(r.stdout, /NOT started/, `started anyway: ${r.stdout}`);
+    assert.match(r.stdout, /other-session-0001/, 'should name the session that holds it');
+    assert.ok(!leaseHolders(dir).includes(ME), 'claimed a milestone it was refused');
+    assert.strictEqual(stop(dir).exitCode, 0, 'a refused session was driven anyway');
+  });
+});
+
+test('a collision found at a stop is reported once, then the loop pauses itself', () => {
+  withProject((dir) => {
+    say(dir, 'devkit continue');
+    writeLease(dir); // the other session turns up after this one started
+    const first = stop(dir);
+    assert.strictEqual(first.exitCode, 2);
+    assert.match(first.stderr, /PAUSED/, `did not say it paused: ${first.stderr}`);
+    assert.ok(!leaseHolders(dir).includes(ME), 'kept its claim after pausing');
+    const second = stop(dir);
+    assert.strictEqual(second.exitCode, 0, 'asked the same question a second time');
+    assert.strictEqual(second.stderr.trim(), '');
+  });
+});
+
 test('mentioning the keywords mid-sentence changes nothing', () => {
   withProject((dir) => {
     const r = say(dir, 'why did devkit continue not pick up M1?');
