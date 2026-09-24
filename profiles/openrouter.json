@@ -20,10 +20,16 @@
     "    tool-use and long-context reliability; a model that cannot follow a",
     "    red-green loop will cost you more in reviewer rounds than it saves.",
     "  cheap (haiku) - devkit-reviewer, devkit-dep-audit, and background",
-    "    work. Highest volume, lowest stakes, best place to save money."
+    "    work. Highest volume, lowest stakes, best place to save money.",
+    "",
+    "maxContextTokens: Claude Code compacts the conversation as it nears this, so it",
+    "caps what each late request costs - every request re-sends the whole context,",
+    "and one long fallback session once spent about $8.50 that way. Lower is cheaper",
+    "but summarises older detail sooner. Your own CLAUDE_CODE_MAX_CONTEXT_TOKENS wins."
   ],
   "baseUrl": "https://openrouter.ai/api",
   "keyEnv": "OPENROUTER_API_KEY",
+  "maxContextTokens": 100000,
   "tiers": {
     "opus": "anthropic/claude-sonnet-4.5",
     "sonnet": "qwen/qwen3-coder",

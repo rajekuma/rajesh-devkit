@@ -22,6 +22,18 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- **`maxContextTokens` in a profile.** The launcher passes it to Claude Code
+  as `CLAUDE_CODE_MAX_CONTEXT_TOKENS` unless the user already set one, so the
+  conversation is compacted sooner and each late request costs less. Both
+  shipped profiles set 100k. Measured on the same session: 192 requests
+  re-sending the conversation carried 18.6 million input tokens for 14
+  thousand output - about $8.50 at $0.30 per million - and emptied a $10
+  balance into a `402`. The README now has "What a fallback session really
+  costs": the ~45k-token floor every request carries, those numbers, keeping
+  fallback sessions to one scoped step, doing open-ended exploration on the
+  subscription, and that a 402 is the account balance (with worst-case
+  reservations for in-flight requests), not the key's limit.
+
 - **`profiles/openrouter-lean.json`, a cheaper candidate profile.** Same
   tiers, cheaper models with tool support: `qwen/qwen3-coder-next` for
   sonnet, `google/gemini-2.5-flash-lite` for haiku, `deepseek/deepseek-v4-pro`
@@ -370,6 +382,20 @@ reader six months from now cannot recover from the diff.
   different milestone in the same tree.
 
 ### Fixed
+
+- **`devkit continue` no longer starts on a milestone another live session
+  holds, and a collision is never asked about twice.** Found on a real
+  fallback session: `devkit continue` armed it for M29 while a Claude session
+  was already working M29, so every stop raised the collision question. The
+  user answered "other work"; the hook, which cannot hear answers, asked
+  again at the next stop, each time forcing another turn with the whole
+  conversation attached - on OpenRouter, 80-100k tokens a time. Now
+  `devkit continue` checks for a live owner first and, finding one, starts
+  nothing and says who holds it. A collision that turns up later is reported
+  once at a stop, which then pauses the loop in that session and releases
+  its claim, so it cannot recur and the other session keeps the milestone.
+  Under `"loopStart": "always"` there is no loop to pause, and it still
+  repeats there.
 
 - **A profile started from inside a Claude session used that session's
   login.** Running an eval under `openrouter-lean` from the desktop app's

@@ -127,10 +127,20 @@ if (conflict) {
   // gate does. The harness's own stop_hook_active guard above means this can
   // fire at most once per stop chain.
   //
-  // Repeats on later stops while the conflict is still live, rather than being
-  // remembered as shown-once like the escalation gate. That gate marks a
-  // moment that passes; this one describes a condition that is either still
-  // true or has cleared itself on the TTL.
+  // Said ONCE, then this session stops driving. It used to repeat at every
+  // stop while the conflict was live, and a hook cannot hear the user's
+  // answer: in real use the user said "other work", and every later stop
+  // asked again, each time forcing another full-context turn - through a
+  // paid gateway, 80-100k tokens apiece. Under the default keyword start the
+  // session is disarmed and its claim released right here, so the question
+  // cannot recur and the other session is left in sole possession; the user
+  // re-arms with `devkit continue` once it's settled. Under "loopStart":
+  // "always" there is no arm to take away, so it still repeats there.
+  const pausedHere = config.loopStart !== 'always' && Boolean(sessionId);
+  if (pausedHere) {
+    arm.disarm(dir, sessionId);
+    lease.release(dir, sessionId);
+  }
   process.stderr.write(
     [
       `Another session appears to be working ${milestone.display} in this same working tree:`,
@@ -140,10 +150,16 @@ if (conflict) {
         'criterion of it. Two sessions implementing one milestone from the same checkpoint ' +
         'is how the same file gets written twice and a test baseline goes stale unnoticed.',
       '',
-      `Ask the user which session should own ${milestone.display}. If the other one is ` +
-        `finished or dead its claim expires by itself within ${Math.round(ttl / 60000)} ` +
-        `minutes; if both sessions are wanted, this one needs a different milestone. ` +
-        'Reading, reviewing and answering questions here are all fine meanwhile.',
+      pausedHere
+        ? `The loop is now PAUSED in this session and its claim on ${milestone.display} is ` +
+          'released, so this will not be asked again. Tell the user in one or two sentences, ' +
+          'then stop and wait for them - do not explore the codebase or start other work on ' +
+          `your own. To take ${milestone.display} here instead, they say "devkit pause" (or ` +
+          '/exit) in the other session and then "devkit continue" here.'
+        : `Ask the user which session should own ${milestone.display}. If the other one is ` +
+          `finished or dead its claim expires by itself within ${Math.round(ttl / 60000)} ` +
+          `minutes; if both sessions are wanted, this one needs a different milestone. ` +
+          'Reading, reviewing and answering questions here are all fine meanwhile.',
     ].join('\n')
   );
   process.exit(2);

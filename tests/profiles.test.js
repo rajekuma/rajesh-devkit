@@ -103,6 +103,23 @@ test('a host session\'s plumbing never reaches the claude a profile starts', () 
   });
 });
 
+test('a profile context ceiling reaches claude, and a user setting wins', () => {
+  // Measured: 192 requests re-sending the whole conversation cost ~$8.50 on
+  // a gateway. The ceiling makes Claude Code compact sooner.
+  withFakeClaude(({ dir, fake, report }) => {
+    launch(['openrouter'], { home: dir, env: { DEVKIT_CLAUDE_BIN: fake, OPENROUTER_API_KEY: KEY } });
+    const cfg = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, 'profiles', 'openrouter.json'), 'utf8'));
+    assert.strictEqual(report().env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, String(cfg.maxContextTokens));
+  });
+  withFakeClaude(({ dir, fake, report }) => {
+    launch(['openrouter'], {
+      home: dir,
+      env: { DEVKIT_CLAUDE_BIN: fake, OPENROUTER_API_KEY: KEY, CLAUDE_CODE_MAX_CONTEXT_TOKENS: '150000' },
+    });
+    assert.strictEqual(report().env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, '150000');
+  });
+});
+
 test('the claude profile clears every gateway variable left in the shell', () => {
   withFakeClaude(({ dir, fake, report }) => {
     launch(['claude'], {

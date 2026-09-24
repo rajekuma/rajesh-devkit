@@ -223,10 +223,30 @@ function profileEnv(name, baseEnv = process.env) {
     if (typeof cfg.tiers[tier] === 'string') env[variable] = cfg.tiers[tier];
   }
 
+  // Every request re-sends the whole conversation, so its cost grows with the
+  // context, and a gateway charges for all of it. Measured: one 26-minute
+  // fallback session made 192 requests that carried 18.6 million input tokens
+  // between them - about $8.50 at $0.30 per million - while writing only
+  // 14 thousand. Claude Code compacts as the context nears the window it
+  // assumes (200k for a model it doesn't know), so a lower ceiling here makes
+  // it compact sooner and caps what each late request costs. A value the user
+  // set themselves wins.
+  const ceiling = cfg.maxContextTokens;
+  let ceilingNote = null;
+  if (typeof ceiling === 'number' && Number.isFinite(ceiling) && ceiling >= 20000) {
+    if (baseEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS) {
+      ceilingNote = `  context -> ${baseEnv.CLAUDE_CODE_MAX_CONTEXT_TOKENS} tokens (your own setting, kept)`;
+    } else {
+      env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(Math.floor(ceiling));
+      ceilingNote = `  context -> compacts near ${Math.floor(ceiling)} tokens, to cap per-request cost`;
+    }
+  }
+
   const lines = [`devkit: profile ${name} - ${cfg.baseUrl}, key from ${source} (${mask(key)})`];
   for (const tier of Object.keys(TIER_VARS)) {
     if (cfg.tiers[tier]) lines.push(`  ${tier.padEnd(7)}-> ${cfg.tiers[tier]}`);
   }
+  if (ceilingNote) lines.push(ceilingNote);
   lines.push(
     'Billed per token to this provider, NOT to your Claude subscription. Set a hard spend ' +
       "cap on the key in the provider's dashboard - nothing here can enforce one."
