@@ -1,11 +1,84 @@
 # rajesh-devkit
 
-A personal Claude Code plugin: an
-onboard→spec→ux→implement→review→ship→document dev loop, stack-agnostic by
-design — it infers a project's own layout, test runner, package ecosystem,
-component library, and coverage thresholds rather than assuming .NET/Flutter
-or any other specific stack. Hooks turn it into a milestone-driven
-*unattended* loop against any host project's `PROGRESS.md`, if it has one.
+**A Claude Code plugin that runs a real software development lifecycle —
+spec, design, test-first implementation, review, security, ship, docs — one
+milestone at a time, with measured evidence behind its design choices.**
+
+It was extracted from, and is dogfooded on, a live product:
+**[MyHomeMaintenance](https://www.myhomemaintenance.in)** — transparent
+maintenance billing for residents' welfare associations (16 phases, 57
+specs, 20 architecture decision records; the product's repository is
+private). The plugin is stack-agnostic: it reads each project's own
+conventions, test runner and coverage gate instead of assuming one.
+
+```mermaid
+flowchart LR
+  P[PROGRESS.md<br/>milestone queue] --> S[devkit-specify<br/>grills you, writes the spec]
+  S --> A{You approve}
+  A --> D[datamodel / ux<br/>only if it applies]
+  D --> I[devkit-implementer<br/>RED → GREEN per criterion]
+  I --> G[review · quality · security<br/>verdicts stamped to the code they saw]
+  G -- code changed after a verdict --> G
+  G --> SH[devkit-ship<br/>UNKNOWN is never PASS]
+  SH --> DOC[devkit-docs] --> P
+```
+
+**How you drive it:** `devkit continue` starts the loop on the next
+milestone; it runs every stage, stops when the milestone ships, and waits for
+you. `devkit pause` stops it. Nothing commits or pushes unless you enable
+that stage.
+
+### What makes it different
+
+- **Verification over trust.** Tests are written and seen failing before
+  code. A gate that can't run reports `UNKNOWN`, never `PASS`. A verdict
+  issued on code that has since changed is `STALE`.
+- **Measured, not assumed.** The plugin evaluates itself: the same
+  implementation task, run on different models, graded the same way.
+
+  | Setup | Score | Real cost |
+  |---|---|---|
+  | Claude (subscription) | 9/9 | flat fee |
+  | `openrouter-hybrid`: qwen3-coder drives, GPT-6 Luna implements | 9/9 | ~$0.07 |
+  | qwen3-coder alone | 8/9 | ~$0.11–0.21 |
+  | GPT-6 Luna alone | 2/9 | ~$0.02 |
+
+  The finding behind the hybrid: *driving the loop and doing the work are
+  different skills.* The full record, including where money was wasted, is
+  in [docs/model-learnings.md](docs/model-learnings.md).[^runs]
+- **Survives your usage limit.** The loop's position is written to disk
+  after every edit. When a limit hits, one command resumes the same
+  milestone on a cheaper provider.
+- **Safe with more than one session.** Sessions claim the milestone they're
+  working on, so two can't collide on it, and a session doing other work is
+  never dragged into the loop.
+
+### Deliberately not built
+
+- **Parallel worktree-per-milestone sessions.** Parallelism saves time, not
+  tokens; on a per-account usage limit it just spends the budget faster.
+  Right for teams, wrong for a solo developer paying per token.
+- **Claude Code's plan mode in the loop.** The approved spec *is* the plan:
+  reviewed, versioned, and checked by every later gate.
+
+### Start
+
+```bash
+claude plugin marketplace add rajekuma/rajesh-devkit
+claude plugin install rajesh-devkit@rajesh-devkit --scope project
+```
+
+Then say `devkit onboard this project`. **New to the approach?**
+[docs/SDLC.md](docs/SDLC.md) walks through it end to end; the rest of this
+README is the reference.
+
+[^runs]: Each row is a single run of the `implementer-red-green` eval
+    (2026-09-23/24), except qwen3-coder, which has two. Model behaviour
+    varies run to run, so read these as indicative, not settled; repeated
+    runs are the next step. Real costs come from OpenRouter's own billing,
+    not the eval's estimate.
+
+## What it will never do
 
 One property holds across every component with a single, opt-in exception:
 **nothing here commits, pushes, tags, merges, or opens a PR.** Several
@@ -20,12 +93,6 @@ pushing to a default branch, merging, deleting branches or rewriting history.
 Those aren't a confirmation question; they're an irreversibility one. Tagging
 a release is on the same side of that line: `devkit-release` prepares one
 and prints the tag command; nothing here runs it.
-
-> **New here?** [**docs/SDLC.md**](docs/SDLC.md) is the end-to-end
-> walkthrough — how to take a product from nothing, or from an existing
-> codebase, to shipped features one milestone at a time, with the reasoning
-> behind each stage. This README is the reference: what each component does,
-> how the hooks behave, and what gets written where.
 
 ## What this plugin is
 
