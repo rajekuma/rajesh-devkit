@@ -17,7 +17,7 @@
     "    it runs, devkit-implementer and ten other agents. The one that",
     "    matters: it must hold a red-green loop.",
     "  haiku  - devkit-reviewer and devkit-dep-audit.",
-    "  opus / fable - reached only with --model opus. Spec, ADR and roadmap",
+    "  opus / fable - also asked for by Claude Code's built-in Explore/Plan agents, so kept on the cheap model.",
     "    work is better left for the Claude subscription window anyway.",
     "",
     "maxContextTokens: Claude Code compacts the conversation as it nears this, so it",
@@ -29,9 +29,9 @@
   "keyEnv": "OPENROUTER_API_KEY",
   "maxContextTokens": 100000,
   "tiers": {
-    "opus": "deepseek/deepseek-v4-pro",
+    "opus": "qwen/qwen3-coder-next",
     "sonnet": "qwen/qwen3-coder-next",
     "haiku": "google/gemini-2.5-flash-lite",
-    "fable": "deepseek/deepseek-v4-pro"
+    "fable": "qwen/qwen3-coder-next"
   }
 }

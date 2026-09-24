@@ -7,15 +7,15 @@
     "Why try it: openai/gpt-6-luna lists at $0.10 in / $0.01 cached / $0.50 out per million -",
     "cheaper than qwen/qwen3-coder on every line, with a 10x cache discount where qwen gets 3x.",
     "Re-sent context is what cost $8.50 in one session, so the cache price matters most.",
-    "opus/fable (reached only with --model opus) go to gpt-6-sol at $2 / $0.20 / $10."
+    "opus/fable also go to Luna: Claude Code's built-in Explore/Plan agents ask for them, so they are never just --model opus."
   ],
   "baseUrl": "https://openrouter.ai/api",
   "keyEnv": "OPENROUTER_API_KEY",
   "maxContextTokens": 100000,
   "tiers": {
-    "opus": "openai/gpt-6-sol",
+    "opus": "openai/gpt-6-luna",
     "sonnet": "openai/gpt-6-luna",
     "haiku": "openai/gpt-6-luna",
-    "fable": "openai/gpt-6-sol"
+    "fable": "openai/gpt-6-luna"
   }
 }
