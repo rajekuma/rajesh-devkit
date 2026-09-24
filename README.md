@@ -946,6 +946,24 @@ Three consequences worth knowing:
   wait for your Claude window for those rather than pay for
   `--model opus` through the gateway.
 
+#### The best measured fallback so far: `openrouter-hybrid`
+
+```bash
+node <plugin>/profiles/devkit.js openrouter-hybrid
+```
+
+Driving the loop and doing the work turned out to be different skills.
+`openai/gpt-6-luna` writes good code cheaply ($0.10 in / **$0.01 cached** /
+$0.50 out) but, as the session model, ran `devkit-implementer` in an isolated
+copy of the repo, so its work never reached the project (2/9).
+`qwen/qwen3-coder` orchestrates properly. The hybrid profile's
+`"sessionTier": "opus"` runs the **session on qwen3-coder** (the opus tier)
+while every agent that asks for `sonnet` — the implementer and ten others —
+runs on **Luna**. On `implementer-red-green` it scored **9/9, matching
+Claude, for about $0.07**. That is one run: treat it as the front-runner, not
+settled, until a second run or a real milestone agrees. Any profile can set
+`sessionTier` the same way.
+
 #### Exploring models — and keeping score in `docs/model-learnings.md`
 
 The fallback is also where you try new models, cheaply and on purpose.
