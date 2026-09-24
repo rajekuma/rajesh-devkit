@@ -323,6 +323,7 @@ rajesh-devkit/
 ├── docs/
 │   ├── SDLC.md                 # the loop, explained without the plugin
 │   └── model-learnings.md      # every model tried: score, real cost, lesson
+├── LICENSE                      # MIT
 └── README.md
 ```
 
@@ -2332,3 +2333,7 @@ broken/vulnerable on purpose.
   quickest way to tell whether a change reached it. While iterating on the
   plugin itself, `claude --plugin-dir <path>` skips the cache entirely and
   loads the working tree.
+
+## License
+
+[MIT](LICENSE) © 2026 Rajesh Kumar S
