@@ -13,9 +13,11 @@
     "endorsements - check them, price them, and change them to suit.",
     "",
     "Choosing per tier, by what the tier is used for here:",
-    "  reasoning (opus/fable) - reached only when a session starts with",
-    "    --model opus. Skills (devkit-specify, devkit-adr, devkit-roadmap) run on",
-    "    the SESSION model; prefer waiting for your subscription window for them.",
+    "  opus/fable - NOT only reached with --model opus: Claude Code's own built-in",
+    "    Explore and Plan agents ask for them. In a real fallback session three",
+    "    Explore agents on anthropic/claude-sonnet-4.5 ($3/$15) cost more than the",
+    "    whole qwen3-coder main session. So they map to qwen3-coder too; spec, ADR and",
+    "    roadmap work waits for the subscription window anyway.",
     "  coding (sonnet) - devkit-implementer and most subagents. Needs real",
     "    tool-use and long-context reliability; a model that cannot follow a",
     "    red-green loop will cost you more in reviewer rounds than it saves.",
@@ -31,9 +33,9 @@
   "keyEnv": "OPENROUTER_API_KEY",
   "maxContextTokens": 100000,
   "tiers": {
-    "opus": "anthropic/claude-sonnet-4.5",
+    "opus": "qwen/qwen3-coder",
     "sonnet": "qwen/qwen3-coder",
     "haiku": "google/gemini-2.5-flash",
-    "fable": "anthropic/claude-sonnet-4.5"
+    "fable": "qwen/qwen3-coder"
   }
 }

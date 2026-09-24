@@ -559,6 +559,18 @@ that grew past 120k tokens per request.
   relaunch. `resume.json` makes the restart cheap; the cost grows with how
   long one conversation runs, not with how many you start.
 - **Do open-ended exploration on your subscription**, not on the gateway.
+- **Watch the opus tier — Claude Code's own agents use it.** Its built-in
+  `Explore` and `Plan` agents ask for the opus/fable tier, so that tier is
+  *not* "only reached with `--model opus`". In the session above, three
+  `Explore` agents ran on `anthropic/claude-sonnet-4.5` (then the default
+  profile's opus tier, $3 / $15) and cost about $3.50 — more than the whole
+  qwen3-coder main session. Every shipped profile now maps opus and fable to
+  a model it already uses, and a test keeps it that way. If you edit a
+  profile, keep them cheap.
+- **Plan mode writes no code.** That session put itself into plan mode,
+  explored, wrote a 1 KB plan and hit the 402 before the plan was ever
+  approved — so $8.50 bought a plan, not a line of UI. If a fallback session
+  enters plan mode on a big open-ended task, that is the moment to stop it.
 - **The profiles cap the context at 100k tokens** (`maxContextTokens`), so
   Claude Code compacts sooner and late requests cost less. Lower is cheaper
   but summarises older detail sooner; your own
@@ -929,11 +941,11 @@ tier to one OpenRouter model. With the shipped mapping:
 
 | Component | Tier | On your Claude subscription | In the OpenRouter fallback |
 |---|---|---|---|
-| The session itself — the orchestrator that follows the loop | the session's | the model you picked | `qwen/qwen3-coder` (the launcher starts on `sonnet`); `--model opus` gives `anthropic/claude-sonnet-4.5` |
+| The session itself — the orchestrator that follows the loop | the session's | the model you picked | `qwen/qwen3-coder` (the launcher starts on `sonnet`) |
 | Skills: `devkit-specify`, `devkit-adr`, `devkit-roadmap`, `devkit-onboard`, `devkit-help`, `devkit-stats`, `devkit-eval` | inherit the session | the session's model | the session's model — `qwen/qwen3-coder` by default |
 | `devkit-implementer`, `devkit-ship`, `devkit-docs`, `devkit-ux`, `devkit-ui-verify`, `devkit-datamodel`, `devkit-quality`, `devkit-security`, `devkit-pipeline`, `devkit-release`, `devkit-deliver` | `sonnet` | Claude Sonnet | `qwen/qwen3-coder` |
 | `devkit-reviewer`, `devkit-dep-audit` | `haiku` | Claude Haiku | `google/gemini-2.5-flash` |
-| *(`opus` / `fable` tiers)* | — | — | `anthropic/claude-sonnet-4.5`, only reached with `--model opus` |
+| Claude Code's **built-in** `Explore` and `Plan` agents, and `--model opus` | `opus` / `fable` | Claude Opus | `qwen/qwen3-coder` — deliberately the same cheap model (see below) |
 
 Three consequences worth knowing:
 
@@ -998,7 +1010,7 @@ from the live catalogue for tool support and price:
 |---|---|---|
 | sonnet | `qwen/qwen3-coder` — $0.30 / $1.00 | `qwen/qwen3-coder-next` — $0.12 / $0.80 |
 | haiku | `google/gemini-2.5-flash` — $0.30 / $2.50 | `google/gemini-2.5-flash-lite` — $0.10 / $0.40 |
-| opus / fable | `anthropic/claude-sonnet-4.5` — $3 / $15 | `deepseek/deepseek-v4-pro` — $0.95 / $1.90 |
+| opus / fable | `qwen/qwen3-coder` — $0.30 / $1.00 | `qwen/qwen3-coder-next` — $0.12 / $0.80 |
 
 (Per million input / output tokens, OpenRouter list prices on 2026-09-23;
 `node profiles/check.js <profile>` prints today's.) Use it with

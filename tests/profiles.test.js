@@ -103,6 +103,22 @@ test('a host session\'s plumbing never reaches the claude a profile starts', () 
   });
 });
 
+test('no profile sends the opus or fable tier to a model it does not otherwise use', () => {
+  // Claude Code's own built-in Explore and Plan agents ask for these tiers,
+  // so they are not "only reached with --model opus". Measured: three Explore
+  // agents on anthropic/claude-sonnet-4.5 cost more than the whole qwen3-coder
+  // session that launched them. Keeping them on the session's or the agents'
+  // model means no tier can quietly be the expensive one.
+  const dir = path.join(PLUGIN_ROOT, 'profiles');
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json'))) {
+    const cfg = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    const allowed = new Set([cfg.tiers.sonnet, cfg.tiers[cfg.sessionTier || 'sonnet']]);
+    for (const tier of ['opus', 'fable']) {
+      assert.ok(allowed.has(cfg.tiers[tier]), `${f}: ${tier} -> ${cfg.tiers[tier]} is a model the profile does not otherwise use`);
+    }
+  }
+});
+
 test('a profile can put the session on a different tier from its agents', () => {
   // Measured: gpt-6-luna does good implementer work but, as the session
   // model, isolated the implementer; qwen3-coder orchestrates well. The

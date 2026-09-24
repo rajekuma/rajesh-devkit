@@ -46,7 +46,7 @@ the working fallbacks.
 
 | Date | Profile | What happened | Cost | Lesson |
 |---|---|---|---|---|
-| 2026-09-23 | `openrouter` (`qwen/qwen3-coder`) | 26 min, open-ended "look at the app and suggest mobile UI work". 192 requests, **18.6M input tokens** (12.4M of them cache reads), **14k output**. Several background agents. A plugin bug re-asked a collision question at every stop, each time forcing another full-context turn. Ended in `402 … exceed your available credits`. | **~$8.50** — most of a $10 balance | Cost is context × turns, not output. Every request starts at ~45k tokens (Claude Code's instructions, tools, `CLAUDE.md`, plugin listings) and re-sends the whole conversation. qwen3-coder's cache discount is only 3× ($0.30 → $0.10). Scope a fallback session to one step; explore on the subscription. The collision bug is fixed in 0.7.4. |
+| 2026-09-23 | `openrouter` (`qwen/qwen3-coder`) | 26 min, open-ended "look at the app and suggest mobile UI work". 192 requests, **18.6M input tokens** (12.4M of them cache reads), **14k output**. Several background agents. A plugin bug re-asked a collision question at every stop, each time forcing another full-context turn. Ended in `402 … exceed your available credits`. | **~$8.50** — most of a $10 balance. From its own token records: main session (qwen3-coder, 193 requests) ~$3.10; three of Claude Code's **built-in `Explore` agents on `anthropic/claude-sonnet-4.5`** — the profile's opus tier — ~$3.50 together; the rest likely requests in flight at the 402. **No code was written**: the session put itself in plan mode, produced a 974-byte plan, and never exited plan mode. | Cost is context × turns, not output. Claude Code's own Explore/Plan agents use the opus tier, so an expensive opus mapping is a trap even if you never pass `--model opus` — every profile now keeps opus/fable on a model it already uses. Every request starts at ~45k tokens (Claude Code's instructions, tools, `CLAUDE.md`, plugin listings) and re-sends the whole conversation. qwen3-coder's cache discount is only 3× ($0.30 → $0.10). Scope a fallback session to one step; explore on the subscription. The collision bug is fixed in 0.7.4. |
 | 2026-09-23 | free `:free` models | `qwen/qwen3.8-27b:free` — a 400 (`grammar rejected: tool "DesignSync" … "minLength"`) then 429s (`Provider returned error`) on every retry. Never answered through Claude Code. | $0 | "Free" costs time: 50 requests/day before any purchase, 20/minute, and providers throttle hard. Some free backends can't parse Claude Code's tool schemas at all. |
 
 ## Advice checked against the catalogue
@@ -69,7 +69,7 @@ An AI search summary recommended, for this loop:
 | `openai/gpt-6-sol` | $2.00 | $0.20 | $10.00 | "Sonnet-class coder" is a claim, unmeasured. The $8.50 session would have cost ~$15+. |
 | `openai/gpt-6-astra` | $10.00 | $1.00 | $50.00 | Not a fallback price. |
 | `nvidia/nemotron-3-ultra-550b-a55b:free` | free | — | free | `openrouter-nemotron-free`: 8/9. Rate-limited. |
-| `anthropic/claude-sonnet-4.5` | $3.00 | $0.30 | $15.00 | The default profile's opus tier. |
+| `anthropic/claude-sonnet-4.5` | $3.00 | $0.30 | $15.00 | Was the default profile's opus tier until 2026-09-24 — removed after built-in Explore agents ran up ~$3.50 on it. |
 
 ## Standing lessons
 
@@ -97,3 +97,9 @@ An AI search summary recommended, for this loop:
    agents on another: `openrouter-hybrid` (qwen3-coder driving, Luna working)
    scored 9/9 where Luna alone scored 2/9. One run so far — re-measure before
    treating it as settled.
+9. **The opus tier is not "only for `--model opus`".** Claude Code's own
+   `Explore` and `Plan` agents ask for it. Map opus/fable to a model the
+   profile already uses, or they become the expensive line on the bill.
+10. **Plan mode buys a plan, not code.** A session that enters plan mode on
+    an open-ended task can spend its whole budget exploring before anything
+    is approved. Stop it early on the fallback.

@@ -429,6 +429,19 @@ reader six months from now cannot recover from the diff.
 
 ### Fixed
 
+- **No profile routes the opus tier to an expensive model any more.** The
+  default `openrouter` profile mapped opus/fable to
+  `anthropic/claude-sonnet-4.5` ($3 / $15) on the assumption that only
+  `--model opus` reached it. Claude Code's own built-in `Explore` and `Plan`
+  agents ask for that tier: in the real $8.50 session, three `Explore`
+  agents on it cost about $3.50 - more than the whole qwen3-coder main
+  session - and no code was written at all (the session put itself in plan
+  mode and hit the 402 with only a 974-byte plan). opus/fable now map to
+  qwen3-coder in `openrouter`, to Luna in `openrouter-luna` (was GPT-6 Sol)
+  and to qwen3-coder-next in `openrouter-lean` (was DeepSeek V4 Pro). A test
+  requires every profile's opus and fable to reuse a model the profile
+  already uses for its session or agents.
+
 - **`devkit continue` no longer starts on a milestone another live session
   holds, and a collision is never asked about twice.** Found on a real
   fallback session: `devkit continue` armed it for M29 while a Claude session
