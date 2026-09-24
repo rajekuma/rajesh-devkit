@@ -22,6 +22,17 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- **The loop says how to run `devkit-implementer`, not only that it runs.**
+  Its description and the Stop hook's implement step now say: in this
+  working tree, never with worktree isolation, and let it finish - no
+  stopping, relaunching or doing its work yourself. Measured candidly: it
+  did not rescue the two models it was aimed at. `gpt-6-luna` switched from
+  `isolation: "worktree"` to `"remote"`; `qwen3-coder-next` now waited for
+  the implementer but isolated it anyway; both stayed 2/9 with good work in
+  a copy the project never saw. Kept because it is right, and recorded in
+  `docs/model-learnings.md`: those two models are unsuitable as the
+  session model, whatever their coding quality.
+
 - **`docs/model-learnings.md`, the running record of every model tried** -
   eval score, real cost, what went wrong and the lesson - seeded with every
   measurement so far, the $8.50 session, the free-tier dead ends and the

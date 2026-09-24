@@ -31,6 +31,17 @@ Claude, and has overstated a gateway run fifteen-fold.
 | 2026-09-24 | `openrouter-nemotron-free` | `nvidia/nemotron-3-ultra-550b-a55b:free` | **8/9** | **$0** | Matches qwen3-coder at no cost: waited for the implementer, runner cached, criteria ticked, code right — and, like qwen, a report with no RED evidence. No 429s on this run, but free-tier limits (1,000 requests/day, 20/minute, provider throttling) still apply. |
 | 2026-09-24 | `openrouter-luna` | `openai/gpt-6-luna` | **2/9** (misleading) | ~$0.02 | The session launched the implementer with `isolation: "worktree"` — a throwaway copy of the repo. The work in that copy was good: 4/4 criteria ticked, runner cached, and a proper RED-then-GREEN report (the one grader that reads the report passed). None of it reached the project, so every file-based grader failed. It also first tried to call the implementer as a *skill*. Cheapest per token by far; needs the orchestration fixed before it can be judged. |
 
+| 2026-09-24 | `openrouter-luna`, after telling it "in this working tree, never with worktree isolation, let it finish" (implementer description + loop nudge) | `openai/gpt-6-luna` | **2/9** | ~$0.02 | Obeyed the word, not the intent: switched to `isolation: "remote"` — another isolated copy. The implementer's report again passed the RED grader; its work again never reached the project. |
+| 2026-09-24 | `openrouter-lean`, same instruction | `qwen/qwen3-coder-next` | **2/9** | ~$0.03 | Now waited for the implementer (`run_in_background: false`) — the instruction helped there — but used `isolation: "worktree"` anyway, so again nothing reached the project. |
+
+**Verdict on the orchestration fix:** a prompt sentence does not reliably
+override how a model drives Claude Code's `Agent` tool. `gpt-6-luna` and
+`qwen3-coder-next` are unsuitable as the *session* model for this loop,
+whatever their coding quality — the sentence stays, because it is right and
+costs Claude and qwen3-coder nothing, but it is not a fix. Profiles that keep
+the session on a model that orchestrates well (qwen3-coder, nemotron) are
+the working fallbacks.
+
 ## Real sessions
 
 | Date | Profile | What happened | Cost | Lesson |

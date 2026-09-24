@@ -279,8 +279,15 @@ function downstream() {
   }
   if (on('implement')) {
     steps.push(
+      // How to run it, not just that it runs. Measured on cheaper models: one
+      // stopped the implementer mid-work three times and did the milestone
+      // itself; another ran it with worktree isolation, so good work stayed
+      // in a throwaway copy the project never saw. Both lost everything the
+      // implementer exists to do (ticks, cached runner, RED evidence).
       'implement it with strict TDD (red-green, one acceptance criterion at a time, per ' +
-        "this project's own testing conventions);"
+        "this project's own testing conventions) by invoking the devkit-implementer subagent " +
+        'in this working tree - never with worktree isolation - and letting it finish: wait for ' +
+        'its completion notice, do not stop or relaunch it, and do not do its work yourself;'
     );
   }
   if (on('ui-verify')) {
