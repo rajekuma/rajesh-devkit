@@ -422,6 +422,20 @@ test('devkit-datamodel stops and writes nothing when no stored data changes', ()
   assert.match(body, /forward-only/i, 'lost the project-rollback-policy rule');
 });
 
+test('the implementer is run in this tree and allowed to finish', () => {
+  // Measured: one model stopped the implementer mid-work and did the job
+  // itself; another isolated it in a worktree the project never saw. The
+  // orchestrator reads both the nudge and the agent's own description.
+  withFixture({ progress: SAMPLE_PROGRESS, specs: { 'user-login.md': READY_SPEC, 'user-login.ux.md': '# UX\n' } }, (dir) => {
+    const r = runHook('continue-loop.js', dir);
+    assert.match(r.stderr, /never with worktree isolation/);
+    assert.match(r.stderr, /do not stop or relaunch it/);
+  });
+  const desc = read(PLUGIN_ROOT, 'agents', 'devkit-implementer.md').split('\n').find((l) => l.startsWith('description:'));
+  assert.match(desc, /worktree isolation/);
+  assert.match(desc, /let it finish/);
+});
+
 test('devkit-implementer must show the RED it saw, not just claim it', () => {
   // Measured: a model did real fail->pass on every criterion and reported
   // only "implemented, tests pass", so nobody could tell it from tests-after.
