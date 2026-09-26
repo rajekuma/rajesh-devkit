@@ -14,7 +14,7 @@ assuming anything.
 ## Steps
 
 1. **Read the spec file in full.** Then check for this project's own
-   conventions: `CLAUDE.md`, and any `.claude/rules/*.md` (or equivalent
+   conventions: `CLAUDE.md` and/or `AGENTS.md`, and any `.claude/rules/*.md` (or equivalent
    conventions folder) relevant to what the spec touches — testing discipline,
    layering rules, naming conventions. Follow what's documented; don't invent
    a convention the project hasn't stated.

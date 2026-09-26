@@ -79,7 +79,9 @@ rather than as a terse dump.
    - The loop runs only when the user starts it: **`devkit continue`** takes
      the next milestone and the `Stop` hook drives it until it ships, then
      waits; **`devkit continue all`** runs the whole queue; **`devkit
-     pause`** stops it. Always tell the user these three, because a session
+     continue phase N`** works one phase as a lane (for parallel sessions,
+     usually one per git worktree); **`devkit continue M<n>`** takes one
+     named milestone; **`devkit pause`** stops it. Always tell the user these three, because a session
      that never said `devkit continue` is never nudged - by design, since
      sessions opened for other work used to be driven (and asked about
      collisions) at every stop. This skill is for checking status on demand.

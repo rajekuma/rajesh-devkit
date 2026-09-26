@@ -24,7 +24,10 @@ user confirms.
 
    - **This toolkit's own prerequisites:** `PROGRESS.md` (or `ROADMAP.md`,
      `TODO.md`, `MILESTONES.md` — the tracker may exist under another name),
-     `specs/`, `docs/adr/` or another decision-record folder, `CLAUDE.md`.
+     `specs/`, `docs/adr/` or another decision-record folder, `CLAUDE.md`,
+     `AGENTS.md` (anywhere in the tree) and `.github/copilot-instructions.md`
+     - a project shared with other agent runtimes keeps its instructions
+     there, and Claude Code reads `AGENTS.md` too.
    - **Other `.claude` assets**, in the project *and* in
      `%USERPROFILE%\.claude`: existing skills, subagents, commands, hooks,
      and `.claude/rules/`. Two collisions specifically matter:
@@ -93,7 +96,12 @@ user confirms.
      vision document from a one-line description; a fabricated vision is the
      one artifact here that will quietly misdirect every spec that follows.
 
-4. **`CLAUDE.md`.** If one exists, read it and refine — never overwrite
+4. **`CLAUDE.md` (and `AGENTS.md`).** If the project already keeps its
+   instructions in `AGENTS.md` for other agents, don't fork them into a
+   second, drifting copy: a `CLAUDE.md` that imports it (`@AGENTS.md`) and adds
+   only what is Claude-specific keeps one source of truth. Keep `CLAUDE.md`
+   short — Claude Code's own guidance is under 200 lines, because a longer
+   file is followed less, not just billed more. If one exists, read it and refine — never overwrite
    blind; if `claude init` is used, skim the diff afterward rather than
    trusting it. If there's none but real code exists, this is exactly what
    `claude init` is for: it has an actual codebase to learn from. For a truly

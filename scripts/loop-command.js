@@ -73,11 +73,19 @@ if (command.action === 'pause') {
 // arm is still recorded and the reply says so, so the keyword is never a
 // silent no-op that leaves someone wondering whether it worked.
 const progressPath = path.join(dir, 'PROGRESS.md');
-const milestone = fs.existsSync(progressPath) ? d.findNextMilestone(progressPath, config.parked) : null;
+const scope = command.scope || null;
+const milestone = fs.existsSync(progressPath) ? d.findNextMilestone(progressPath, config.parked, scope) : null;
 if (!milestone) {
   say(
-    'rajesh-devkit: there is no unstarted milestone in PROGRESS.md, so there is nothing for ' +
-      'the loop to take. Say "devkit roadmap" to propose the next milestones.'
+    scope && scope.phase
+      ? `rajesh-devkit: nothing left to take in Phase ${scope.phase} - every row under a ` +
+          `"Phase ${scope.phase}" heading in PROGRESS.md is done or parked, or there is no such ` +
+          'heading. Nothing was started.'
+      : scope && scope.milestone
+        ? `rajesh-devkit: M${scope.milestone} is not an unfinished row in PROGRESS.md (it may be ` +
+          'done, or numbered differently). Nothing was started.'
+        : 'rajesh-devkit: there is no unstarted milestone in PROGRESS.md, so there is nothing for ' +
+          'the loop to take. Say "devkit roadmap" to propose the next milestones.'
   );
 }
 
@@ -116,7 +124,9 @@ if (conflict) {
   );
 }
 
-arm.arm(dir, sessionId, command.all ? arm.ALL : milestone.display);
+// A phase lane drives every milestone in its phase, so it arms for "all"
+// within that scope; a named milestone arms for exactly that one.
+arm.arm(dir, sessionId, command.all || (scope && scope.phase) ? arm.ALL : milestone.display, scope);
 
 // What to do first is exactly what the Stop hook would say at this moment,
 // so ask it rather than keeping a second copy of the chain here to drift.
@@ -133,16 +143,22 @@ const nudge = spawnSync(process.execPath, [path.join(__dirname, 'continue-loop.j
 });
 const next = nudge.status === 2 ? (nudge.stderr ?? '').trim() : '';
 
-const scope = command.all
-  ? 'for every milestone in the queue, starting with'
-  : 'for';
+const lane = scope && scope.phase
+  ? `for Phase ${scope.phase} only, starting with`
+  : command.all
+    ? 'for every milestone in the queue, starting with'
+    : 'for';
 say(
   [
-    `rajesh-devkit: loop started in this session ${scope} ${milestone.display}. ` +
-      (command.all
-        ? 'It carries on to each next milestone until the queue is empty or you say "devkit pause".'
-        : 'It stops when this milestone ships; say "devkit continue" again for the next one, ' +
-          'or "devkit pause" to stop sooner.') +
+    `rajesh-devkit: loop started in this session ${lane} ${milestone.display}. ` +
+      (scope && scope.phase
+        ? `It carries on through Phase ${scope.phase}'s milestones and stops when the phase is ` +
+          'done, never touching another phase - so another session can work a different phase ' +
+          'in parallel. "devkit pause" stops it sooner.'
+        : command.all
+          ? 'It carries on to each next milestone until the queue is empty or you say "devkit pause".'
+          : 'It stops when this milestone ships; say "devkit continue" again for the next one, ' +
+            'or "devkit pause" to stop sooner.') +
       (config.loopStart === 'always'
         ? ' (This project uses "loopStart": "always", so the loop drives every session anyway.)'
         : ''),

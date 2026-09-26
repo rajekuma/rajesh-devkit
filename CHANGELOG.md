@@ -22,6 +22,31 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- **Parallel lanes: `devkit continue phase N` and `devkit continue M<n>`.**
+  `devkit continue` always took the first unfinished row, so two sessions -
+  say one on the Claude login and one on a gateway profile, to go faster
+  without spending the Claude limit twice - both reached for the same
+  milestone, and the second was refused. A session can now be started on
+  one phase (a lane: it works through that phase and stops at its end) or
+  one named milestone. The lane is stored with the session's arm, and every
+  hook that asks "what's next" asks it for that session: the Stop hook, the
+  edit hook's `resume.json` and claim, and `record-gate` (which reads the
+  worktree's `resume.json`, having no session of its own). Phases come from
+  the tracker's `## Phase N` headings. The README's new "Parallel lanes"
+  section is generic: one git worktree per lane, the lane's own test
+  resources, a Claude or gateway driver per lane, dependency-aware lane
+  choice, and merge rules. It replaces "deliberately not built" for
+  worktree parallelism: the objection was spending the Claude limit faster,
+  which a gateway-driven lane doesn't. Sequential stays the default.
+
+- **`docs/PRINCIPLES.md`, the charter every plugin change is held to**, and
+  a `CLAUDE.md` for this repository that imports it, so every session
+  working on the plugin has it in context. First principle: *generic first,
+  never shaped around one project* - the plugin was extracted from one
+  product and is dogfooded on it, and its incidents are cited as evidence,
+  never built in as assumptions. Tests keep the import in place and keep
+  provider and model ids out of `agents/` and `skills/`.
+
 - **`sessionTier` in a profile, and `openrouter-hybrid`: 9/9 for about
   $0.07.** Measurement showed driving the loop and doing the work are
   different skills: `gpt-6-luna` did good implementer work but, as the session
@@ -219,6 +244,14 @@ reader six months from now cannot recover from the diff.
   `devkit-onboard` seeds it when the project's own docs say so.
 
 ### Changed
+
+- **The agents honour `AGENTS.md` as well as `CLAUDE.md`.** Projects shared
+  with other agent runtimes (Copilot, internal agent platforms) keep their
+  instructions in `AGENTS.md`, which Claude Code also reads. The implementer,
+  reviewer, quality, security, UX and data-model agents and the specify skill
+  now read it alongside `CLAUDE.md`; `devkit-onboard` inventories `AGENTS.md`
+  and `.github/copilot-instructions.md`, and imports `AGENTS.md` from
+  `CLAUDE.md` rather than forking a second, drifting copy.
 
 - **`devkit-implementer` must show the RED it saw, not just claim it.** Its
   report now carries one line per criterion: the test's name and the failure

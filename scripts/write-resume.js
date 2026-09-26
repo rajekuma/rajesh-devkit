@@ -77,7 +77,12 @@ if (!d.devkitOwnsLoop(dir, config)) process.exit(0);
 const progressPath = path.join(dir, 'PROGRESS.md');
 if (!fs.existsSync(progressPath)) process.exit(0);
 
-const milestone = d.findNextMilestone(progressPath, config.parked);
+// The milestone THIS session is working: within its lane, if it was started
+// with `devkit continue phase N` or `devkit continue M<n>`. Each worktree keeps
+// its own resume.json, so in parallel lanes each checkpoint describes its own
+// lane's milestone rather than whichever row happens to be first.
+const earlySession = hookInput && typeof hookInput.session_id === 'string' ? hookInput.session_id : null;
+const milestone = d.findNextMilestone(progressPath, config.parked, arm.scopeOf(dir, earlySession));
 if (!milestone) process.exit(0);
 
 function git(...args) {
@@ -148,7 +153,7 @@ const sessionId = hookInput && typeof hookInput.session_id === 'string' ? hookIn
 // publishing it as one is what made unrelated sessions report each other as
 // collisions - see lib/arm.js. The checkpoint below is still written: where
 // the work got to is true whoever is in the tree.
-if (sessionId && arm.isDriving(dir, config, sessionId, milestone.display)) {
+if (sessionId && arm.isDriving(dir, config, sessionId, milestone)) {
   lease.renew(
     dir,
     {

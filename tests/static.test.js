@@ -329,3 +329,31 @@ test('README lists every component in "What this plugin is" AND in the model tab
     assert.ok(models.includes(`\`${name}\``), `the model table has no row naming ${name}`);
   }
 });
+
+test('the charter is always in context for work on this plugin', () => {
+  // docs/PRINCIPLES.md governs every change; CLAUDE.md imports it so Claude
+  // Code loads it into every session on this repository. Dropping the import
+  // would make the charter a document nobody is shown.
+  const claude = fs.readFileSync(path.join(PLUGIN_ROOT, 'CLAUDE.md'), 'utf8');
+  assert.match(claude, /^@docs\/PRINCIPLES\.md\s*$/m);
+  assert.ok(fs.existsSync(path.join(PLUGIN_ROOT, 'docs', 'PRINCIPLES.md')));
+});
+
+test('no agent or skill names a provider or a model id', () => {
+  // Principle 6: components ask for tiers; profiles map tiers to models. A
+  // hard-coded id would pin the whole plugin to one provider.
+  const dirs = ['agents', 'skills'];
+  const re = /\b(?:openai|anthropic|qwen|google|deepseek|nvidia|mistralai|meta-llama|x-ai)\/[\w.-]+|\bclaude-(?:opus|sonnet|haiku|fable)-\d/;
+  const walk = (d) =>
+    fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(d, e.name)) : e.name.endsWith('.md') ? [path.join(d, e.name)] : []
+    );
+  for (const d of dirs) {
+    for (const f of walk(path.join(PLUGIN_ROOT, d))) {
+      // Tool repositories that share a provider's org name are not models.
+      const text = fs.readFileSync(f, 'utf8').replace(/google\/osv-scanner/g, '');
+      const m = text.match(re);
+      assert.strictEqual(m, null, `${path.relative(PLUGIN_ROOT, f)} names a model/provider: ${m && m[0]}`);
+    }
+  }
+});

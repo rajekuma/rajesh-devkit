@@ -29,7 +29,7 @@ under time pressure, inconsistently, one component at a time. Naming them
 ## Steps
 
 1. **Read the feature spec in full**, plus this project's own conventions
-   (`CLAUDE.md`, `.claude/rules/`). You are given a specific spec to work
+   (`CLAUDE.md`, `AGENTS.md`, `.claude/rules/`). You are given a specific spec to work
    from — you don't choose the feature. If the spec has `🔒 SENSITIVE:`
    requirements, note them: a security or authorization boundary almost
    always has a visible surface (what an unauthorized user sees, what an

@@ -296,26 +296,58 @@ function milestoneRowPattern(glyphs) {
 // loop would otherwise stall on the first such row forever, nudging toward a
 // spec for something the owner deliberately parked. They are skipped here
 // and reported by devkit-help instead, so parked is not the same as hidden.
-function findNextMilestone(progressPath, parked = null) {
+//
+// `scope` narrows the search to one lane of parallel work - see lib/arm.js:
+//   { phase: '9' }      only rows under a "## Phase 9 ..." heading
+//   { milestone: '46' } only that one row, parked or not, because the user
+//                       named it explicitly
+// Without a scope the whole tracker is one queue, exactly as before. Phase
+// headings are matched loosely ("## Phase 9", "### Phase 9 - Water") because
+// that is how trackers are written; a tracker with no Phase headings simply
+// has no phases to scope to, and a phase scope finds nothing there.
+const PHASE_HEADING = /^\s*#{1,6}\s*Phase\s+([\w.]+)\b/i;
+
+function sameId(a, b) {
+  return String(a).replace(/^M/i, '').toLowerCase() === String(b).replace(/^M/i, '').toLowerCase();
+}
+
+function findNextMilestone(progressPath, parked = null, scope = null) {
   const lines = readLines(progressPath);
   if (!lines) return null;
   const rowRe = milestoneRowPattern([GLYPH.notStarted, GLYPH.hourglass]);
   const taskRe = /^\s*-\s*\[\s*\]\s*(.+)$/;
+  const wantPhase = scope && scope.phase != null ? String(scope.phase) : null;
+  const wantMilestone = scope && scope.milestone != null ? String(scope.milestone) : null;
+  let phase = null;
 
   for (const line of lines) {
+    const heading = line.match(PHASE_HEADING);
+    if (heading) {
+      phase = heading[1];
+      continue;
+    }
     const row = line.match(rowRe);
     if (row) {
       const note = (row[4] ?? '').trim();
-      if (parked && note && parked.test(note)) continue;
       const number = row[1];
+      if (wantMilestone) {
+        if (!sameId(number, wantMilestone)) continue;
+      } else {
+        if (wantPhase && !(phase && sameId(phase, wantPhase))) continue;
+        if (parked && note && parked.test(note)) continue;
+      }
       const name = row[2].trim();
-      return { number, name, note, display: `M${number} - ${name}` };
+      return { number, name, note, phase, display: `M${number} - ${name}` };
     }
+    // Plain task lines have no number to name, so only the unscoped queue
+    // and a phase scope reach them.
+    if (wantMilestone) continue;
     const task = line.match(taskRe);
     if (task) {
+      if (wantPhase && !(phase && sameId(phase, wantPhase))) continue;
       const name = task[1].trim();
       if (parked && parked.test(name)) continue;
-      return { number: null, name, note: '', display: name };
+      return { number: null, name, note: '', phase, display: name };
     }
   }
   return null;
