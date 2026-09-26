@@ -37,7 +37,7 @@ Steps:
    was the thing a reader skimming the verdict would have acted on, and it
    was not real.
 2. Identify the relevant `specs/<feature>.md` for this change (match by feature name /
-   files touched) and read it in full. Also read `CLAUDE.md` and whichever files in
+   files touched) and read it in full. Also read `CLAUDE.md` (and `AGENTS.md`, if the project keeps one) and whichever files in
    `.claude/rules/` (or an equivalent conventions folder, if this project names it
    differently) apply to what the diff touches, for conventions the diff must follow.
 3. Map every acceptance criterion in the spec to the diff: mark each as Met / Not Met /

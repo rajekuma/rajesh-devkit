@@ -198,3 +198,109 @@ test('the loop keywords do nothing in a project that runs its own loop', () => {
     removeFixture(dir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Lanes: `devkit continue phase N` and `devkit continue M<n>`, so parallel
+// sessions (usually in separate git worktrees, one on Claude and one on a
+// gateway profile) each work their own phase instead of all reaching for the
+// first unfinished row.
+// ---------------------------------------------------------------------------
+const arm = require('../scripts/lib/arm');
+
+const PHASED = [
+  '# Progress',
+  '',
+  '## Phase 1 - Billing',
+  '',
+  '| # | Milestone | Status |',
+  '|---|---|---|',
+  `| 1 | Rules | ${GLYPH.notStarted} |`,
+  `| 2 | Invoices | ${GLYPH.notStarted} |`,
+  '',
+  '## Phase 2 - Water',
+  '',
+  '| # | Milestone | Status |',
+  '|---|---|---|',
+  `| 3 | Meter entry | ${GLYPH.notStarted} |`,
+  `| 4 | Consumption | ${GLYPH.notStarted} |`,
+  '',
+].join('\n');
+
+function withPhased(fn) {
+  const dir = newFixture({ progress: PHASED });
+  try {
+    return fn(dir);
+  } finally {
+    removeFixture(dir);
+  }
+}
+
+function tick(dir, n) {
+  const file = path.join(dir, 'PROGRESS.md');
+  const s = fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .map((l) => (l.startsWith(`| ${n} |`) ? l.replace(GLYPH.notStarted, GLYPH.done) : l))
+    .join('\n');
+  fs.writeFileSync(file, s, 'utf8');
+}
+
+test('the lane keywords parse, and anything else stays a plain continue', () => {
+  assert.deepStrictEqual(arm.parseCommand('devkit continue phase 9').scope, { phase: '9' });
+  assert.deepStrictEqual(arm.parseCommand('devkit continue M46').scope, { milestone: '46' });
+  assert.deepStrictEqual(arm.parseCommand('devkit continue milestone 41a').scope, { milestone: '41a' });
+  assert.strictEqual(arm.parseCommand('devkit continue all').all, true);
+  assert.strictEqual(arm.parseCommand('devkit continue please').scope, undefined);
+  assert.strictEqual(arm.parseCommand('devkit continue').scope, undefined);
+});
+
+test('devkit continue phase N starts on that phase, not on the first row', () => {
+  withPhased((dir) => {
+    const r = say(dir, 'devkit continue phase 2');
+    assert.match(r.stdout, /M3 - Meter entry/, `wrong milestone: ${r.stdout}`);
+    const s = stop(dir);
+    assert.strictEqual(s.exitCode, 2);
+    assert.match(s.stderr, /M3 - Meter entry/);
+    assert.doesNotMatch(s.stderr, /M1 - Rules/);
+  });
+});
+
+test('a phase lane walks its own phase and stops at the end of it', () => {
+  withPhased((dir) => {
+    say(dir, 'devkit continue phase 2');
+    tick(dir, 3);
+    assert.match(stop(dir).stderr, /M4 - Consumption/, 'did not move on within the phase');
+    tick(dir, 4);
+    const end = stop(dir);
+    assert.strictEqual(end.exitCode, 0, `crossed into another phase: ${end.stderr}`);
+  });
+});
+
+test('two sessions on two phases work in parallel without colliding', () => {
+  withPhased((dir) => {
+    say(dir, 'devkit continue phase 1', 'claude-lane');
+    const water = say(dir, 'devkit continue phase 2', 'gateway-lane');
+    assert.doesNotMatch(water.stdout, /NOT started/, `treated separate phases as a collision: ${water.stdout}`);
+    const a = stop(dir, 'claude-lane');
+    const b = stop(dir, 'gateway-lane');
+    assert.match(a.stderr, /M1 - Rules/);
+    assert.match(b.stderr, /M3 - Meter entry/);
+    assert.doesNotMatch(a.stderr + b.stderr, /Another session appears/);
+  });
+});
+
+test('devkit continue M<n> takes that milestone even when it is not first', () => {
+  withPhased((dir) => {
+    const r = say(dir, 'devkit continue M4');
+    assert.match(r.stdout, /M4 - Consumption/);
+    assert.match(stop(dir).stderr, /M4 - Consumption/);
+  });
+});
+
+test('a phase with nothing left starts nothing, and says why', () => {
+  withPhased((dir) => {
+    const r = say(dir, 'devkit continue phase 7');
+    assert.match(r.stdout, /nothing left to take in Phase 7/);
+    assert.strictEqual(stop(dir).exitCode, 0);
+  });
+});

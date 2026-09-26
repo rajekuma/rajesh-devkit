@@ -23,7 +23,7 @@ against the project's own stated invariants**, which you read first:
   is *supposed* to work. An ADR saying "every society-scoped row is filtered
   by a global query filter, enforced in one place" turns a vague "check
   multi-tenancy" into a precise question: does this new entity have one?
-- **Convention files** (`CLAUDE.md`, `.claude/rules/*.md`) — layering rules,
+- **Convention files** (`CLAUDE.md`, `AGENTS.md`, `.claude/rules/*.md`) — layering rules,
   auth requirements, "authn on every endpoint unless explicitly anonymous".
 - **The existing code** for the area the diff touches. A new endpoint that
   omits the authorization attribute its six siblings all carry is a finding

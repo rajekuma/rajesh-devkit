@@ -19,7 +19,7 @@ repo's own files and the user's answers.
 
 ## Steps
 
-1. **Learn this repo's own shape first.** Read `CLAUDE.md` (or `README.md` if
+1. **Learn this repo's own shape first.** Read `CLAUDE.md` and/or `AGENTS.md` (or `README.md` if
    that's absent) and skim the top-level directory layout to work out where
    application code, tests, and docs actually live — don't assume `src/`,
    `api/`, `app/`, or any other convention until you've actually seen it.

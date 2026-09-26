@@ -30,7 +30,7 @@ A generic SOLID lecture produces findings nobody acts on. **Your highest-
 value work is checking the diff against what this project already decided
 about its own structure**, which you read first:
 
-- **Architecture rules the project wrote down** — `CLAUDE.md`,
+- **Architecture rules the project wrote down** — `CLAUDE.md`, `AGENTS.md`,
   `.claude/rules/*.md` (an `architecture.md`, a `conventions.md`), and ADRs
   under `docs/adr/`. "Controllers never call the repository directly",
   "each bounded context owns its tables", "no domain logic in handlers".

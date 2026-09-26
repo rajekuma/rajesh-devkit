@@ -58,7 +58,7 @@ Three specific ways it goes wrong, all of which you plan against explicitly:
    re-justified. You plan only the *change* this milestone makes to them.
 
 1. **Read the spec in full**, plus this project's own conventions —
-   `CLAUDE.md` and any `.claude/rules/` file about data or persistence. Pay
+   `CLAUDE.md` / `AGENTS.md` and any `.claude/rules/` file about data or persistence. Pay
    particular attention to requirements marked `SENSITIVE:`: a data-model
    change is one of the five categories that marker exists for, so if it's
    there, this milestone is the reason.

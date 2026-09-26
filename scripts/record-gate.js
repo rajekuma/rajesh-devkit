@@ -35,10 +35,23 @@ function resolveProjectDir() {
   return process.cwd();
 }
 
+// The milestone being worked here. In a parallel lane that is not the first
+// unfinished row in the tracker - it is whatever this worktree's session is
+// on - and this command runs from Bash with no session id to ask about. The
+// worktree's own resume.json names it (write-resume keeps it lane-aware), so
+// that wins while its milestone is still unfinished; otherwise, the first
+// unfinished row, as before.
 function currentMilestone(dir) {
   const progressPath = path.join(dir, 'PROGRESS.md');
   if (!fs.existsSync(progressPath)) return null;
   const config = d.readStageConfig(dir);
+  try {
+    const resume = JSON.parse(fs.readFileSync(path.join(d.telemetryDir(dir), 'resume.json'), 'utf8'));
+    const status = resume && d.readMilestoneStatuses(progressPath)[`M${resume.milestoneNumber}`];
+    if (status && !status.done && typeof resume.milestone === 'string') return resume.milestone;
+  } catch {
+    /* no checkpoint yet - fall through */
+  }
   const m = d.findNextMilestone(progressPath, config.parked);
   return m ? m.display : null;
 }

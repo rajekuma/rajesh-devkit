@@ -140,7 +140,8 @@ const loopHint =
     ? 'Just keep working - the Stop hook will nudge toward whatever this loop does next when ' +
       'the session pauses.'
     : 'Nothing starts on its own: say "devkit continue" when you want the loop to take this ' +
-      'milestone ("devkit continue all" to run the whole queue unattended), and "devkit pause" ' +
+      'milestone ("devkit continue all" to run the whole queue unattended, "devkit continue ' +
+      'phase N" to work one phase as a parallel lane), and "devkit pause" ' +
       'to stop it. Until then this session is free for anything else.';
 
 const milestone = d.findNextMilestone(progressPath, config.parked);
@@ -197,7 +198,7 @@ function branchName() {
 // other as collisions at every stop - see lib/arm.js. Under the default
 // keyword start a brand-new session is never driving yet, so it claims
 // nothing until `devkit continue`.
-if (sessionId && arm.isDriving(dir, config, sessionId, milestone.display)) {
+if (sessionId && arm.isDriving(dir, config, sessionId, milestone)) {
   lease.renew(
     dir,
     { sessionId, milestone: milestone.display, worktree, branch: branchName(), transcript },

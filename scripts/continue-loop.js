@@ -43,7 +43,12 @@ if (!d.devkitOwnsLoop(dir, config)) process.exit(0);
 const progressPath = path.join(dir, 'PROGRESS.md');
 if (!fs.existsSync(progressPath)) process.exit(0);
 
-const milestone = d.findNextMilestone(progressPath, config.parked);
+// This session's lane, if it was started with `devkit continue phase N` or
+// `devkit continue M<n>` - so a session working one phase is only ever nudged
+// toward that phase's rows while another session works a different phase.
+const sessionId =
+  hookInput && typeof hookInput.session_id === 'string' ? hookInput.session_id : null;
+const milestone = d.findNextMilestone(progressPath, config.parked, arm.scopeOf(dir, sessionId));
 if (!milestone) process.exit(0);
 
 const specPath = d.findSpecForMilestone(dir, milestone.number, milestone.name);
@@ -75,9 +80,6 @@ if (!specPath && !on('specify')) process.exit(0);
 // append, because a collision is not a nudge toward the milestone: it must
 // not burn one of the eight, and it must not log `milestone_started` for work
 // this session is being told not to start.
-const sessionId =
-  hookInput && typeof hookInput.session_id === 'string' ? hookInput.session_id : null;
-
 // Only a session the user has put on the loop is driven by it - see
 // lib/arm.js. Checked before the collision check, not after, because an idle
 // session is not working this milestone and so cannot collide over it: in
@@ -86,7 +88,7 @@ const sessionId =
 // it claims nothing, so it also stops being the "other session" someone
 // else's hook reports. A milestone this session armed for having shipped
 // lands here too, which is what makes the next one wait for the user.
-if (!arm.isDriving(dir, config, sessionId, milestone.display)) process.exit(0);
+if (!arm.isDriving(dir, config, sessionId, milestone)) process.exit(0);
 
 const ttl = lease.ttlMs(config);
 const worktree = lease.worktreeId(dir);

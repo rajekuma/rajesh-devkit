@@ -53,13 +53,26 @@ that stage.
   working on, so two can't collide on it, and a session doing other work is
   never dragged into the loop.
 
+### Sequential by default, parallel when you choose
+
+Parallelism saves time, not tokens: on a Claude usage limit, two Claude
+sessions just spend the budget twice as fast, so the loop runs one
+milestone at a time unless you ask for more. When you do, it runs **lanes** —
+one phase per session (`devkit continue phase N`), one git worktree per lane,
+and the parallel lane on a gateway profile so it doesn't touch your Claude
+limit at all. See "Parallel lanes" below.
+
 ### Deliberately not built
 
-- **Parallel worktree-per-milestone sessions.** Parallelism saves time, not
-  tokens; on a per-account usage limit it just spends the budget faster.
-  Right for teams, wrong for a solo developer paying per token.
 - **Claude Code's plan mode in the loop.** The approved spec *is* the plan:
   reviewed, versioned, and checked by every later gate.
+
+### Contributing
+
+Every change to the plugin is held to
+[docs/PRINCIPLES.md](docs/PRINCIPLES.md) — above all, *generic first: never
+shaped around one project*. The repo's `CLAUDE.md` imports it, so any Claude
+Code session working on the plugin has it in context.
 
 ### Start
 
@@ -320,7 +333,9 @@ rajesh-devkit/
 │   ├── openrouter-*.json       # candidates to measure: lean, luna, nemotron-free
 │   ├── catalogue.js            # which gateway models are new since you last looked
 │   └── check.js                # verifies those IDs still exist, with prices; --new
+├── CLAUDE.md                    # for work on the plugin: imports docs/PRINCIPLES.md
 ├── docs/
+│   ├── PRINCIPLES.md           # the charter every plugin change is held to
 │   ├── SDLC.md                 # the loop, explained without the plugin
 │   └── model-learnings.md      # every model tried: score, real cost, lesson
 ├── LICENSE                      # MIT
@@ -528,7 +543,8 @@ loop than the team without changing it for anyone.
 
 **3. How the agents do the work — your project's own rules.** This is the
 most powerful one, and it needs no plugin settings at all. Every agent reads
-`CLAUDE.md`, `.claude/rules/*.md` and your ADRs (`docs/adr/`) before it does
+`CLAUDE.md` (and `AGENTS.md`, if your project keeps one for other agent
+runtimes too), `.claude/rules/*.md` and your ADRs (`docs/adr/`) before it does
 anything, and follows what's written there over its own defaults. Write your
 conventions down once and every milestone obeys them:
 
@@ -694,6 +710,59 @@ which only moves when you update it — see "Updating" above.
 
 The detail behind every step is in "Running on another provider, and
 surviving a usage limit" below.
+
+## Parallel lanes — more than one session at once
+
+**The default is one session, one milestone at a time.** Parallelism saves
+time, not tokens: on a Claude usage limit, two Claude sessions spend it twice
+as fast, and every lane gives *you* more specs to approve and more changes
+to review. Reach for lanes when you have independent phases and the review
+time to match — two lanes is realistic for one person.
+
+**Independent milestones aren't enough — each lane needs its own working
+tree.** Sessions in one folder share one git branch and one pile of
+uncommitted changes, anything the tests share (a test database, ports, build
+output), and the files every feature touches (migration snapshots, route or
+dependency-injection registration, lockfiles). So a lane is:
+
+| | One per lane |
+|---|---|
+| **Scope** | one phase of `PROGRESS.md`: `devkit continue phase N` |
+| **Folder + branch** | a git worktree: `git worktree add ../<project>-<lane> -b feat/<lane>` |
+| **Test resources** | its own test database / port / whatever the suite shares, set the way your project configures tests (an environment variable, a local config). If that isn't possible, mark the suite `"exclusive": true` in `test-runners.json` and don't let lanes test at the same time. |
+| **Driver** | your Claude login for the hard or `SENSITIVE:` lane; a gateway profile for the other (`node <plugin>/profiles/devkit.js openrouter-hybrid`), which never touches your Claude limit |
+
+**Choosing lanes.** Pick phases whose milestones don't need another lane's
+*unmerged* work. When a later milestone does (it builds on tables or APIs
+the other lane is still writing), pause that lane there (`devkit pause`)
+until the other lane has merged.
+
+**Running one.** In the lane's folder, start a session (a Claude session or
+the gateway launcher) and say `devkit continue phase N`. The loop works
+through that phase's milestones only and stops at the end of the phase. Check
+the `devkit-*` agents are listed first. A `--scope project` install enables
+the plugin in the repository's `.claude/settings.json`, but Claude Code also
+records the install against the project's folder path — so in a new
+worktree folder, if the agents are missing, run the two install commands
+there once.
+
+**Merging lanes back.**
+
+1. Merge one lane at a time.
+2. Rebase each remaining lane onto the updated main branch before it
+   continues.
+3. Regenerate generated files that conflict (migration snapshots,
+   lockfiles) instead of merging them by hand.
+4. Each lane ticks only its own rows in `PROGRESS.md`; resolve any conflict
+   in that file by hand — it's prose.
+
+**What the plugin guarantees.** Each worktree keeps its own claims,
+`resume.json` and loop state, so lanes in different worktrees never see each
+other. Two sessions on different phases of the *same* tree never take each
+other's milestones either. And `record-gate` stamps verdicts against the
+lane's own milestone. What it can't do is make two sessions safe in one
+folder when the project's tests share a database — that's what the separate
+worktree and test resources are for.
 
 ## Getting started in a brand-new project
 
@@ -1263,14 +1332,15 @@ number rather than a feeling.
 | `PostToolUse` | `Edit\|Write` | `scripts/run-verify.js` | Fires after every Edit or Write tool call. | If no verify script (`.claude/verify.js`, `.sh` or `.ps1`) exists in the host project, exits 0 silently (no-op). If it exists, runs it and **exits with whatever code it returned** — no remapping. The verify script's own exit-code convention is what decides whether Claude sees the failure (see the contract below). |
 | `PostToolUse` | `Edit\|Write` | `scripts/track-milestones.js` | Fires after every Edit or Write tool call, alongside `run-verify.js` (same matcher, both run). | Never blocks — always exits 0. Re-parses `PROGRESS.md`'s milestone statuses, diffs against a stored snapshot, and appends a `milestone_shipped` telemetry event for anything that just flipped to done. No-ops silently if there's no `PROGRESS.md` or no recognisable milestone lines. |
 | `PostToolUse` | `Edit|Write` | `scripts/write-resume.js` | Fires after every Edit or Write tool call, alongside the other two. | Never blocks - always exits 0. Rewrites `.claude/rajesh-devkit/resume.json` with where the loop actually is: milestone, spec, spec status, criteria ticked, next criterion, branch, dirty tree, provider. Every field is derived from the repo, so it needs no cooperation from the model and can never be more than one edit stale. This is the hook that makes a usage limit survivable - it is the only one that has already run when a session is blocked mid-criterion and gets no further turn. `SessionStart` reads it back. It also renews this session's entry in `session-lease.json` on every edit, which is the most frequent sign of life the plugin can publish. Defers to a project own loop skill like every other writing hook. |
-
-| `UserPromptSubmit` | *(none)* | `scripts/loop-command.js` | Fires on every prompt; acts only when the prompt *starts with* `devkit continue`, `devkit continue all` or `devkit pause`. | Never blocks — always exits 0. `continue` records that this session drives the next milestone (or, with `all`, the whole queue) and hands the session the Stop hook's current instruction as its first step; `pause` removes that and drops the session's claim on the milestone. Everything else passes through untouched. |
+| `UserPromptSubmit` | *(none)* | `scripts/loop-command.js` | Fires on every prompt; acts only when the prompt *starts with* `devkit continue` (optionally `all`, `phase N` or `M<n>`) or `devkit pause`. | Never blocks — always exits 0. `continue` records that this session drives the next milestone (or, with `all`, the whole queue; with `phase N`, only that phase's milestones - a parallel lane; with `M<n>`, that one milestone) and hands the session the Stop hook's current instruction as its first step; `pause` removes that and drops the session's claim on the milestone. Everything else passes through untouched. |
 
 ### Starting and stopping the loop
 
 ```
 devkit continue       take the next milestone; the loop drives it until it ships, then waits
 devkit continue all   the same for the whole queue - an unattended run
+devkit continue phase N   only Phase N's milestones, then stop - one lane of parallel work
+devkit continue M<n>  that one milestone, even if it isn't first in the tracker
 devkit pause          stop driving this session and drop its claim
 ```
 
