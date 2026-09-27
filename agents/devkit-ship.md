@@ -135,7 +135,8 @@ reading the conversation. It is recorded:
    another.** Before running anything, check that no other test process is
    already running against this project (a `dotnet test`/`testhost`, `jest`,
    `pytest`, `go test` for the same working directory), and never start two
-   yourself in parallel. A cached runner entry with `"exclusive": true`
+   yourself in parallel. If one is running that you didn't start, never kill
+   it — report the suite as contended. A cached runner entry with `"exclusive": true`
    means this project has already been caught out by it. In a real run,
    overlapping test runs against one shared database produced 19 phantom
    failures, then 5, in tests unrelated to the milestone — plus a wrong test

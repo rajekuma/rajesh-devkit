@@ -1,7 +1,8 @@
 ---
 name: devkit-onboard
-description: Gets a project onto this toolkit's loop — inventories what already exists (CLAUDE.md, specs/, docs/adr/, milestone trackers, other .claude assets), detects the stack and seeds the test-runner cache, then proposes a PROGRESS.md and any load-bearing ADRs to backfill. Handles both a brand-new project and one with existing code and history, without clobbering anything already there. Trigger phrases — "devkit onboard this project", "set up devkit here", "get this repo on the devkit loop".
+description: Guided setup that gets any project onto this toolkit's loop, one question at a time — for an empty folder it offers git init, a product-vision interview (devkit-vision), starter files from the plugin's templates (CLAUDE.md, .claude/rules, ADRs, a spec template, PROGRESS.md) and a loop preset (full, api, ui, product, design); for an existing repo it inventories what is already there (code, CLAUDE.md/AGENTS.md, specs, trackers, ADRs), seeds the test-runner cache and proposes only what is missing. Never overwrites a file. Trigger phrases — "devkit onboard", "devkit onboard this project", "set up devkit here", "get this repo on the devkit loop".
 model: inherit
+allowed-tools: Bash(node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.js" *)
 ---
 
 # Onboard a project onto the dev loop
@@ -10,6 +11,21 @@ The loop this toolkit automates needs three things to exist: a `PROGRESS.md`
 with milestones, a `specs/` folder, and enough project context that
 `devkit-specify` doesn't write specs that contradict how the codebase already
 works. Your job is to get a project from wherever it is to that state.
+
+**How to run it: one decision at a time, with `AskUserQuestion`.** Each
+numbered step below that says *ask* is one question, with the recommended
+answer first. Never batch five questions into one message and never decide
+on the user's behalf — this is often the first thing a new user of the
+plugin sees, and it should feel like a short guided conversation, not a
+form. Say at the start roughly how many questions are coming (six to eight).
+
+**Starter files come from the plugin, by script — never retyped.** The
+templates live in `${CLAUDE_PLUGIN_ROOT}/templates/`, and
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.js"` copies the ones the user
+chooses (`--list` shows them). It never overwrites an existing file and
+prints exactly what it created and what it kept. Fill in their
+`<placeholders>` afterwards, from what you learned and with the user's
+confirmation.
 
 **The rule that governs every step: inventory before you write.** A project
 with history usually has some of this already, in its own shape, under its
@@ -41,12 +57,21 @@ user confirms.
      config (`.github/workflows/`, `.gitlab-ci.yml`, `Jenkinsfile`), is there
      a `.gitignore`.
    - **Does real code exist yet?** This is the branch point for everything
-     below — count source files, check `git log` for history.
+     below — count source files, check `git log` for history. An empty
+     folder (nothing but `.git`, `.claude` or editor settings) is a
+     **greenfield** start; everything else is an **existing project**.
 
    Report all of it as a short list. This is the 30-second check that avoids
    every collision risk below, and it is never skipped.
 
-2. **Detect the stack and seed the test-runner cache.** Work out what this
+   **Greenfield and not a git repository yet → ask** "Initialise git here?"
+   (recommended: yes). On yes, run
+   `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.js" . --git-init --items gitattributes`
+   — git plus LF line endings, so the project is identical on every OS.
+
+2. **Detect the stack and seed the test-runner cache.** *(Existing projects,
+   or a greenfield project once its stack is chosen — skip it for an empty
+   folder and say you will come back to it.)* Work out what this
    project is built with and how its tests actually run — `package.json`,
    `pyproject.toml`/`pytest.ini`, `*.csproj`/`*.sln`, `go.mod`,
    `Cargo.toml`, `pubspec.yaml`, and any of these more than once in a
@@ -90,13 +115,27 @@ user confirms.
      page. Save the confirmed version wherever this project already keeps
      that kind of document; only fall back to `docs/product_vision.md` if
      there's no existing home for it.
-   - **Brand-new project:** there's nothing to read, so this is a
-     conversation. Ask what's being built, who for, and what "done" looks
-     like for a first release — one question at a time. Don't generate a
+   - **Brand-new project → ask** "Shall we write the product vision now?"
+     (recommended: yes). On yes, hand over to the **`devkit-vision`** skill
+     — it interviews the user one question at a time and writes
+     `docs/product_vision.md` from their answers only. Say first that this
+     is the step worth a strong model: if the session isn't on Opus or Fable,
+     suggest switching (`/model opus`) for the interview. Don't generate a
      vision document from a one-line description; a fabricated vision is the
      one artifact here that will quietly misdirect every spec that follows.
 
-4. **`CLAUDE.md` (and `AGENTS.md`).** If the project already keeps its
+4. **Starter files → ask**, as one multi-select question, which of these the
+   project should get — recommend all of them for a greenfield project, and
+   only the missing ones for an existing project:
+   `claude-md`, `rules`, `adr`, `spec-template`, `progress`,
+   `vision` (skip if step 3 already wrote it), `gitattributes`.
+   Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/scaffold.js" . --items <chosen,comma,separated>`
+   and show its output as-is. Then fill the placeholders you can — the
+   commands in `CLAUDE.md`, the test layers in `.claude/rules/testing.md`
+   — from what you actually detected, and leave the rest as visible
+   `<placeholders>` with a one-line note on who fills them.
+
+   **`CLAUDE.md` (and `AGENTS.md`).** If the project already keeps its
    instructions in `AGENTS.md` for other agents, don't fork them into a
    second, drifting copy: a `CLAUDE.md` that imports it (`@AGENTS.md`) and adds
    only what is Claude-specific keeps one source of truth. Keep `CLAUDE.md`
@@ -123,9 +162,13 @@ user confirms.
      code. Genuinely more upfront work, and genuinely more useful later.
 
    For a brand-new project neither applies — the milestones are just the
-   plan, so decompose the product intent from step 3 into a handful of
-   milestones each small enough to spec and ship in one sitting, and get them
-   confirmed.
+   plan. Decompose `docs/product_vision.md` into **phases** (`## Phase 1 —
+   <name>` headings: the loop, and parallel lanes, work by phase) of a
+   handful of milestones each, every milestone small enough to spec and ship
+   in one sitting. Propose them as a table, **ask** the user to confirm or
+   edit, then write them into the scaffolded `PROGRESS.md`. The first phase
+   is usually repository and stack setup — whose decisions become the first
+   ADRs in step 6.
 
 6. **Backfill only load-bearing ADRs.** From the code and the user's
    answers, identify decisions that still constrain how new work must be
@@ -143,28 +186,38 @@ user confirms.
    stages its owner never wanted is noise they'll learn to ignore — which
    costs you the nudges that did matter.
 
-   Ask once, offering these as starting points rather than a fixed menu (use
-   `AskUserQuestion`; people can combine them):
+   **Ask once**, offering the presets (recommended first for the project as
+   you now understand it):
 
-   | Role | Stages |
-   |---|---|
-   | Product owner — write specs, document what shipped | `specify`, `docs` |
-   | UX / design — turn specs into screens and states | `ux` |
-   | Backend engineer — schema, API, tests | `specify`, `datamodel`, `implement`, `review` |
-   | DevSecOps — pipelines, scanning, release gating | `pipeline`, `ship` |
-   | Everything (solo, or one person wearing all hats) | all of them |
-   | This project already has its own loop | only the stages it lacks |
+   | Preset | For | Stages |
+   |---|---|---|
+   | `full` | a solo developer doing everything | every stage except `deliver` |
+   | `api` | backend / API work | `specify`, `datamodel`, `implement`, `review`, `quality`, `security`, `ship`, `docs` |
+   | `ui` | screens on top of APIs that already exist | `specify`, `ux`, `implement`, `ui-verify`, `review`, `quality`, `ship`, `docs` |
+   | `product` | a product owner: specs and release notes | `specify`, `docs` |
+   | `design` | a UX designer | `ux` |
+   | custom | anything else, or a project with its own loop | only the stages it lacks |
 
    Write the answer to `.claude/devkit.json`, **committed**, so the project's
    declared process is visible and reviewable rather than living in one
-   person's head:
+   person's head — `scaffold.js . --preset <name>` does it when the file
+   doesn't exist yet; otherwise edit it:
 
    ```json
-   { "role": "product-owner", "stages": ["specify", "docs"] }
+   { "preset": "api" }
    ```
 
+   An explicit `"stages": [...]` list wins over `preset`, for a custom
+   choice. Tell the user the preset is only the project's default: any one
+   session can pick its own — `devkit continue phase 3 as ui` runs that
+   session as a UI lane without changing the file for anyone else. (The
+   implementer stays in the `ui` preset on purpose: it implements whatever
+   the spec describes, in the project's own stack — in a UI lane, the
+   screens and their tests.)
+
    Valid stages: `specify`, `ux`, `datamodel`, `implement`, `ui-verify`,
-   `review`, `ship`, `docs`, `pipeline`, `deliver`. **`deliver` is off unless
+   `review`, `quality`, `security`, `ship`, `docs`, `release`,
+   `pipeline`, `deliver`. **`deliver` is off unless
    asked for** - it is the only component that commits and pushes, so never
    enable it without the user explicitly choosing it. `role` is a label for humans; only `stages` changes
    behaviour. **No file means every stage is enabled** — so a project that
@@ -187,9 +240,13 @@ user confirms.
    - Confirm `.claude/rajesh-devkit/` is gitignored.
 
 9. **Hand off with one concrete next step, then stop.** Name the actual first
-   milestone and the exact thing to say to start it
-   (`"devkit spec this feature: <name>"`). Don't end on a summary of what you did —
-   end on what happens next.
+   milestone and the exact thing to say to start the loop on it:
+   **`devkit continue`** — it begins with `devkit-specify` when the
+   milestone has no spec yet. Mention the two variants once:
+   `devkit continue all` (the whole queue, unattended) and
+   `devkit continue phase N as <preset>` (one phase as a lane, for parallel
+   sessions). Don't end on a summary of what you did — end on what happens
+   next.
 
    **Do not start that milestone.** Onboarding ends at the handoff: do not
    invoke `devkit-specify`, draft a spec, or begin implementing, even though

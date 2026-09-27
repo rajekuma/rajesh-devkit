@@ -48,6 +48,10 @@ if (!fs.existsSync(progressPath)) process.exit(0);
 // toward that phase's rows while another session works a different phase.
 const sessionId =
   hookInput && typeof hookInput.session_id === 'string' ? hookInput.session_id : null;
+// A session started with `as <preset>` runs its own stage list; the project's
+// config stays as it is for every other session.
+const sessionStages = arm.stagesOf(dir, sessionId);
+if (sessionStages) config.stages = sessionStages;
 const milestone = d.findNextMilestone(progressPath, config.parked, arm.scopeOf(dir, sessionId));
 if (!milestone) process.exit(0);
 

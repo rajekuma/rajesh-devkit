@@ -357,3 +357,15 @@ test('no agent or skill names a provider or a model id', () => {
     }
   }
 });
+
+test('agents that run processes only ever stop the ones they started', () => {
+  // Found by an eval: devkit-ui-verify listed every node.exe and force-killed
+  // one it had not started - the eval runner. On a developer's machine that
+  // kills their dev server or editor. The rule must stay in every agent that
+  // starts or checks for processes.
+  const read = (f) => fs.readFileSync(path.join(PLUGIN_ROOT, 'agents', f), 'utf8');
+  assert.match(read('devkit-ui-verify.md'), /Only ever stop what you started/);
+  assert.match(read('devkit-ui-verify.md'), /Never kill by\s+process name/);
+  assert.match(read('devkit-implementer.md'), /don't kill a process\s+you didn't start/);
+  assert.match(read('devkit-ship.md'), /never kill\s+it/);
+});

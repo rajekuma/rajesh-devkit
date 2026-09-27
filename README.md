@@ -81,9 +81,16 @@ claude plugin marketplace add rajekuma/rajesh-devkit
 claude plugin install rajesh-devkit@rajesh-devkit --scope project
 ```
 
-Then say `devkit onboard this project`. **New to the approach?**
-[docs/SDLC.md](docs/SDLC.md) walks through it end to end; the rest of this
-README is the reference.
+Then, in the project folder — empty or years old — start Claude Code and
+say **`devkit onboard`**. It asks one question at a time: `git init`?, the
+product vision (a short interview, best on Opus), which starter files to copy
+(`CLAUDE.md`, rules, ADRs, a spec template, `PROGRESS.md` — never overwriting
+anything), your first milestones, and which loop you want (`full`, `api`,
+`ui`, `product`, `design`). Then say **`devkit continue`**.
+
+**Giving a demo?** [docs/DEMO.md](docs/DEMO.md) is a step-by-step script.
+**New to the approach?** [docs/SDLC.md](docs/SDLC.md) walks through it end to
+end; the rest of this README is the reference.
 
 [^runs]: Each row is a single run of the `implementer-red-green` eval
     (2026-09-23/24), except qwen3-coder, which has two. Model behaviour
@@ -110,9 +117,16 @@ and prints the tag command; nothing here runs it.
 ## What this plugin is
 
 - `devkit-onboard` — the entry point for a project that isn't on the loop
-  yet, new or brownfield: inventories what already exists before writing
-  anything, seeds the test-runner cache with a command it actually ran, and
-  proposes a `PROGRESS.md` and the ADRs worth backfilling.
+  yet, new or brownfield. A guided setup, one question at a time: for an
+  empty folder it offers `git init`, the vision interview, starter files
+  from the plugin's `templates/` (copied by `scripts/scaffold.js`, never
+  overwriting) and a loop preset; for an existing repo it inventories what
+  already exists before writing anything, seeds the test-runner cache with a
+  command it actually ran, and proposes only what's missing.
+- `devkit-vision` — interviews the owner one question at a time and writes
+  `docs/product_vision.md` from their answers only: the problem, who it's
+  for, the first usable version, what it won't do, how success shows. Run it
+  on a strong model; everything downstream is judged against it.
 - `devkit-specify` — an interactive skill acting as product owner: drafts a
   feature spec into `specs/<kebab-feature>.md`, reading the host repo's own
   code and decision-record docs first, then interviewing you one question at
@@ -274,13 +288,18 @@ rajesh-devkit/
 │   ├── devkit-ui-verify.md      # drives the built UI through every specified state
 │   ├── devkit-ship.md           # pre-ship preflight: CI, coverage, advisories, secrets
 │   └── devkit-ux.md             # spec -> screens/states/tokens/a11y criteria
+├── templates/                   # starter files devkit-onboard copies into a project:
+│                                 # CLAUDE.md, rules, ADRs, spec template, PROGRESS.md,
+│                                 # product vision (neutral names; scaffold.js maps them)
 ├── skills/
 │   ├── devkit-adr/
 │   │   └── SKILL.md             # writes an architecture decision record
 │   ├── devkit-eval/
 │   │   └── SKILL.md             # this plugin's own regression + drift check
 │   ├── devkit-onboard/
-│   │   └── SKILL.md             # gets a new or brownfield project onto the loop
+│   │   └── SKILL.md             # guided setup: git, vision, starter files, preset
+│   ├── devkit-vision/
+│   │   └── SKILL.md             # the product-vision interview
 │   ├── devkit-roadmap/
 │   │   └── SKILL.md             # proposes the next milestones from what shipped + production
 │   ├── devkit-stats/
@@ -322,6 +341,7 @@ rajesh-devkit/
 │   ├── write-resume.js         # PostToolUse hook: the resume checkpoint, so a
 │   │                             # session killed by a usage limit loses nothing
 │   ├── session-welcome.js      # SessionStart hook: "what's next" banner
+│   ├── scaffold.js             # not a hook - copies starter templates, never overwriting
 │   ├── record-gate.js          # not a hook - stamps a gate verdict with the tree
 │   │                             # it saw; `check` says which went stale
 │   └── token-report.js         # not a hook - invoked by devkit-stats on demand;
@@ -336,6 +356,7 @@ rajesh-devkit/
 ├── CLAUDE.md                    # for work on the plugin: imports docs/PRINCIPLES.md
 ├── docs/
 │   ├── PRINCIPLES.md           # the charter every plugin change is held to
+│   ├── DEMO.md                 # a 20-minute presenter's script
 │   ├── SDLC.md                 # the loop, explained without the plugin
 │   └── model-learnings.md      # every model tried: score, real cost, lesson
 ├── LICENSE                      # MIT
@@ -520,7 +541,24 @@ plugin itself. Six places, in order of how much they change:
 
 **1. Which steps the loop runs — `.claude/devkit.json`** (committed, so the
 team shares it). `devkit-onboard` asks and writes it during setup; edit it any
-time:
+time. The quickest form is a **preset**:
+
+```json
+{ "preset": "api" }
+```
+
+| Preset | For | Stages |
+|---|---|---|
+| `full` | a solo developer doing everything (the default) | every stage except `deliver` |
+| `api` | backend / API work | `specify`, `datamodel`, `implement`, `review`, `quality`, `security`, `ship`, `docs` |
+| `ui` | screens on top of APIs that already exist | `specify`, `ux`, `implement`, `ui-verify`, `review`, `quality`, `ship`, `docs` |
+| `product` | a product owner | `specify`, `docs` |
+| `design` | a UX designer | `ux` |
+
+The `ui` preset keeps `implement` on purpose: the implementer builds whatever
+the spec describes, in your stack — in a UI lane, the screens and their
+tests. For anything else, list the stages explicitly (an explicit list wins
+over a preset):
 
 ```json
 {
@@ -528,6 +566,9 @@ time:
   "loopStart": "keyword"
 }
 ```
+
+**A preset for one session only:** `devkit continue phase 16 as ui` runs that
+session as a UI lane while the file stays as it is for everyone else.
 
 Leave a stage out and the loop never asks for it. Every stage is on by
 default except `deliver`: `specify`, `ux`, `datamodel`, `implement`,
@@ -928,6 +969,7 @@ doesn't know needs a model that reasons well.
 | `devkit-specify` | **a strong model** (Opus / Fable) | Its real job is deciding what it *doesn't* know — which gaps take a default and which must be asked, and whether a requirement touches one of the five sensitive categories when that isn't obvious. That can't be reduced to a checklist; if it could, the checklist would already be in the skill. The failure mode is the worst kind available here: a weaker model fills gaps confidently and produces a *plausible* spec with invented requirements. It looks fine, and everything downstream treats the spec as truth. It also writes the `SENSITIVE:` marker, and the escalation gate cannot catch what was never marked. |
 | `devkit-adr` | **a strong model** (Opus / Fable) | Two judgments carry it: refusing to record a non-decision, and never inventing a rationale. The second is the most damaging failure in this plugin — a fabricated "why" is indistinguishable from a real one and gets quoted back years later by someone assuming a human wrote it. |
 | `devkit-onboard` | anything from Sonnet up | The most procedural component here: inventory, detect the stack, run the test command, write `PROGRESS.md`, run `session-welcome.js` to confirm the loop can parse it. Its judgment calls (don't clobber, which ADRs are load-bearing) are stated very explicitly, and explicit instructions are what mid-tier models follow reliably. It also verifies its own work by executing things, so mistakes surface instead of hiding. 9/9 on its eval. |
+| `devkit-vision` | **a strong model** (Opus / Fable) | Every milestone, spec and review is judged against the vision it writes. Its discipline is refusing to fill gaps: an honest "we don't know yet" goes under Open questions, because a plausible guess gets treated as a requirement from then on. |
 | `devkit-roadmap` | **a strong model** (Opus / Fable) | The same failure mode as `devkit-specify`, one level up: a weaker model fills the blank page with plausible features. Its whole discipline is refusing a candidate with no evidence line, and that refusal is the judgment. |
 | `devkit-help`, `devkit-stats`, `devkit-eval` | anything | Mechanical: relay a status check, read a telemetry log, run a suite. |
 
@@ -1079,7 +1121,7 @@ tier to one OpenRouter model. With the shipped mapping:
 | Component | Tier | On your Claude subscription | In the OpenRouter fallback |
 |---|---|---|---|
 | The session itself — the orchestrator that follows the loop | the session's | the model you picked | `qwen/qwen3-coder` (the launcher starts on `sonnet`) |
-| Skills: `devkit-specify`, `devkit-adr`, `devkit-roadmap`, `devkit-onboard`, `devkit-help`, `devkit-stats`, `devkit-eval` | inherit the session | the session's model | the session's model — `qwen/qwen3-coder` by default |
+| Skills: `devkit-specify`, `devkit-adr`, `devkit-roadmap`, `devkit-vision`, `devkit-onboard`, `devkit-help`, `devkit-stats`, `devkit-eval` | inherit the session | the session's model | the session's model — `qwen/qwen3-coder` by default |
 | `devkit-implementer`, `devkit-ship`, `devkit-docs`, `devkit-ux`, `devkit-ui-verify`, `devkit-datamodel`, `devkit-quality`, `devkit-security`, `devkit-pipeline`, `devkit-release`, `devkit-deliver` | `sonnet` | Claude Sonnet | `qwen/qwen3-coder` |
 | `devkit-reviewer`, `devkit-dep-audit` | `haiku` | Claude Haiku | `google/gemini-2.5-flash` |
 | Claude Code's **built-in** `Explore` and `Plan` agents, and `--model opus` | `opus` / `fable` | Claude Opus | `qwen/qwen3-coder` — deliberately the same cheap model (see below) |
@@ -1341,6 +1383,7 @@ devkit continue       take the next milestone; the loop drives it until it ships
 devkit continue all   the same for the whole queue - an unattended run
 devkit continue phase N   only Phase N's milestones, then stop - one lane of parallel work
 devkit continue M<n>  that one milestone, even if it isn't first in the tracker
+... as <preset>        any of the above with this session's own stages: full, api, ui, product, design
 devkit pause          stop driving this session and drop its claim
 ```
 
@@ -1478,12 +1521,20 @@ stops in between, so only `SessionStart` can act first, and that is prose a
 model may not treat as binding. Rewording it more forcefully did not change
 the outcome.
 
-`evals/escalation-gate-integration` is deliberately left **failing** as the
-mechanical record of this. Real enforcement would need a `PreToolUse` hook
-that *denies* `Edit`/`Write` while the current milestone is flagged and
-unacknowledged — a design change, not a fix, and not built. Until then: if a
-milestone is genuinely sensitive, decide the approach before saying
-"continue", rather than trusting the gate to interrupt you.
+**What changed with `devkit continue` (0.7+).** Starting the loop now goes
+through the `UserPromptSubmit` hook, which runs *before* the model's first
+turn and hands it the escalation question up front — the gate no longer has
+to wait for a stop. In `evals/escalation-gate-integration`, which failed on
+every earlier run (the session implemented the flagged milestone, then
+asked), a `devkit continue` session read the spec, wrote nothing, never
+delegated to the implementer, named both `SENSITIVE` requirements and asked
+which approach to take. That is one run (2026-09-26), so treat it as strong
+evidence, not proof. The gate is still advice rather than a lock: a prompt
+that isn't `devkit continue` doesn't drive the loop at all, and real
+enforcement would still need a `PreToolUse` hook that *denies*
+`Edit`/`Write` while the milestone is flagged and unacknowledged — not
+built. If a milestone is genuinely sensitive, decide the approach before
+saying `devkit continue`.
 
 ### Two sessions, one working tree
 
@@ -1727,6 +1778,7 @@ behaviour that existed before it:
   "stages": ["specify", "ux", "implement", "review", "security", "ship", "docs"],
   "loop": "devkit",
   "loopStart": "keyword",
+  "preset": "full",
   "parkedPattern": "not spec'd",
   "checkpointCommit": true,
   "sessionLeaseTtlMinutes": 15,
@@ -1742,6 +1794,9 @@ behaviour that existed before it:
   from still has the skill it grew out of, so installing the plugin there
   did nothing at all, and the only way to try it was to delete the fallback
   first. Now both can sit on disk and one of them drives.
+- **`preset`** — `full`, `api`, `ui`, `product` or `design`: a named stage
+  list, used when there's no explicit `stages`. See "Customize it for your
+  project" for what each contains.
 - **`loopStart`** — `"keyword"` (the default) means a session is driven by
   the loop only after the user says `devkit continue`; `"always"` drives
   every session from the moment it starts, which was the behaviour before

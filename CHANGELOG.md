@@ -22,6 +22,51 @@ reader six months from now cannot recover from the diff.
 
 ### Added
 
+- **Guided onboarding: `devkit onboard` asks one question at a time, and
+  scaffolds from templates shipped in the plugin.** Getting a new project
+  onto the loop meant a manual checklist in the README: talk through intent
+  yourself, run `claude init`, hand-write `PROGRESS.md`, seed ADRs. Now
+  `devkit-onboard` tells an empty folder from an existing repo, then asks:
+  `git init`? the product vision? which starter files? which milestones?
+  which loop? It never batches questions and never decides for the user.
+  The starter files - `CLAUDE.md` (short, pointing to the detail),
+  `.claude/rules/` (testing, architecture, conventions, workflow), an ADR
+  template plus ADR-0001, the spec template `devkit-specify` writes,
+  `PROGRESS.md` with phases, a product-vision skeleton, `.gitattributes` -
+  live in `templates/` and are copied by `scripts/scaffold.js`, which never
+  overwrites an existing file and reports exactly what it created and kept.
+  A copy rather than a model retyping them, because that promise has to hold
+  in someone else's project. The templates use neutral names, since a
+  `CLAUDE.md` or `.claude/rules/` inside the plugin's own tree would load as
+  live instructions for anyone working on the plugin; guidance inside them
+  is in HTML comments, which Claude Code strips before loading.
+
+- **`devkit-vision`, the product-intent interview.** One question per
+  message - the problem, who it's for, the first usable version (outcomes,
+  not features), what it won't do, how success shows, constraints, open
+  questions - writing `docs/product_vision.md` from the owner's answers
+  only. Gaps become open questions, never guesses, because a guess gets
+  treated as a requirement from then on. Meant for a strong model; it says
+  so once and carries on either way.
+
+- **Stage presets: `full`, `api`, `ui`, `product`, `design`.** Set one for the
+  project (`"preset": "api"` in `.claude/devkit.json`; an explicit `stages`
+  list still wins) or for one session (`devkit continue phase 16 as ui`),
+  which is stored with that session's arm and applied by the Stop hook and
+  the edit hook for it alone - so a UI lane on existing APIs runs UX and UI
+  verification and skips data-model planning, without changing the project's
+  config for anyone else. The `ui` preset keeps `implement` deliberately: the
+  implementer builds whatever the spec describes, in the project's stack. An
+  unknown preset starts nothing rather than silently running the full chain.
+
+- **A first-run banner that names one command.** An empty folder is greeted
+  with the guided onboarding; an existing repo without a tracker is pointed
+  at `devkit onboard` too, instead of a four-step manual checklist.
+
+- **`docs/DEMO.md`, a 20-minute presenter's script** - empty folder to a
+  shipped milestone, an existing repo, a parallel lane, the gateway
+  fallback - with what to type, what to point out, and on-stage fixes.
+
 - **Parallel lanes: `devkit continue phase N` and `devkit continue M<n>`.**
   `devkit continue` always took the first unfinished row, so two sessions -
   say one on the Claude login and one on a gateway profile, to go faster
@@ -461,6 +506,41 @@ reader six months from now cannot recover from the diff.
   different milestone in the same tree.
 
 ### Fixed
+
+- **Agents only ever stop processes they started.** Found by the full eval
+  run: `devkit-ui-verify`, restarting the demo server between states, listed
+  every `node.exe` on the machine and force-killed two - its own server and
+  one it had not started, which was the eval runner itself (the run died
+  with no report). On a developer's machine the same move kills their own
+  dev server, their editor's language server or another agent's session.
+  `devkit-ui-verify` now records the id of each process it launches and
+  stops exactly those, never kills by name or anything it merely found in a
+  process list or on a port, and reports a taken port as a finding.
+  `devkit-implementer` and `devkit-ship`, which check for a test process
+  already running, now wait or report rather than kill. A test keeps the
+  rule in all three.
+
+- **Five eval graders that failed correct behaviour.** A full run of all 17
+  cases before the 0.11 release scored 14 perfect; every one of the misses
+  was a grader, not the plugin. `escalation-gate-integration` checked only
+  the last message for "sensitive" while the session named the requirements
+  in its first - the runner gains `target: all_messages`. `specify-marks-
+  sensitive` required the Read tool while the skill read the code with
+  `cat` - it now accepts either, from the trace. Two `ui-verify` regexes
+  matched "empty"/"denied" anywhere on a PASS row, and fired on the error
+  state's row because its rendered-output cell said those elements were
+  hidden - they now match only the state-name cell. And its judge failed a
+  correctly partial verification for being incomplete - it is now told that
+  incomplete is the expected outcome and to judge only the listed actions,
+  and **the Windows runner's judges default to Sonnet instead of Haiku**.
+  Until 0.7.2 `-JudgeModel` was never passed to `claude`, so judges ran on
+  the session's default, strong model; once it was, Haiku judges kept
+  failing that run even with the clarified instructions.
+  Separately, `escalation-gate-integration` - documented as failing on
+  purpose since the gate could only act at a stop - now passes: `devkit
+  continue` hands the escalation question to the model before its first
+  turn. Its prompt and two onboarding/help graders were updated for the
+  keyword start and the guided onboarding.
 
 - **No profile routes the opus tier to an expensive model any more.** The
   default `openrouter` profile mapped opus/fable to

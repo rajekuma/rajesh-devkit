@@ -82,6 +82,10 @@ if (!fs.existsSync(progressPath)) process.exit(0);
 // its own resume.json, so in parallel lanes each checkpoint describes its own
 // lane's milestone rather than whichever row happens to be first.
 const earlySession = hookInput && typeof hookInput.session_id === 'string' ? hookInput.session_id : null;
+// A session started with `as <preset>` runs its own stage list; the project's
+// config stays as it is for every other session.
+const sessionStages = arm.stagesOf(dir, earlySession);
+if (sessionStages) config.stages = sessionStages;
 const milestone = d.findNextMilestone(progressPath, config.parked, arm.scopeOf(dir, earlySession));
 if (!milestone) process.exit(0);
 

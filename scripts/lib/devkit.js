@@ -65,6 +65,27 @@ const ALL_STAGES = [
 // inheriting it by installing the plugin.
 const DEFAULT_STAGES = ALL_STAGES.filter((s) => s !== 'deliver');
 
+// Named stage sets for the loops people actually run, so choosing one is a
+// word rather than a hand-written list. A project picks one in
+// .claude/devkit.json ("preset": "api"); a single session picks one for
+// itself (`devkit continue phase 16 as ui`) - a UI lane working on APIs that
+// already exist has no schema to plan, while the implementer still writes its
+// screens test-first, because it implements whatever the spec describes, in
+// the project's own stack. An explicit "stages" list always wins.
+const STAGE_PRESETS = {
+  full: DEFAULT_STAGES,
+  api: ['specify', 'datamodel', 'implement', 'review', 'quality', 'security', 'ship', 'docs'],
+  ui: ['specify', 'ux', 'implement', 'ui-verify', 'review', 'quality', 'ship', 'docs'],
+  product: ['specify', 'docs'],
+  design: ['ux'],
+};
+
+function presetStages(name) {
+  if (typeof name !== 'string') return null;
+  const stages = STAGE_PRESETS[name.trim().toLowerCase()];
+  return stages ? [...stages] : null;
+}
+
 // Committed, so a project's declared process is visible and reviewable; the
 // local file is gitignored, so one person can run a narrower loop than the
 // repo's default without changing it for everyone.
@@ -153,10 +174,13 @@ function readStageConfig(dir) {
     if (!cfg) continue;
     if (!extras) extras = readExtras(cfg);
     if (stageResult) continue;
-    if (!Array.isArray(cfg.stages)) continue;
-    const stages = cfg.stages.filter((s) => ALL_STAGES.includes(s));
-    if (stages.length === 0) continue;
-    stageResult = { stages, source };
+    const listed = Array.isArray(cfg.stages) ? cfg.stages.filter((s) => ALL_STAGES.includes(s)) : [];
+    if (listed.length > 0) {
+      stageResult = { stages: listed, source };
+      continue;
+    }
+    const fromPreset = presetStages(cfg.preset);
+    if (fromPreset) stageResult = { stages: fromPreset, source: `${source} preset "${cfg.preset}"` };
   }
 
   return {
@@ -560,6 +584,8 @@ module.exports = {
   GITIGNORE_ENTRY,
   ALL_STAGES,
   DEFAULT_STAGES,
+  STAGE_PRESETS,
+  presetStages,
   CONFIG_PROJECT,
   CONFIG_LOCAL,
   readStageConfig,

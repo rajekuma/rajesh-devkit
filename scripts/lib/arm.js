@@ -85,15 +85,28 @@ function pruned(sessions, now) {
 // sessions run in parallel on different phases (usually in different git
 // worktrees, one on Claude and one on a gateway profile) without both
 // reaching for the first unfinished row in the tracker.
-function arm(dir, sessionId, milestone, scope = null, now = Date.now()) {
+// `stages`, when given, replaces the project's stage list for this session
+// only - `devkit continue ... as ui` - so a UI lane runs ux and ui-verify and
+// skips data-model planning without changing the project's config for
+// anyone else.
+function arm(dir, sessionId, milestone, scope = null, now = Date.now(), stages = null) {
   if (!sessionId) return false;
   const sessions = pruned(readArms(dir), now);
   sessions[sessionId] = {
     milestone: milestone ?? ALL,
     ...(scope ? { scope } : {}),
+    ...(Array.isArray(stages) && stages.length ? { stages } : {}),
     armedAt: new Date(now).toISOString(),
   };
   return writeArms(dir, sessions);
+}
+
+// The stage list this session was started with (`as <preset>`), or null to
+// use the project's.
+function stagesOf(dir, sessionId) {
+  if (!sessionId) return null;
+  const entry = readArms(dir)[sessionId];
+  return entry && Array.isArray(entry.stages) && entry.stages.length ? entry.stages : null;
 }
 
 // The lane this session was started in, or null for the whole tracker.
@@ -143,6 +156,8 @@ function isDriving(dir, config, sessionId, milestone) {
 //   devkit continue all         the whole queue, unattended
 //   devkit continue phase 9     every milestone in Phase 9, then stop - a lane
 //   devkit continue M46         that one milestone, even if it isn't first
+//   ... as ui                   any of the above, with a stage preset for this
+//                               session only (full, api, ui, product, design)
 //
 // Anything else after "continue" is ignored, as it always was, so a stray
 // word never turns a plain continue into something narrower by accident.
@@ -153,16 +168,23 @@ function parseCommand(prompt) {
   if (typeof prompt !== 'string') return null;
   const c = prompt.split(/\r?\n/)[0].match(CONTINUE_RE);
   if (c) {
-    const rest = c[1].trim().replace(/[.!]+$/, '');
-    if (/^all$/i.test(rest)) return { action: 'continue', all: true };
+    let rest = c[1].trim().replace(/[.!]+$/, '');
+    let preset = null;
+    const as = rest.match(/^(.*?)\s*\bas\s+([a-z][\w-]*)$/i);
+    if (as) {
+      rest = as[1].trim();
+      preset = as[2].toLowerCase();
+    }
+    const out = (cmd) => (preset ? { ...cmd, preset } : cmd);
+    if (/^all$/i.test(rest)) return out({ action: 'continue', all: true });
     const phase = rest.match(/^phase\s+([\w.]+)$/i);
-    if (phase) return { action: 'continue', all: false, scope: { phase: phase[1] } };
+    if (phase) return out({ action: 'continue', all: false, scope: { phase: phase[1] } });
     const one = rest.match(/^(?:milestone\s+)?(m?\d[\w.]*)$/i);
-    if (one) return { action: 'continue', all: false, scope: { milestone: one[1].replace(/^m/i, '') } };
-    return { action: 'continue', all: false };
+    if (one) return out({ action: 'continue', all: false, scope: { milestone: one[1].replace(/^m/i, '') } });
+    return out({ action: 'continue', all: false });
   }
   if (PAUSE_RE.test(prompt)) return { action: 'pause' };
   return null;
 }
 
-module.exports = { ARM_FILE, ALL, armPath, readArms, arm, disarm, scopeOf, isDriving, parseCommand };
+module.exports = { ARM_FILE, ALL, armPath, readArms, arm, disarm, scopeOf, stagesOf, isDriving, parseCommand };

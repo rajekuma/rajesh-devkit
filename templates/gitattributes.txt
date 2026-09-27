@@ -1,0 +1,6 @@
+# Check text files out with LF on every OS, so a clone is byte-identical on
+# Windows, macOS and Linux (and shell scripts never pick up a stray \r).
+* text=auto eol=lf
+# Windows-only scripts that must keep CRLF:
+*.bat text eol=crlf
+*.cmd text eol=crlf
