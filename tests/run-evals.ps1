@@ -3,7 +3,11 @@ param(
     [string]$Case = '*',
     [switch]$KeepTemp,
     [switch]$SkipLlm,
-    [string]$JudgeModel = 'haiku',
+    # Sonnet, not Haiku. Until 0.7.2 this was never passed to claude, so judges
+    # silently ran on the session's default (strong) model; once it was, Haiku
+    # judges began failing a correctly partial ui-verify run for being
+    # "incomplete" despite being told that is the expected outcome.
+    [string]$JudgeModel = 'sonnet',
     # The session model for the run under test. Set by `node tests/run-evals.js
     # --profile <name>`, which also puts the profile's gateway variables in this
     # process's environment; see that script.
@@ -228,6 +232,11 @@ function Invoke-Claude {
 function Read-Trace([string]$OutFile) {
     $toolUses = New-Object System.Collections.ArrayList
     $lastMessage = ''
+    # Every message the session itself wrote (not its subagents'), for graders
+    # that ask "did it say X at any point" - the escalation case's session
+    # named the SENSITIVE requirements in its first message and asked the
+    # user in its last, and a last-message-only check marked that a failure.
+    $allMessages = New-Object System.Collections.ArrayList
     $cost = 0.0
     foreach ($line in (Get-Content -LiteralPath $OutFile -Encoding UTF8 -ErrorAction SilentlyContinue)) {
         if (-not $line.Trim()) { continue }
@@ -238,7 +247,10 @@ function Read-Trace([string]$OutFile) {
                 if ($block.type -eq 'tool_use') {
                     [void]$toolUses.Add(@{ name = $block.name; input = ($block.input | ConvertTo-Json -Compress -Depth 10) })
                 }
-                if ($block.type -eq 'text' -and $block.text) { $lastMessage = $block.text }
+                if ($block.type -eq 'text' -and $block.text) {
+                    $lastMessage = $block.text
+                    if (-not $obj.parent_tool_use_id) { [void]$allMessages.Add([string]$block.text) }
+                }
             }
         }
         if ($obj.type -eq 'result') {
@@ -246,13 +258,14 @@ function Read-Trace([string]$OutFile) {
             if ($obj.total_cost_usd) { $cost = [double]$obj.total_cost_usd }
         }
     }
-    return @{ ToolUses = $toolUses; LastMessage = $lastMessage; Cost = $cost }
+    return @{ ToolUses = $toolUses; LastMessage = $lastMessage; AllMessages = ($allMessages -join "`n"); Cost = $cost }
 }
 
 function Get-GraderText($Grader, $Ctx) {
     $target = $Grader['target']
     if (-not $target) { $target = $Grader['focus'] }
     if (-not $target -or $target -eq 'last_message') { return $Ctx.Trace.LastMessage }
+    if ($target -eq 'all_messages') { return $Ctx.Trace.AllMessages }
     if ($target -is [hashtable] -and $target['source'] -eq 'file') {
         $re = ConvertFrom-Glob $target['path']
         $parts = @()

@@ -10,7 +10,7 @@ context:
   scaffold_script: scaffold.sh
 execution:
   max_turns: 20
-  timeout_seconds: 400
+  timeout_seconds: 600
   allowed_tools: [Read, Glob, Grep, Bash, Agent]
   prompt: |
     Milestone 1 (task list view) is implemented. Use the devkit-ui-verify

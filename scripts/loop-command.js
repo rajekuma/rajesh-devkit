@@ -72,6 +72,21 @@ if (command.action === 'pause') {
 // continue. Under "loopStart": "always" every session already drives, but the
 // arm is still recorded and the reply says so, so the keyword is never a
 // silent no-op that leaves someone wondering whether it worked.
+// `as <preset>`: this session's own stage list. An unknown name starts
+// nothing - silently falling back to the full chain would drive a UI lane
+// into data-model planning, the exact thing the preset was chosen to avoid.
+let sessionStages = null;
+if (command.preset) {
+  sessionStages = d.presetStages(command.preset);
+  if (!sessionStages) {
+    say(
+      `rajesh-devkit: "${command.preset}" is not a stage preset. Use one of: ` +
+        `${Object.keys(d.STAGE_PRESETS).join(', ')} - e.g. "devkit continue phase 3 as ui". ` +
+        'Nothing was started.'
+    );
+  }
+}
+
 const progressPath = path.join(dir, 'PROGRESS.md');
 const scope = command.scope || null;
 const milestone = fs.existsSync(progressPath) ? d.findNextMilestone(progressPath, config.parked, scope) : null;
@@ -126,7 +141,14 @@ if (conflict) {
 
 // A phase lane drives every milestone in its phase, so it arms for "all"
 // within that scope; a named milestone arms for exactly that one.
-arm.arm(dir, sessionId, command.all || (scope && scope.phase) ? arm.ALL : milestone.display, scope);
+arm.arm(
+  dir,
+  sessionId,
+  command.all || (scope && scope.phase) ? arm.ALL : milestone.display,
+  scope,
+  Date.now(),
+  sessionStages
+);
 
 // What to do first is exactly what the Stop hook would say at this moment,
 // so ask it rather than keeping a second copy of the chain here to drift.
@@ -159,6 +181,10 @@ say(
           ? 'It carries on to each next milestone until the queue is empty or you say "devkit pause".'
           : 'It stops when this milestone ships; say "devkit continue" again for the next one, ' +
             'or "devkit pause" to stop sooner.') +
+      (sessionStages
+        ? ` Stages for this session ("${command.preset}"): ${sessionStages.join(', ')}; the ` +
+          "project's own config is unchanged for everyone else."
+        : '') +
       (config.loopStart === 'always'
         ? ' (This project uses "loopStart": "always", so the loop drives every session anyway.)'
         : ''),

@@ -1,5 +1,5 @@
 ---
-type: tool_used
-tool: Read
-input_match: 'users\.js'
+type: regex
+pattern: '(Read|Bash)[^\n]*users\.js'
+target: trace
 ---

@@ -72,29 +72,35 @@ To hand the loop to this plugin instead, add "loop": "devkit" to
 
 const progressPath = path.join(dir, 'PROGRESS.md');
 if (!fs.existsSync(progressPath)) {
-  say(`
-rajesh-devkit is installed, but this project has no PROGRESS.md yet - the
-one file the loop actually needs to have anything to nudge toward. Before
-that:
-
-  1. If you haven't already, talk through what this project actually is
-     (the product intent, not conventions) and save it somewhere like
-     docs/product_vision.md - a conversation, not a command.
-  2. Run \`claude init\` to generate/update CLAUDE.md from the repo as it
-     stands.
-  3. Break the vision into milestones and write PROGRESS.md - a table per
-     phase, every row starting unstarted, e.g.:
-
-       | # | Milestone | Status |
-       |---|---|---|
-       | 1 | <name> | (unstarted glyph) |
-
-  4. Optionally seed docs/adr/ if any big, hard-to-reverse decisions are
-     already made.
-
-Once PROGRESS.md exists with an unstarted row, this message will say what's
-next instead of this.
+  // Two different starting points, one next step. The old banner printed a
+  // four-step manual checklist here; onboarding now asks those questions
+  // itself, one at a time, and scaffolds from the plugin's templates - so the
+  // banner's only job is to name the command and say what it will do.
+  const IGNORABLE = new Set(['.git', '.claude', '.vscode', '.idea', '.gitignore', '.gitattributes', 'README.md', 'LICENSE']);
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir).filter((e) => !IGNORABLE.has(e));
+  } catch {
+    entries = [];
+  }
+  if (entries.length === 0) {
+    say(`
+rajesh-devkit: this looks like a new, empty project. Say "devkit onboard" and
+it walks you through setup one question at a time - git, the product vision (a
+short interview, best on a strong model such as Opus), starter files
+(CLAUDE.md, rules, ADRs, a spec template, PROGRESS.md), your first milestones,
+and which loop you want (full, api, ui, product, design). Nothing is written
+without your yes. Then say "devkit continue" to start the loop.
 `);
+  } else {
+    say(`
+rajesh-devkit is installed, but this project has no PROGRESS.md yet - the
+milestone tracker the loop reads. Say "devkit onboard": it looks at what is
+already here first (code, CLAUDE.md or AGENTS.md, docs, a tracker under
+another name), asks before changing anything, and never overwrites a file.
+Then say "devkit continue" to start the loop.
+`);
+  }
   process.exit(0);
 }
 

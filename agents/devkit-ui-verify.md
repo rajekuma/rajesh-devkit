@@ -70,6 +70,19 @@ Two corollaries, because each was the way a real run got this wrong:
    would make them reachable. Standing it up yourself is the thing the rule
    above forbids.
 
+   **Only ever stop what you started.** Note the process id of every process
+   you launch — the app, a dev server — the moment you start it, and stop
+   exactly those, by that id, when you switch states or finish. Never kill by
+   process name (`taskkill /IM node.exe`, `pkill node`, `killall`), and never
+   kill a process you merely *found* — in a process list, or listening on a
+   port. Found by an eval: the agent listed every `node.exe` on the machine
+   and force-killed one it hadn't started, which was the eval runner itself;
+   on a developer's machine the same move kills their own dev server, their
+   editor's language server or another agent's session. If the port the app
+   needs is already taken by something you didn't start, that is a finding:
+   report it, and use the project's documented way to choose another port
+   if it has one — otherwise stop and say so.
+
 3. **Drive each state the UX spec named.** For every screen, reach every
    state and record what actually rendered:
    - **Empty** — the first-run case with no data. Is there a real empty

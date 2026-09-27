@@ -270,7 +270,9 @@ assuming anything.
    one shared database produced 19 phantom failures, then 5, in tests the
    milestone never touched — plus a wrong test count from a half-rebuilt
    assembly. None reproduced alone. Before running, check nothing else is
-   (a lingering test host counts); after a surprising red, re-run **alone**
+   (a lingering test host counts) — and if something is, don't kill a process
+   you didn't start: wait for it, or tell the user what's holding the suite;
+   after a surprising red, re-run **alone**
    before calling it a regression or changing any code for it. If you learn
    the hard way that this project's tests cannot share a machine with
    themselves, record it in its `test-runners.json` entry as

@@ -75,7 +75,8 @@ those are done. No file means every stage except `deliver` is on. See
 
 | Stage | Component | Produces | Reads |
 |---|---|---|---|
-| Onboard | `devkit-onboard` | `PROGRESS.md`, test-runner cache | the existing repo |
+| Vision | `devkit-vision` | `docs/product_vision.md` | your answers, nothing else |
+| Onboard | `devkit-onboard` | git, starter files, `PROGRESS.md`, test-runner cache, the loop preset | the existing repo |
 | `specify` | `devkit-specify` | `specs/<feature>.md` | code, ADRs, conventions |
 | `ux` | `devkit-ux` | `specs/<feature>.ux.md` | the spec, component library |
 | `datamodel` | `devkit-datamodel` | `specs/<feature>.data.md` | the spec, the ORM and migration tooling |
@@ -148,11 +149,17 @@ this is a conversation, not a generation step.
 devkit onboard this project
 ```
 
-`devkit-onboard` inventories what exists (nothing, yet), detects your stack,
-**runs your test command once to confirm it actually works**, caches it, and
-walks you through decomposing the vision into milestones small enough to spec
-and ship in one sitting. It writes `PROGRESS.md` and stops — what it just set
-up is yours to review before work starts against it.
+`devkit-onboard` asks one question at a time. For an empty folder: `git
+init`?, the product vision (it hands over to `devkit-vision` for the
+interview), which starter files to copy from the plugin's templates
+(`CLAUDE.md`, `.claude/rules/`, ADRs, a spec template, `PROGRESS.md`), then
+it decomposes the vision into phases of milestones small enough to spec and
+ship in one sitting, and asks which loop you want — a preset: `full`, `api`,
+`ui`, `product` or `design`. For an existing repo it inventories what's there
+first, **runs your test command once to confirm it actually works**, caches
+it, and proposes only what's missing. It never overwrites a file, and it
+stops at the handoff — what it just set up is yours to review before you say
+`devkit continue`.
 
 ### 3. Spec the first milestone
 

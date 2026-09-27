@@ -13,4 +13,4 @@ execution:
   timeout_seconds: 300
   allowed_tools: [Read, Glob, Grep, Bash, Agent, Skill, AskUserQuestion]
   prompt: |
-    Continue with the next milestone in PROGRESS.md.
+    devkit continue
