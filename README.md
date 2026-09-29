@@ -218,7 +218,9 @@ and prints the tag command; nothing here runs it.
 - `track-milestones.js` (PostToolUse hook) — after every `Edit`/`Write`,
   detects any milestone that just flipped to done in `PROGRESS.md` and logs
   a timestamped "shipped" event, pairing with the "started" event
-  `continue-loop.js` already logs.
+  `continue-loop.js` already logs. In a session driving the loop, it also
+  checks that the milestone just marked done has a recorded verdict from
+  every gate the project enables, and says which are missing if not.
 - `session-welcome.js` (`SessionStart` hook) — greets a new session with
   what's next: the bootstrap checklist if `PROGRESS.md` doesn't exist yet,
   or the next milestone's status otherwise.
@@ -1536,6 +1538,29 @@ enforcement would still need a `PreToolUse` hook that *denies*
 built. If a milestone is genuinely sensitive, decide the approach before
 saying `devkit continue`.
 
+**After you answer: the same gates either way (0.11.1).** The question only
+decides who writes the code — you pick "implement it myself" (the session
+does it, test-first) or delegation to `devkit-implementer`. Everything after
+that is identical: data-model planning when the milestone changes stored
+data, then every gate your project enables (UI verification, review,
+quality, security, ship, docs, release), each verdict stamped. Three things
+hold that in place, found missing in real use on a milestone implemented
+directly:
+
+- The question itself now carries the whole remaining chain. It used to end
+  "invoke devkit-reviewer when done" and name nothing else, so quality,
+  security, ship and docs ran only if the model remembered them.
+- Your answer is recorded (`node <plugin>/scripts/record-gate.js approach
+  self|delegate`, kept in `.claude/rajesh-devkit/approach.json`), and every
+  later nudge for that milestone follows it. Before, the next nudge after a
+  stop told a session you had asked to implement directly to delegate to the
+  implementer instead. A recorded answer also means the question is never
+  asked twice, even after a resume on another machine.
+- When a driving session marks the milestone done in `PROGRESS.md`,
+  `track-milestones.js` checks that each enabled gate recorded a verdict for
+  it, and names the ones that didn't. `docs` and `datamodel` record no
+  verdict, so they aren't checked this way.
+
 ### Two sessions, one working tree
 
 Every other piece of state this plugin keeps answers *where did the work get
@@ -2163,7 +2188,17 @@ toward a new milestone; `track-milestones.js` logs the matching
 to one JSONL file **inside the host project**:
 `.claude\rajesh-devkit\telemetry.jsonl` (plus `telemetry.snapshot.json`,
 `track-milestones.js`'s own bookkeeping for detecting a status flip).
-`devkit-stats` reads that file and reports duration per milestone.
+`devkit-stats` reads that file and reports duration per milestone. It
+groups events by milestone number (`M35a`), from the earliest start to the
+first ship after it, so a milestone renamed in flight or picked up again in a
+new session is still one window.
+
+`track-milestones.js` writes whenever this plugin drives the loop — including
+a project that keeps its own old `spec-loop` skill but has handed the loop
+over with `"loop": "devkit"`. Before 0.11.1 it asked only whether that skill
+existed, so such a project logged every start and never a ship, and
+`devkit-stats` could report nothing for it. The first time it sees a
+tracker it records a baseline rather than a ship for every row already done.
 
 Four more files share that directory and the same one-line `.gitignore`
 rule: `loop-arm.json`, which sessions the user started the loop in (see
@@ -2198,6 +2233,10 @@ won't have a `milestone_started` event and won't show a duration —
 **Real USD cost per milestone.** `scripts/token-report.js` scans this
 project's own session transcripts — the main session and every delegated
 subagent run — for a given time window and sums their real `usage` fields.
+Work the main session does itself, such as a milestone you chose to
+implement directly, is in the total like any subagent's; the per-agent list
+names subagents only, so the main session's share is the total minus that
+list.
 It finds the right transcript directory deterministically from
 `$CLAUDE_PROJECT_DIR` using Claude Code's own path-sanitization scheme
 (every `: \ / .` and space becomes a literal hyphen — verified empirically

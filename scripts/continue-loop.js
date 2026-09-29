@@ -12,6 +12,7 @@ const d = require('./lib/devkit');
 const lease = require('./lib/lease');
 const gates = require('./lib/gates');
 const arm = require('./lib/arm');
+const approach = require('./lib/approach');
 
 const NUDGE_CAP = 8;
 
@@ -219,7 +220,14 @@ const started = (() => {
   return Boolean(c && c.done > 0);
 })();
 
+// The user's recorded answer to the gate below, if any. On disk with the
+// project, so it survives a resume on another machine - which the gate's own
+// temp-file memory does not - and it stands in for that memory: a milestone
+// whose approach is already chosen has had its human.
+const chosen = approach.approachFor(dir, milestone.display);
+
 const isSensitive =
+  !chosen &&
   d.isSensitiveSpec(specPath, config) &&
   on('implement') &&
   !draftBlocked &&
@@ -267,7 +275,16 @@ if (count === 1) {
 // The instruction for each stage after design, in chain order, filtered to
 // the ones this project enabled. Built rather than hardcoded so a loop never
 // names a stage its owner switched off - the whole point of stage config.
-function downstream() {
+//
+// `how` is the implementer step's mode: 'delegate' (the default and today's
+// behaviour), 'self' (the user chose to have this session implement it), or
+// 'ask' (the escalation message, where the answer is not known yet and both
+// routes are spelled out). Only that one step changes - found in real use
+// (M35a/M35b), where the escalation message ended "invoke devkit-reviewer
+// when done" and named no other gate, so a directly-implemented milestone
+// got quality, security, ship and docs only if the model remembered them.
+// Whoever writes the code, the gates after it are the same.
+function downstream(how = 'delegate') {
   const steps = [];
   // Conditional, not a standing step. It used to read as an order for every
   // milestone, and in real use a project whose schema had long been built
@@ -283,7 +300,22 @@ function downstream() {
         'this step entirely and do not create a .data.md;'
     );
   }
-  if (on('implement')) {
+  if (on('implement') && how === 'self') {
+    steps.push(
+      'implement it yourself in this session, as the user chose for this milestone - do ' +
+        'not delegate it to devkit-implementer - with strict TDD (red-green, one acceptance ' +
+        "criterion at a time, per this project's own testing conventions: see each test fail " +
+        'for the right reason before writing the code, tick each criterion in the spec as it ' +
+        'passes, run the whole suite at the end);'
+    );
+  } else if (on('implement') && how === 'ask') {
+    steps.push(
+      'implement it with strict TDD (red-green, one acceptance criterion at a time, per ' +
+        "this project's own testing conventions) the way the user chose: yourself, in this " +
+        'session, if they chose that; otherwise by invoking the devkit-implementer subagent ' +
+        'in this working tree - never with worktree isolation - and letting it finish;'
+    );
+  } else if (on('implement')) {
     steps.push(
       // How to run it, not just that it runs. Measured on cheaper models: one
       // stopped the implementer mid-work three times and did the milestone
@@ -434,8 +466,11 @@ if (showEscalation) {
     'reasoning, or is standard delegation to devkit-implementer fine for this one? Then ' +
     'wait. Asking after starting the work does not satisfy this gate - the point is that ' +
     'a human chooses the approach BEFORE anything is written, not that they are informed ' +
-    'once it exists. This is a one-time gate for this milestone: once answered, proceed ' +
-    'with strict TDD as normal and invoke devkit-reviewer when done.';
+    'once it exists. Once answered, record the choice so every later nudge for this ' +
+    `milestone follows it: \`node "${RECORD_GATE}" approach self\` or \`node ` +
+    `"${RECORD_GATE}" approach delegate\`. Then run this milestone's whole chain, in ` +
+    'order - the same chain whichever route builds it; implementing directly skips ' +
+    `nothing after it: ${downstream('ask').join(' ')}`;
 } else if (trackerStale) {
   message =
     `Next milestone from PROGRESS.md: ${milestone.display}. Its spec (${specPath}) is already ` +
@@ -457,7 +492,7 @@ if (showEscalation) {
     `Next milestone from PROGRESS.md: ${milestone.display}. No spec exists for it yet - ` +
     `draft one first: say "devkit spec this feature: ${milestone.name}" to invoke ` +
     'devkit-specify and write specs/<kebab-case-feature>.md.' +
-    (downstream().length > 0 ? ` Once the spec exists: ${downstream().join(' ')}` : '');
+    (downstream(chosen ?? 'delegate').length > 0 ? ` Once the spec exists: ${downstream(chosen ?? 'delegate').join(' ')}` : '');
 } else if (on('ux') && !uxDone) {
   message =
     `Next milestone from PROGRESS.md: ${milestone.display}. Its spec is at ${specPath}, but ` +
@@ -466,9 +501,9 @@ if (showEscalation) {
     'loading, error, permission-denied), reusing this project\'s existing components and ' +
     'tokens, and appending accessibility criteria to the feature spec\'s own acceptance ' +
     'list so the later stages gate on them.' +
-    (downstream().length > 0 ? ` After that: ${downstream().join(' ')}` : '');
+    (downstream(chosen ?? 'delegate').length > 0 ? ` After that: ${downstream(chosen ?? 'delegate').join(' ')}` : '');
 } else {
-  const next = downstream();
+  const next = downstream(chosen ?? 'delegate');
   // Every stage this loop owns is either done or not its business. Stop
   // rather than inventing work - this is what lets a two-stage loop (a
   // product owner's specify-and-document, say) end cleanly instead of
