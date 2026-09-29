@@ -13,6 +13,36 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Fixed (0.11.1)
+
+- **A milestone you chose to implement directly now gets every gate.** The
+  sensitive-milestone question ended "invoke devkit-reviewer when done" and
+  named no other gate. Found on M35a/M35b of the project this plugin is
+  dogfooded on: whether quality, security, ship and docs ran depended on the
+  model remembering them. The question now carries the whole remaining chain,
+  filtered to the project's enabled stages, with both implementation routes
+  spelled out.
+- **The user's answer is followed, not overridden.** `record-gate.js approach
+  self|delegate` records it in `.claude/rajesh-devkit/approach.json`, keyed by
+  milestone number. Every later nudge for that milestone follows it. Before,
+  the first nudge after a stop told a session that had been asked to
+  implement directly to "invoke devkit-implementer ... do not do its work
+  yourself". A recorded answer also stops the question being asked twice
+  after a resume on another machine, which the temp-file memory could not do.
+- **Marking a milestone done without its gates is called out.** In a session
+  driving the loop, `track-milestones.js` names every enabled gate (ui-verify,
+  review, quality, security, ship) with no verdict recorded for that
+  milestone. It reports only; the edit is not blocked.
+- **`devkit-stats` has data in projects that keep an old loop skill.**
+  `track-milestones.js` asked only whether `.claude/skills/spec-loop/` existed
+  and ignored `"loop": "devkit"`, so such a project logged every
+  `milestone_started` and never a `milestone_shipped`, leaving no window to
+  cost. It also no longer logs a ship for every finished row the first time it
+  sees a tracker, and a failed telemetry write no longer fails the hook.
+- **`devkit-stats` pairs by milestone number, from the earliest start.** A
+  milestone renamed in flight, or re-armed in a new session, logged several
+  starts under different names and paired with none of them.
+
 ### Removed
 
 - **`profiles/devkit-env.ps1` and `profiles/devkit-env.sh`** (`Use-DevkitProfile`,

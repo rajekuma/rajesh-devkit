@@ -42,10 +42,13 @@ silently dropped or guessed).
 
 2. **Parse and pair.** Each line is
    `{"event": "milestone_started"|"milestone_shipped", "milestone": "<name>", "timestamp": "<ISO 8601 UTC>"}`.
-   Pair each `milestone_started` with the next `milestone_shipped` for the
-   *same* milestone name, in chronological order (a milestone can only be
-   "in flight" once at a time under this plugin's own nudge-cap design, so
-   simple FIFO pairing per name is correct). Three outcomes, each handled
+   Group events by **milestone number** — the leading `M<n>` of the name
+   (`M35a - Roles …` → `M35a`), not the full name: a milestone renamed while
+   in flight keeps its number, and a session that re-armed the loop logs
+   another `milestone_started` for the same one. A window runs from the
+   **earliest** `milestone_started` for that number to the first
+   `milestone_shipped` after it; later starts before that ship are the same
+   work resumed, not new work. Three outcomes, each handled
    differently — don't collapse them into one "incomplete data" bucket:
    - **Both events present** → a closed window. Continue to steps 3-5.
    - **`milestone_started` with no `milestone_shipped` yet** → still in

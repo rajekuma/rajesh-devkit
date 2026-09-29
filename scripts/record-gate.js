@@ -6,6 +6,8 @@
 //
 //   node record-gate.js <gate> <verdict>   stamp a verdict with the tree now
 //   node record-gate.js check [--json]     judge every stamp against the tree now
+//   node record-gate.js approach <self|delegate>   remember how the user chose to
+//                                          build this milestone (see lib/approach.js)
 //
 // A verdict describes the diff its gate saw, not the diff that exists after
 // someone acts on it. In the M28 run three gates passed, two of quality's
@@ -23,6 +25,7 @@ const fs = require('fs');
 const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const gates = require('./lib/gates');
+const approach = require('./lib/approach');
 
 // The harness sets CLAUDE_PROJECT_DIR for hooks; a Bash call from the session
 // may or may not inherit it. The repository containing the working directory
@@ -98,6 +101,18 @@ if (args[0] === 'check') {
   }
   process.stdout.write(`${lines.join('\n')}\n`);
   process.exit(allFresh ? 0 : 1);
+}
+
+if (args[0] === 'approach') {
+  const out = approach.recordApproach(dir, milestone, args[1]);
+  if (!out.ok) {
+    process.stderr.write(`record-gate: ${out.error}
+`);
+    process.exit(1);
+  }
+  process.stdout.write(`record-gate: approach = ${out.approach} for ${milestone}
+`);
+  process.exit(0);
 }
 
 if (args.length < 2) usage();
