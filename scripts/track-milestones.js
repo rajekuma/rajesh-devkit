@@ -17,6 +17,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const gates = require('./lib/gates');
 const arm = require('./lib/arm');
@@ -104,6 +105,28 @@ const expected = ['ui-verify', 'review', 'quality', 'security', 'ship'].filter((
   d.stageEnabled(config, g)
 );
 
+// Record each milestone this session just finished into the project's own
+// metrics (scripts/milestone-metrics.js): active time, cost, size of the
+// change. Here rather than in the close-out instructions because a record
+// that depends on the model remembering to make it is the M35a/M35b story
+// again - it was never made. Synchronous and bounded: the transcript scan
+// takes a few seconds, runs once per finished milestone, and any failure
+// just means no record.
+const finishedHere = justDone.filter((key) => arm.isDriving(dir, config, sessionId, current[key]));
+if (config.metrics !== false) {
+  for (const key of finishedHere) {
+    try {
+      spawnSync(process.execPath, [path.join(__dirname, 'milestone-metrics.js'), 'record', key], {
+        encoding: 'utf8',
+        timeout: 45000,
+        env: { ...process.env, CLAUDE_PROJECT_DIR: dir },
+      });
+    } catch {
+      /* no record this time; the telemetry is still there to record it later */
+    }
+  }
+}
+
 const warnings = [];
 if (expected.length > 0) {
   let recorded = {};
@@ -112,9 +135,8 @@ if (expected.length > 0) {
   } catch {
     recorded = {};
   }
-  for (const key of justDone) {
+  for (const key of finishedHere) {
     const m = current[key];
-    if (!arm.isDriving(dir, config, sessionId, m)) continue;
     const missing = expected.filter((g) => !recorded[g] || recorded[g].milestone !== m.display);
     if (missing.length > 0) warnings.push({ display: m.display, missing });
   }

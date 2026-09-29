@@ -432,6 +432,15 @@ function downstream(how = 'delegate') {
         "session log if this project keeps one, set the spec's own `Status:` header to " +
         'Implemented if it has one, and clear the `## In flight` block if it has one.'
     );
+    if (config.metrics !== false) {
+      // Recorded by track-milestones the moment the row flips; said here so
+      // the new files are expected, and land in the milestone's own commit
+      // rather than drifting into the next one.
+      steps.push(
+        `Marking the row done records this milestone's time and cost in ${config.metricsDir || 'docs/metrics'}/ ` +
+          '(milestones.jsonl and README.md); those files belong with the milestone\'s changes.'
+      );
+    }
     if (!on('deliver')) {
       // Deliver is off by default, so for most projects this is the normal
       // path, not an edge case: the loop leaves finished work uncommitted and
