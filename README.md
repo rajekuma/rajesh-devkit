@@ -577,7 +577,7 @@ default except `deliver`: `specify`, `ux`, `datamodel`, `implement`,
 `ui-verify`, `review`, `quality`, `security`, `ship`, `docs`, `release`,
 `pipeline`. No UI? Drop `ux` and `ui-verify`. The other keys — `loopStart`,
 `loop`, `checkpointCommit`, `parkedPattern`, `sensitivePatterns`,
-`sessionLeaseTtlMinutes`, `prices` — are explained in "The rest of
+`sessionLeaseTtlMinutes`, `prices`, `metrics`, `metricsDir` — are explained in "The rest of
 `.claude/devkit.json`".
 
 **2. Just for you — `.claude/rajesh-devkit/devkit.local.json`.** Same shape,
@@ -1808,9 +1808,16 @@ behaviour that existed before it:
   "checkpointCommit": true,
   "sessionLeaseTtlMinutes": 15,
   "sensitivePatterns": ["Money is `decimal`", "multi-tenan", "existing invariant"],
-  "prices": { "qwen/qwen3-coder": { "input": 0.3, "output": 1.0 } }
+  "prices": { "qwen/qwen3-coder": { "input": 0.3, "output": 1.0 } },
+  "metrics": true,
+  "metricsDir": "docs/metrics"
 }
 ```
+
+- **`metrics`** / **`metricsDir`** — whether finished milestones are recorded
+  into the project's own repository (on by default, in `docs/metrics/`). See
+  "Milestone records you commit" under Telemetry. `"metrics": false` turns it
+  off.
 
 - **`loop`** — `"devkit"` makes this plugin drive even where the project has
   its own `spec-loop` skill; `"project"` makes it stand down even where it
@@ -2250,12 +2257,14 @@ inspecting a real transcript, not assumed.
 
 Cost uses a pricing table baked into the script (input/output/cache-write/
 cache-read per model, sourced from the `claude-api` skill, cached
-2026-06-24 — **not fetched live**, so it goes stale if Anthropic changes
+2026-09-25 — **not fetched live**, so it goes stale if Anthropic changes
 prices):
 
 | Model | Input $/MTok | Output $/MTok | Cache write 5m / 1h $/MTok | Cache read $/MTok |
 |---|---|---|---|---|
+| `claude-opus-5-5` | 4.00 | 20.00 | 5.00 / 8.00 | 0.20 |
 | `claude-opus-5` | 5.00 | 25.00 | 6.25 / 10.00 | 0.50 |
+| `claude-sonnet-5-5` | 2.00 | 10.00 | 2.50 / 4.00 | 0.20 |
 | `claude-sonnet-5` | 2.00 | 10.00 | 2.50 / 4.00 | 0.20 |
 | `claude-haiku-4-5` | 1.00 | 5.00 | 1.25 / 2.00 | 0.10 |
 | `claude-fable-5-1` | 10.00 | 50.00 | 12.50 / 20.00 | 0.25 |
@@ -2286,6 +2295,43 @@ as a range with reasoning shown and flagged `🚩 Heuristic estimate, not
 measured`, never as a bare precise number. The implied speedup (estimate
 midpoint ÷ real duration) is reported the same way, and only when both
 figures actually exist for that milestone.
+
+### Milestone records you commit
+
+The telemetry above is per machine and gitignored. What is worth keeping —
+what each milestone actually took — goes into the project itself, so the
+next estimate ("how long will Phase 9 take on Opus, and what if Sonnet
+builds it?") starts from measurements.
+
+When a session driving the loop marks a milestone done, `track-milestones.js`
+runs `scripts/milestone-metrics.js record M<n>`, which appends one line to
+`docs/metrics/milestones.jsonl` and regenerates `docs/metrics/README.md`:
+
+- **Active hours**: time between assistant turns, each pause capped at 15
+  minutes, so a night or an unanswered question isn't counted as work.
+  Wall-clock hours are kept alongside.
+- **Cost**, split between the main session (the implementing, when it was
+  done directly) and the subagents (the gates), each with its model.
+- **Tokens** by kind, the **model that built it**, whether it was
+  implemented directly or delegated, whether the spec was `SENSITIVE`, the
+  number of **acceptance criteria**, the **gate verdicts**, and the **size of
+  the change** (lines added and removed, untracked files included).
+- The summary page gives cost and active minutes **per acceptance
+  criterion**, by milestone, by building model and by phase. Per criterion,
+  because milestones differ in size tenfold and a per-milestone average
+  hides that.
+
+The files are written next to the milestone's changes and belong in its
+commit. A milestone can be recorded again (its line is replaced), and one
+the loop never timed can be backfilled by hand:
+
+```bash
+node <plugin>/scripts/milestone-metrics.js record M35a --start 2026-09-28T18:22:48Z --end 2026-09-28T19:37:12Z --commit 5d352fc --approach self --note "from the session transcript"
+```
+
+A window given by hand is recorded as **estimated**, with its note, and
+never reads as measured. `"metrics": false` in `.claude/devkit.json` turns
+recording off; `"metricsDir"` moves it.
 
 For overall session-level cost/token/tool-usage metrics (not milestone-level,
 but real and zero-code today), Claude Code also has a built-in OpenTelemetry

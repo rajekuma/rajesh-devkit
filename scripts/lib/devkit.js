@@ -152,6 +152,11 @@ function readExtras(cfg) {
     ),
     sensitivePatterns: patterns,
     prices: cfg.prices && typeof cfg.prices === 'object' ? cfg.prices : {},
+    // Per-milestone cost and effort records, committed with the project
+    // (scripts/milestone-metrics.js). On unless switched off: they are what
+    // makes the next estimate a measurement instead of a guess.
+    metrics: cfg.metrics !== false,
+    metricsDir: typeof cfg.metricsDir === 'string' && cfg.metricsDir.trim() ? cfg.metricsDir.trim() : null,
   };
 }
 
@@ -372,6 +377,29 @@ function findNextMilestone(progressPath, parked = null, scope = null) {
       const name = task[1].trim();
       if (parked && parked.test(name)) continue;
       return { number: null, name, note: '', phase, display: name };
+    }
+  }
+  return null;
+}
+
+// One milestone row by number, done or not, with the Phase heading it sits
+// under - what a record of a finished milestone needs, where
+// findNextMilestone only ever returns unfinished ones.
+function findMilestoneByNumber(progressPath, number) {
+  const lines = readLines(progressPath);
+  if (!lines || number == null) return null;
+  const rowRe = milestoneRowPattern(Object.values(GLYPH));
+  let phase = null;
+  for (const line of lines) {
+    const heading = line.match(PHASE_HEADING);
+    if (heading) {
+      phase = heading[1];
+      continue;
+    }
+    const row = line.match(rowRe);
+    if (row && sameId(row[1], String(number))) {
+      const name = row[2].trim();
+      return { number: row[1], name, phase, display: `M${row[1]} - ${name}`, done: row[3] === GLYPH.done };
     }
   }
   return null;
@@ -600,6 +628,7 @@ module.exports = {
   readFileOrNull,
   readLines,
   findNextMilestone,
+  findMilestoneByNumber,
   findParkedMilestones,
   readMilestoneStatuses,
   findSpecForMilestone,

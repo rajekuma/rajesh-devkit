@@ -18,13 +18,17 @@ const os = require('os');
 const path = require('path');
 
 // Pricing ($ per million tokens). Source: Anthropic API pricing (cached
-// 2026-06-24 per the claude-api skill). Cache write = 1.25x input at the
+// 2026-09-25 per the claude-api skill). Opus 5.5 and Sonnet 5.5 were missing
+// until 0.11.2, so every turn they ran fell into unknownModelTokens and a
+// milestone built on Opus 5.5 reported $0.00. Cache write = 1.25x input at the
 // 5-minute TTL, 2x at the 1-hour TTL; cache read = 0.1x input - except
 // claude-fable-5-1, which has a documented flat $0.25/MTok cache-read rate
 // (0.025x), not the general convention. Update this table if pricing
 // changes; it is not fetched live.
 const PRICING = {
+  'claude-opus-5-5': { input: 4.0, output: 20.0, cacheRead: 0.2 },
   'claude-opus-5': { input: 5.0, output: 25.0, cacheRead: 0.5 },
+  'claude-sonnet-5-5': { input: 2.0, output: 10.0, cacheRead: 0.2 },
   'claude-sonnet-5': { input: 2.0, output: 10.0, cacheRead: 0.2 },
   'claude-haiku-4-5': { input: 1.0, output: 5.0, cacheRead: 0.1 },
   'claude-fable-5-1': { input: 10.0, output: 50.0, cacheRead: 0.25 },
@@ -117,6 +121,16 @@ const transcriptDir = path.join(os.homedir(), '.claude', 'projects', sanitized);
 
 const results = new Map();
 const byAgent = new Map();
+// The same per-model usage, split by who spent it: every subagent run, and
+// the main session under a null agentId. Without the main session's own row
+// a milestone the orchestrator implemented directly shows as a total with
+// nothing accounting for most of it - found on M35a, where the main session
+// was ~80% of the spend and the report listed only the five gate agents.
+const usageByAgent = new Map();
+// Every assistant turn's timestamp in the window, for active time: wall-clock
+// from start to ship includes nights and meetings, which is useless for
+// estimating the next milestone.
+const turnTimes = [];
 let unknownModelTokens = 0;
 
 function num(v) {
@@ -140,6 +154,23 @@ function addUsage(model, usage, agentId, agentMeta) {
     r.cacheWrite5m += num(usage.cache_creation_input_tokens);
   }
   r.cacheRead += num(usage.cache_read_input_tokens);
+
+  const agentKey = agentId ?? null;
+  if (!usageByAgent.has(agentKey)) usageByAgent.set(agentKey, new Map());
+  const perModel = usageByAgent.get(agentKey);
+  if (!perModel.has(model)) {
+    perModel.set(model, { input: 0, output: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0 });
+  }
+  const a = perModel.get(model);
+  a.input += num(usage.input_tokens);
+  a.output += num(usage.output_tokens);
+  if (usage.cache_creation) {
+    a.cacheWrite5m += num(usage.cache_creation.ephemeral_5m_input_tokens);
+    a.cacheWrite1h += num(usage.cache_creation.ephemeral_1h_input_tokens);
+  } else if (usage.cache_creation_input_tokens) {
+    a.cacheWrite5m += num(usage.cache_creation_input_tokens);
+  }
+  a.cacheRead += num(usage.cache_read_input_tokens);
 
   if (agentId) {
     if (!byAgent.has(agentId)) {
@@ -176,6 +207,7 @@ function scanTranscript(file, agentId, agentMeta) {
     if (entry.type !== 'assistant' || !entry.timestamp) continue;
     const ts = new Date(entry.timestamp).getTime();
     if (Number.isNaN(ts) || ts < start || ts > end) continue;
+    turnTimes.push(ts);
     const usage = entry.message && entry.message.usage;
     if (!usage) continue;
     addUsage(entry.message.model, usage, agentId, agentMeta);
@@ -225,6 +257,57 @@ function round(n, places) {
 
 const CONFIGURED_PRICES = readConfiguredPrices(args.projectDir);
 
+function priceOf(model) {
+  let p = PRICING[model] ?? CONFIGURED_PRICES[model];
+  if (!p) {
+    const stripped = String(model).replace(/-\d{8}$/, '');
+    if (stripped !== model) p = PRICING[stripped] ?? CONFIGURED_PRICES[stripped];
+  }
+  return p ?? null;
+}
+
+function costOf(model, r) {
+  const p = priceOf(model);
+  if (!p) return null;
+  return (
+    (r.input / 1e6) * p.input +
+    (r.output / 1e6) * p.output +
+    (r.cacheWrite5m / 1e6) * (p.input * 1.25) +
+    (r.cacheWrite1h / 1e6) * (p.input * 2) +
+    (r.cacheRead / 1e6) * p.cacheRead
+  );
+}
+
+// Cost of one agent's usage across the models it ran; null when any of its
+// tokens came from a model with no price, rather than a partial sum that
+// reads as the whole.
+function agentCost(perModel) {
+  let sum = 0;
+  for (const [model, r] of perModel) {
+    const c = costOf(model, r);
+    if (c === null) return null;
+    sum += c;
+  }
+  return sum;
+}
+
+function agentTokens(perModel) {
+  let t = 0;
+  for (const r of perModel.values()) t += r.input + r.output + r.cacheWrite5m + r.cacheWrite1h + r.cacheRead;
+  return t;
+}
+
+// Active minutes: the sum of gaps between consecutive assistant turns, each
+// gap counted only up to IDLE_CAP_MS. A pause longer than that is someone
+// away - a night, a meeting, an unanswered question - not work.
+const IDLE_CAP_MS = 15 * 60 * 1000;
+function activeMinutes(times) {
+  const t = [...times].sort((x, y) => x - y);
+  let ms = 0;
+  for (let i = 1; i < t.length; i++) ms += Math.min(t[i] - t[i - 1], IDLE_CAP_MS);
+  return Math.round(ms / 60000);
+}
+
 let totalCost = 0;
 const byModel = [];
 for (const [model, r] of results) {
@@ -232,20 +315,9 @@ for (const [model, r] of results) {
   // dated-snapshot suffix (e.g. "claude-haiku-4-5-20251001") that an exact
   // match against this table's bare keys would miss - found for real: 1.9M
   // haiku tokens silently fell into unknownModelTokens before this existed.
-  let p = PRICING[model] ?? CONFIGURED_PRICES[model];
-  if (!p) {
-    const stripped = model.replace(/-\d{8}$/, '');
-    if (stripped !== model) p = PRICING[stripped] ?? CONFIGURED_PRICES[stripped];
-  }
-
-  let modelCost = null;
-  if (p) {
-    modelCost =
-      (r.input / 1e6) * p.input +
-      (r.output / 1e6) * p.output +
-      (r.cacheWrite5m / 1e6) * (p.input * 1.25) +
-      (r.cacheWrite1h / 1e6) * (p.input * 2) +
-      (r.cacheRead / 1e6) * p.cacheRead;
+  // (priceOf strips that suffix.)
+  const modelCost = costOf(model, r);
+  if (modelCost !== null) {
     totalCost += modelCost;
   } else {
     unknownModelTokens += r.input + r.output + r.cacheWrite5m + r.cacheWrite1h + r.cacheRead;
@@ -270,7 +342,17 @@ for (const [agentId, a] of byAgent) {
     description: a.description,
     model: a.model,
     tokens: a.tokens,
+    costUsd: usageByAgent.has(agentId) ? nullableRound(agentCost(usageByAgent.get(agentId))) : null,
   });
+}
+
+const mainUsage = usageByAgent.get(null);
+const mainSession = mainUsage
+  ? { tokens: agentTokens(mainUsage), costUsd: nullableRound(agentCost(mainUsage)), models: [...mainUsage.keys()] }
+  : { tokens: 0, costUsd: 0, models: [] };
+
+function nullableRound(v) {
+  return v === null ? null : round(v, 4);
 }
 
 process.stdout.write(
@@ -278,6 +360,9 @@ process.stdout.write(
     {
       totalCostUsd: round(totalCost, 4),
       unknownModelTokens,
+      activeMinutes: activeMinutes(turnTimes),
+      assistantTurns: turnTimes.length,
+      mainSession,
       byModel,
       byAgent: byAgentList,
     },

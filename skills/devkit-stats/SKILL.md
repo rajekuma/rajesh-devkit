@@ -32,6 +32,21 @@ goes stale if Anthropic changes prices after this plugin's last update; a
 model outside that table reports its tokens but not its cost (flagged, not
 silently dropped or guessed).
 
+## Records the project keeps
+
+Finished milestones are also recorded, by the loop itself, into the
+project's own repository: `docs/metrics/milestones.jsonl` (or the
+`metricsDir` in `.claude/devkit.json`), summarized in
+`docs/metrics/README.md` — active hours, cost split between the main session
+and the gates, the building model, criteria count, change size. When those
+files exist, start from them: they are committed, travel with the repo, and
+are what an estimate for the next milestone or phase should be based on.
+Say which records are `estimated` (backfilled) rather than `measured`. The
+steps below are for milestones not recorded there yet; this skill stays
+read-only and never writes those files — recording is
+`node "${CLAUDE_PLUGIN_ROOT}/scripts/milestone-metrics.js" record M<n>`,
+which the user can run.
+
 ## Steps
 
 1. **Find the telemetry log**, at `$env:CLAUDE_PROJECT_DIR\.claude\rajesh-devkit\telemetry.jsonl` —

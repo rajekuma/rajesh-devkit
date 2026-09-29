@@ -13,6 +13,30 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Added (0.11.2)
+
+- **Milestone records committed with the project.** When a driving session
+  marks a milestone done, `scripts/milestone-metrics.js` records it in
+  `docs/metrics/milestones.jsonl` and regenerates `docs/metrics/README.md`.
+  Each record holds active and wall-clock hours, cost split between the main
+  session and the gates, tokens by kind, the building model, direct or
+  delegated, criteria count, gate verdicts and change size. The summary gives
+  cost and active minutes per acceptance criterion, by milestone, model and
+  phase. Before this, the only record was per-machine, gitignored telemetry,
+  and an estimate for the next phase started from nothing. A window given by
+  hand (`--start/--end`, for backfilling) is marked `estimated`, never
+  `measured`. `"metrics": false` turns recording off; `"metricsDir"` moves it.
+- **`token-report.js` reports the main session's own cost, per-agent cost
+  and active minutes.** A milestone the orchestrator implemented directly
+  showed a total with nothing accounting for about 80% of it, because only
+  subagents were listed.
+
+### Fixed (0.11.2)
+
+- **Opus 5.5 and Sonnet 5.5 are priced.** They were missing from the table,
+  so every turn they ran counted as `unknownModelTokens` and a milestone
+  built on Opus 5.5 reported $0.00.
+
 ### Fixed (0.11.1)
 
 - **A milestone you chose to implement directly now gets every gate.** The
