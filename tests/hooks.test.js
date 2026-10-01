@@ -1422,8 +1422,11 @@ test('a conflict does not log the milestone as started', () => {
   withLeaseFixture((dir) => {
     writeLease(dir);
     runHook('continue-loop.js', dir, payload(MINE));
-    const telemetry = read(dir, '.claude', 'rajesh-devkit', 'telemetry.jsonl');
-    assert.strictEqual(telemetry, null, 'wrote telemetry despite a live conflict');
+    const telemetry = read(dir, '.claude', 'rajesh-devkit', 'telemetry.jsonl') ?? '';
+    assert.doesNotMatch(telemetry, /milestone_started/, 'logged a start despite a live conflict');
+    assert.doesNotMatch(telemetry, /loop_nudge/, 'counted the conflict as a nudge');
+    // The collision itself is logged, for the milestone's DevKit receipt.
+    assert.match(telemetry, /session_collision/);
   });
 });
 

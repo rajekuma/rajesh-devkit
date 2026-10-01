@@ -2329,6 +2329,37 @@ the loop never timed can be backfilled by hand:
 node <plugin>/scripts/milestone-metrics.js record M35a --start 2026-09-28T18:22:48Z --end 2026-09-28T19:37:12Z --commit 5d352fc --approach self --note "from the session transcript"
 ```
 
+**The DevKit receipt.** When the loop marks a milestone done, you are shown
+what the plugin did for it, built from its own records (telemetry events,
+gate stamps, the transcript scan), so it costs no model tokens:
+
+```
+DevKit | M35b Statement Ownership & Former-Resident Access | done
+  Loop    3 stops turned into the next step by devkit | asked the sensitive-milestone question | built by claude-opus-5-5 (self)
+  Gates   review: ship | quality: ship | security: clear | ship: clear-with-unknowns | docs: ran
+          5 devkit agent runs (reviewer, security, quality, ship, docs), $8.06
+  Caught  0 missing-gate warnings | 1 stale-verdict warning | 0 session collisions stopped
+  Cost    $46.05 at API prices | 0.98 active h | 14 criteria ($3.29 each) | +4926 / -50 lines
+```
+
+An enabled gate with no recorded verdict shows as `NOT RUN`. The receipt is
+saved in the milestone's record (the "DevKit did" column on the summary
+page), and `node <plugin>/scripts/milestone-metrics.js receipt M<n>` prints
+one again. It reports what the plugin did, not proof the result would have
+been worse without it; that takes a with/without comparison on the same
+spec.
+
+**What you see when a milestone is done.** The same hook hands the session
+that milestone's figures from the record it just wrote: active time, cost
+split between the main session and the gates, the building model, cost per
+criterion and lines changed. The session shows them when it reports the
+milestone complete and asks about committing. When the milestone is the last
+one under its `## Phase N` heading, the session is also told the phase is
+complete, with the phase's totals, and asked to give you the push command so
+CI runs, along with whatever deployment your CI starts. It never runs that
+command: the loop does not push. With the `deliver` stage enabled,
+`devkit-deliver` takes the phase boundary instead.
+
 A window given by hand is recorded as **estimated**, with its note, and
 never reads as measured. `"metrics": false` in `.claude/devkit.json` turns
 recording off; `"metricsDir"` moves it.
