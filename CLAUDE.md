@@ -29,6 +29,8 @@ node profiles/check.js [profile] [--new]          # profile model ids, tool supp
 | `tests/` | `*.test.js` suite; `run-evals.*` for `evals/` |
 | `docs/SDLC.md` | the loop explained for users |
 | `docs/model-learnings.md` | every model measured: score, real cost, lesson |
+| `docs/plans/` | living plans for larger work (e.g. running the loop on other harnesses) |
+| `AGENTS.md` | the same rules for Codex, Copilot and other agents |
 | `CHANGELOG.md` | what changed and the failure it prevents |
 
 ## Always-true rules
