@@ -144,6 +144,9 @@ if (conflict) {
   // re-arms with `devkit continue` once it's settled. Under "loopStart":
   // "always" there is no arm to take away, so it still repeats there.
   const pausedHere = config.loopStart !== 'always' && Boolean(sessionId);
+  // Logged for the milestone's receipt: a collision the loop stopped is work
+  // the plugin did that otherwise leaves no trace.
+  d.appendTelemetry(dir, 'session_collision', milestone.display);
   if (pausedHere) {
     arm.disarm(dir, sessionId);
     lease.release(dir, sessionId);
@@ -547,6 +550,7 @@ if (showEscalation) {
         .results.filter((r) => r.state === 'stale' && r.recordedMilestone === milestone.display)
         .map((r) => `${r.gate} (${r.verdict})`);
       if (stale.length > 0) {
+        d.appendTelemetry(dir, 'gates_stale', milestone.display, undefined, { gates: stale });
         staleNote =
           ` The verdicts recorded for this milestone from ${stale.join(', ')} are STALE: ` +
           'the tree has changed since they were issued, so they no longer vouch for this ' +
@@ -562,6 +566,22 @@ if (showEscalation) {
     `${staleNote}${progress} ` +
     next.join(' ');
 }
+
+// Every nudge is logged, by kind, so a finished milestone's receipt can say
+// what the loop did for it: how many stops it turned into the next step, and
+// whether it asked the sensitive-milestone question or held a Draft spec.
+const nudgeKind = showEscalation
+  ? 'sensitive-question'
+  : trackerStale
+    ? 'tracker-stale'
+    : draftBlocked
+      ? 'draft-blocked'
+      : !specPath
+        ? 'spec'
+        : on('ux') && !uxDone
+          ? 'ux'
+          : 'chain';
+d.appendTelemetry(dir, 'loop_nudge', milestone.display, undefined, { kind: nudgeKind });
 
 process.stderr.write(`${message}\n`);
 process.exit(2);

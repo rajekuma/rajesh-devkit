@@ -176,3 +176,110 @@ test('marking a milestone done in a driving session records it automatically', (
     assert.strictEqual(rec.window.source, 'measured');
   });
 });
+
+// ---------------------------------------------------------------------------
+// What the user sees when a milestone, or a phase, is finished
+// ---------------------------------------------------------------------------
+
+const PHASED = [
+  '# Progress',
+  '',
+  '## Phase 1 - Accounts',
+  '',
+  '| # | Milestone | Status |',
+  '|---|-----------|--------|',
+  `| 1 | User login | ${GLYPH.notStarted} |`,
+  '',
+  '## Phase 2 - Billing',
+  '',
+  '| # | Milestone | Status |',
+  '|---|-----------|--------|',
+  `| 2 | Invoices | ${GLYPH.notStarted} |`,
+  '',
+].join('\n');
+
+function finishM1(dir, home, progress) {
+  fs.writeFileSync(path.join(dir, 'PROGRESS.md'), progress, 'utf8');
+  run('track-milestones.js', dir, home, []); // baseline
+  fs.writeFileSync(path.join(dir, 'PROGRESS.md'), progress.replace(`| 1 | User login | ${GLYPH.notStarted} |`, `| 1 | User login | ${GLYPH.done} |`), 'utf8');
+  return run('track-milestones.js', dir, home, []);
+}
+
+function contextOf(r) {
+  // Gates missing: the stats ride along on the exit-2 message instead.
+  if (r.exitCode === 2) return r.stderr;
+  return JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+}
+
+test('finishing a milestone puts its receipt in front of the session and the user', () => {
+  withProject((dir, home) => {
+    const r = finishM1(dir, home, SAMPLE_PROGRESS);
+    const text = contextOf(r);
+    assert.match(text, /DevKit \| M1 User login \| done/);
+    if (r.exitCode === 0) assert.match(JSON.parse(r.stdout).systemMessage, /DevKit \| M1/, 'the user is not shown it');
+    assert.match(text, /\$25\.00/);
+    assert.match(text, /claude-opus-5-5/);
+    assert.doesNotMatch(text, /Phase .* is complete/, 'no phases in this tracker, so no phase is complete');
+  });
+});
+
+test('the last milestone of a phase says to push - and never pushes', () => {
+  withProject((dir, home) => {
+    const text = contextOf(finishM1(dir, home, PHASED));
+    assert.match(text, /Phase 1 is complete/);
+    assert.match(text, /push/);
+    assert.match(text, /do not run it yourself/);
+    assert.doesNotMatch(text, /Phase 2/);
+  });
+});
+
+test('with the deliver stage on, the phase boundary is handed to devkit-deliver', () => {
+  const files = { '.claude/devkit.json': JSON.stringify({ stages: ['implement', 'deliver'] }) };
+  withProject(
+    (dir, home) => {
+      const text = contextOf(finishM1(dir, home, PHASED));
+      assert.match(text, /devkit-deliver/);
+      assert.doesNotMatch(text, /do not run it yourself/);
+    },
+    { files }
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The receipt says what devkit did - and only what its records show
+// ---------------------------------------------------------------------------
+
+function receiptOf(dir, home) {
+  const r = run('milestone-metrics.js', dir, home, ['receipt', 'M1']);
+  assert.strictEqual(r.exitCode, 0, r.stderr);
+  return r.stdout;
+}
+
+test("the receipt counts the loop's nudges, its own agents, and the gates that never ran", () => {
+  withProject((dir, home) => {
+    const tel = path.join(dir, '.claude', 'rajesh-devkit', 'telemetry.jsonl');
+    const events = [
+      { event: 'loop_nudge', milestone: 'M1 - User login', timestamp: at(101), kind: 'sensitive-question' },
+      { event: 'loop_nudge', milestone: 'M1 - User login', timestamp: at(120), kind: 'chain' },
+      { event: 'gates_stale', milestone: 'M1 - User login', timestamp: at(150), gates: ['review (ship)'] },
+      { event: 'loop_nudge', milestone: 'M2 - Password reset', timestamp: at(150), kind: 'chain' },
+    ];
+    fs.appendFileSync(tel, events.map((e) => `${JSON.stringify(e)}\n`).join(''), 'utf8');
+    run('milestone-metrics.js', dir, home, ['record', 'M1']);
+    const text = receiptOf(dir, home);
+    assert.match(text, /2 stops turned into the next step/, "counted another milestone's nudge, or missed one");
+    assert.match(text, /asked the sensitive-milestone question/);
+    assert.match(text, /1 devkit agent run \(reviewer\)/);
+    assert.match(text, /1 stale-verdict warning/);
+    assert.match(text, /review: NOT RUN/, 'an enabled gate with no verdict went unmentioned');
+  });
+});
+
+test('a window with no loop events says so instead of claiming the loop did nothing', () => {
+  withProject((dir, home) => {
+    run('milestone-metrics.js', dir, home, ['record', 'M1']);
+    const text = receiptOf(dir, home);
+    assert.match(text, /loop events not recorded/);
+    assert.doesNotMatch(text, /0 stops/);
+  });
+});

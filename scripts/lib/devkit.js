@@ -405,6 +405,32 @@ function findMilestoneByNumber(progressPath, number) {
   return null;
 }
 
+// How many milestone rows sit under a Phase heading, and how many are done.
+// Parked rows count as unfinished on purpose: a phase with work set aside is
+// not complete, and "push and let CI run, the phase is done" would be wrong.
+function phaseProgress(progressPath, phaseId) {
+  const lines = readLines(progressPath);
+  if (!lines || phaseId == null) return null;
+  const rowRe = milestoneRowPattern(Object.values(GLYPH));
+  let phase = null;
+  let total = 0;
+  let done = 0;
+  for (const line of lines) {
+    const heading = line.match(PHASE_HEADING);
+    if (heading) {
+      phase = heading[1];
+      continue;
+    }
+    if (!(phase && sameId(phase, String(phaseId)))) continue;
+    const row = line.match(rowRe);
+    if (row) {
+      total += 1;
+      if (row[3] === GLYPH.done) done += 1;
+    }
+  }
+  return total > 0 ? { total, done } : null;
+}
+
 // Every parked row, in tracker order - what findNextMilestone skipped and
 // why. Nothing acts on these; devkit-help reports them so a row that is
 // being passed over stays visible rather than becoming invisible debt.
@@ -567,12 +593,15 @@ function telemetryDir(dir) {
 // Node stack trace instead of 2 with its nudge - so a state-directory problem
 // silently cost the project its entire Stop loop. A dropped telemetry line
 // costs devkit-stats one data point.
-function appendTelemetry(dir, event, milestone, timestamp = new Date().toISOString()) {
+// `extra` carries an event's detail - which kind of nudge, which gates - for
+// the per-milestone receipt (lib/receipt.js). Optional, so the two original
+// events keep their exact shape.
+function appendTelemetry(dir, event, milestone, timestamp = new Date().toISOString(), extra = null) {
   try {
     const outDir = telemetryDir(dir);
     fs.mkdirSync(outDir, { recursive: true });
     ensureGitignoreEntry(dir);
-    const line = JSON.stringify({ event, milestone, timestamp });
+    const line = JSON.stringify(extra ? { event, milestone, timestamp, ...extra } : { event, milestone, timestamp });
     fs.appendFileSync(path.join(outDir, 'telemetry.jsonl'), `${line}\n`, 'utf8');
     return true;
   } catch {
@@ -629,6 +658,7 @@ module.exports = {
   readLines,
   findNextMilestone,
   findMilestoneByNumber,
+  phaseProgress,
   findParkedMilestones,
   readMilestoneStatuses,
   findSpecForMilestone,

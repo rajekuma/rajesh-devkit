@@ -13,6 +13,40 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Added (0.11.3)
+
+- **A DevKit receipt for every finished milestone.** In real use the plugin's
+  own work was invisible: a user watching a milestone finish could not tell
+  what the loop, the gates and the specialist agents had done that a bare
+  session would not have. The receipt says it: how many stops the loop turned
+  into the next step, whether it asked the sensitive-milestone question or
+  held a Draft spec, every gate verdict (and `NOT RUN` for an enabled gate
+  with none), which devkit agents ran and what they cost, and what it caught
+  (missing-gate and stale-verdict warnings, session collisions), next to the
+  milestone's cost and time. It is shown to the user directly through the
+  hook's `systemMessage`, so it does not depend on the model repeating it, and
+  it is saved in the milestone's record with a "DevKit did" column on the
+  summary page. `milestone-metrics.js receipt M<n>` prints one on demand. To
+  support it, `continue-loop.js` now logs each nudge (by kind), each collision
+  and each stale-verdict warning, and `track-milestones.js` logs each
+  missing-gate warning. A window from before these events existed says "loop
+  events not recorded" rather than claiming the loop did nothing. The receipt
+  reports activity, not proof that the result would have been worse without
+  the plugin; that needs a with/without comparison.
+- **A finished milestone shows its stats when it is called done.** As the loop
+  reports the milestone complete and asks about committing, the session is
+  given the figures just recorded: active and wall-clock hours, cost split
+  between the main session and the subagents, the building model, cost per
+  acceptance criterion and lines changed. Before, they appeared only if
+  someone ran `devkit-stats` afterwards. They come from the committed record,
+  so producing them costs no model tokens.
+- **The last milestone of a phase says it is time to push.** The loop never
+  pushes, so nothing used to say a finished phase was waiting on a local
+  branch. Now the session is told the phase is complete, with the phase's
+  recorded totals, and asked to give the user the push command, which starts
+  CI and any deployment CI runs, without running it. With the `deliver` stage
+  on, the boundary is handed to `devkit-deliver` instead.
+
 ### Added (0.11.2)
 
 - **Milestone records committed with the project.** When a driving session

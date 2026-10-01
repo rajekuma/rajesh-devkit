@@ -8,6 +8,7 @@
 //   node milestone-metrics.js record [M<n>] [--start <iso>] [--end <iso>]
 //                                    [--commit <sha>] [--note "<why>"]
 //   node milestone-metrics.js summary
+//   node milestone-metrics.js receipt [M<n>]   print what devkit did for it
 //
 // `record` measures one milestone and writes it to <metricsDir>/milestones.jsonl
 // (one JSON line per milestone, replaced if it is recorded again), then
@@ -32,6 +33,7 @@ const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const gates = require('./lib/gates');
 const approach = require('./lib/approach');
+const receipt = require('./lib/receipt');
 
 const DEFAULT_DIR = path.join('docs', 'metrics');
 const JSONL = 'milestones.jsonl';
@@ -229,20 +231,24 @@ function summarize(records) {
     '  on the API, which is still the right number to compare milestones by.',
     '- **Built by** is the model that spent most in the main session, and whether',
     '  it implemented directly (`self`) or delegated to devkit-implementer.',
+    '- **DevKit did**: what the plugin itself did for the milestone - stops it',
+    '  turned into the next step, its agents that ran, gates recorded, and problems',
+    '  it caught (missing or stale gate verdicts, session collisions). Run',
+    '  `milestone-metrics.js receipt M<n>` for the full receipt.',
     '- **Source**: `measured` windows come from the loop\'s own telemetry;',
     '  `estimated` ones were reconstructed afterwards (see each record\'s note).',
     '',
     '## Milestones',
     '',
-    '| Milestone | Phase | Built by | Active h | Wall h | Cost | Implementing / gates | Criteria | $ per criterion | Active min per criterion | Lines +/- | Source |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| Milestone | Phase | Built by | Active h | Wall h | Cost | Implementing / gates | Criteria | $ per criterion | Active min per criterion | Lines +/- | DevKit did | Source |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const r of sorted) {
     const built = `${r.primaryModel ?? 'unknown'}${r.approach ? ` (${r.approach})` : ''}`;
     const split = `${money(r.mainSession && r.mainSession.costUsd)} / ${money(r.subagentCostUsd)}`;
     const diff = r.diff ? `+${r.diff.insertions} / -${r.diff.deletions}` : '-';
     lines.push(
-      `| ${r.milestone} | ${r.phase ?? '-'} | ${built} | ${r.activeHours} | ${r.wallClockHours} | ${money(r.costUsd)} | ${split} | ${r.criteria ?? '-'} | ${perCriterion(r.costUsd, r.criteria, '$')} | ${perCriterion(r.activeHours * 60, r.criteria, 'min')} | ${diff} | ${r.window.source} |`
+      `| ${r.milestone} | ${r.phase ?? '-'} | ${built} | ${r.activeHours} | ${r.wallClockHours} | ${money(r.costUsd)} | ${split} | ${r.criteria ?? '-'} | ${perCriterion(r.costUsd, r.criteria, '$')} | ${perCriterion(r.activeHours * 60, r.criteria, 'min')} | ${diff} | ${receipt.cell(r)} | ${r.window.source} |`
     );
   }
 
@@ -299,9 +305,10 @@ function summarize(records) {
 
 const args = parseArgs(process.argv.slice(2));
 const command = args._[0];
-if (command !== 'record' && command !== 'summary') {
+if (command !== 'record' && command !== 'summary' && command !== 'receipt') {
   fail('usage: node milestone-metrics.js record [M<n>] [--start <iso>] [--end <iso>] [--commit <sha>] [--note "<why>"]\n' +
-    '       node milestone-metrics.js summary');
+    '       node milestone-metrics.js summary\n' +
+    '       node milestone-metrics.js receipt [M<n>]');
 }
 
 const dir = resolveProjectDir();
@@ -324,6 +331,17 @@ if (command === 'summary') {
   process.exit(0);
 }
 
+const ENABLED_GATES = ['ui-verify', 'review', 'quality', 'security', 'ship'].filter((g) => d.stageEnabled(config, g));
+
+if (command === 'receipt') {
+  const records = readRecords(paths.jsonl);
+  const want = args._[1] ? approach.keyOf(args._[1]) : null;
+  const r = want ? records.find((x) => approach.keyOf(x.milestone) === want) : records[records.length - 1];
+  if (!r) fail(want ? `no record for M${want} in ${paths.jsonl}` : `no records yet in ${paths.jsonl}`);
+  process.stdout.write(`${receipt.format(r, { enabledGates: ENABLED_GATES })}\n`);
+  process.exit(0);
+}
+
 // record
 const progressPath = path.join(dir, 'PROGRESS.md');
 let key = args._[1] ? approach.keyOf(args._[1]) : null;
@@ -340,7 +358,8 @@ if (!key) fail('name the milestone: node milestone-metrics.js record M<n>');
 const row = d.findMilestoneByNumber(progressPath, key);
 const display = row ? row.display : `M${key}`;
 
-const measured = telemetryWindow(readTelemetry(dir), key);
+const telemetry = readTelemetry(dir);
+const measured = telemetryWindow(telemetry, key);
 const start = args.start ?? (measured && measured.start);
 const end = args.end ?? (measured && measured.end);
 if (!start || !end) {
@@ -415,9 +434,11 @@ const record = {
   })),
   gates: recordedGates,
   diff: diffStat(dir, args.commit),
+  devkit: null,
   recordedAt: new Date().toISOString(),
   pluginVersion: pluginVersion(),
 };
+record.devkit = receipt.activity(receipt.eventsFor(telemetry, approach.keyOf, key, start, end), record.subagents);
 if (mainCost == null && report.mainSession && report.mainSession.tokens > 0) record.mainSession.costUsd = null;
 
 const records = readRecords(paths.jsonl).filter((r) => r && r.milestone !== record.milestone);
@@ -429,6 +450,7 @@ try {
 } catch {
   fail(`could not write ${paths.base}`);
 }
+process.stdout.write(`${receipt.format(record, { enabledGates: ENABLED_GATES })}\n`);
 process.stdout.write(
   `milestone-metrics: ${record.milestone} ${record.window.source} - ${record.activeHours} active h, ` +
     `${money(record.costUsd)}, built by ${record.primaryModel ?? 'unknown'} -> ${path.relative(dir, paths.jsonl)}\n`

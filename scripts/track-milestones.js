@@ -21,6 +21,7 @@ const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const gates = require('./lib/gates');
 const arm = require('./lib/arm');
+const receipt = require('./lib/receipt');
 
 const hookInput = d.readStdinJson();
 
@@ -105,14 +106,36 @@ const expected = ['ui-verify', 'review', 'quality', 'security', 'ship'].filter((
   d.stageEnabled(config, g)
 );
 
-// Record each milestone this session just finished into the project's own
-// metrics (scripts/milestone-metrics.js): active time, cost, size of the
-// change. Here rather than in the close-out instructions because a record
-// that depends on the model remembering to make it is the M35a/M35b story
-// again - it was never made. Synchronous and bounded: the transcript scan
-// takes a few seconds, runs once per finished milestone, and any failure
-// just means no record.
+// Milestones this session just finished. Gates are checked first, and a
+// missing gate is logged, so the record made next - and its receipt - can
+// count the warning it caused.
 const finishedHere = justDone.filter((key) => arm.isDriving(dir, config, sessionId, current[key]));
+
+const warnings = [];
+if (expected.length > 0) {
+  let recorded = {};
+  try {
+    recorded = gates.readGates(dir);
+  } catch {
+    recorded = {};
+  }
+  for (const key of finishedHere) {
+    const m = current[key];
+    const missing = expected.filter((g) => !recorded[g] || recorded[g].milestone !== m.display);
+    if (missing.length > 0) {
+      warnings.push({ display: m.display, missing });
+      d.appendTelemetry(dir, 'gates_missing', m.display, undefined, { gates: missing });
+    }
+  }
+}
+
+// Record each finished milestone into the project's own metrics
+// (scripts/milestone-metrics.js): active time, cost, size of the change, and
+// what devkit did for it. Here rather than in the close-out instructions
+// because a record that depends on the model remembering to make it is the
+// M35a/M35b story again - it was never made. Synchronous and bounded: the
+// transcript scan takes a few seconds, runs once per finished milestone, and
+// any failure just means no record.
 if (config.metrics !== false) {
   for (const key of finishedHere) {
     try {
@@ -127,22 +150,95 @@ if (config.metrics !== false) {
   }
 }
 
-const warnings = [];
-if (expected.length > 0) {
-  let recorded = {};
+// What the user sees at the moment the milestone is called done - the same
+// moment the loop asks whether to commit. Before, the numbers existed only if
+// someone thought to run devkit-stats afterwards, and nothing at all said what
+// the plugin had done. Read from the record just written, so they are the
+// committed figures, and cost no model tokens to produce.
+function readRecords() {
   try {
-    recorded = gates.readGates(dir);
+    const rel = config.metricsDir || path.join('docs', 'metrics');
+    const file = path.isAbsolute(rel) ? path.join(rel, 'milestones.jsonl') : path.join(dir, rel, 'milestones.jsonl');
+    return fs
+      .readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .filter((l) => l.trim())
+      .map((l) => {
+        try {
+          return JSON.parse(l);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
   } catch {
-    recorded = {};
-  }
-  for (const key of finishedHere) {
-    const m = current[key];
-    const missing = expected.filter((g) => !recorded[g] || recorded[g].milestone !== m.display);
-    if (missing.length > 0) warnings.push({ display: m.display, missing });
+    return [];
   }
 }
 
-if (warnings.length === 0) process.exit(0);
+const money = (v) => (v == null ? 'unknown' : `$${v.toFixed(2)}`);
+const records = config.metrics !== false && finishedHere.length > 0 ? readRecords() : [];
+
+// A phase finished: the one point where a push - and the CI run, and any
+// deployment CI starts - is due. The loop never pushes (only the deliver
+// stage may, and only by explicit opt-in), so without this nothing says so
+// and finished phases sit on a local branch.
+function phaseNote(key) {
+  const m = current[key];
+  const row = d.findMilestoneByNumber(progressPath, String(key).replace(/^M/, ''));
+  if (!row || !row.phase) return null;
+  const p = d.phaseProgress(progressPath, row.phase);
+  if (!p || p.done < p.total) return null;
+  const mine = records.filter((r) => r.phase != null && String(r.phase) === String(row.phase));
+  const known = mine.filter((r) => r.costUsd != null);
+  const totals =
+    mine.length > 0
+      ? ` Recorded for this phase: ${mine.length} of ${p.total} milestones, ` +
+        `${money(known.reduce((sum, r) => sum + r.costUsd, 0))}${known.length < mine.length ? ' (some costs unknown)' : ''}, ` +
+        `${Math.round(mine.reduce((sum, r) => sum + r.activeHours, 0) * 10) / 10} active h.`
+      : '';
+  const handoff = d.stageEnabled(config, 'deliver')
+    ? 'The deliver stage is enabled, so devkit-deliver opens the PR at this boundary.'
+    : 'This loop never pushes. Tell the user plainly that the phase is ready to push, so CI runs ' +
+      "(and whatever deployment this project's CI starts), give them the push command for the " +
+      'current branch, and do not run it yourself.';
+  return `Phase ${row.phase} is complete with ${m.display} (all ${p.total} of its milestones done).${totals} ${handoff}`;
+}
+
+const receipts = [];
+for (const key of finishedHere) {
+  const r = records.find((x) => x.milestone === key);
+  if (r) receipts.push(receipt.format(r, { enabledGates: expected }));
+}
+const phaseNotes = finishedHere.map(phaseNote).filter(Boolean);
+
+const shown = [...receipts, ...phaseNotes].join('\n\n');
+const report =
+  receipts.length + phaseNotes.length > 0
+    ? (receipts.length > 0
+        ? 'DevKit receipt for the milestone just marked done (from the record written to the ' +
+          "project's metrics - the user has been shown it too):\n" +
+          receipts.join('\n\n') +
+          '\nWhen you report the milestone complete and ask about committing, repeat this receipt ' +
+          'verbatim in a code block, rather than leaving the user to ask for devkit-stats.'
+        : '') +
+      (phaseNotes.length > 0 ? `${receipts.length > 0 ? '\n' : ''}${phaseNotes.join(' ')}` : '')
+    : '';
+
+if (warnings.length === 0) {
+  if (report) {
+    // systemMessage is shown to the user directly, so the receipt does not
+    // depend on the model choosing to repeat it; additionalContext gives the
+    // model the same text for its summary. Exit 0: nothing is blocked.
+    process.stdout.write(
+      `${JSON.stringify({
+        systemMessage: shown,
+        hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: report },
+      })}\n`
+    );
+  }
+  process.exit(0);
+}
 
 const recordGate = path.join(__dirname, 'record-gate.js').split(path.sep).join('/');
 const text = warnings
@@ -160,6 +256,8 @@ process.stderr.write(
     `(\`node "${recordGate}" <gate> <verdict>\`); if a gate finds something, fix it and ` +
     'treat the milestone as unfinished until the gates pass. If the user deliberately ' +
     'skipped a gate for this milestone, say so in your reply instead - never stamp a ' +
-    'verdict for a gate that did not run.\n'
+    'verdict for a gate that did not run.' +
+    (report ? ` ${report}` : '') +
+    '\n'
 );
 process.exit(2);
