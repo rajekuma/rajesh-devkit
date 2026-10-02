@@ -129,11 +129,17 @@ function parseShortstat(text) {
 }
 
 // The size of the change, which is what makes cost comparable across
-// milestones. A named commit when backfilling; otherwise the working tree
-// against HEAD - untracked files included, through a throwaway index, since a
-// milestone's new files are most of it - because the loop marks a milestone
-// done before anyone commits it.
-function diffStat(dir, commit) {
+// milestones. A named commit when backfilling. Otherwise everything since the
+// last commit before the milestone started, committed or not - untracked
+// files included, through a throwaway index, since a milestone's new files
+// are most of it.
+//
+// It used to be the working tree against HEAD at the moment the row was
+// ticked, on the assumption that nobody commits first. Found on M47b: the
+// code was committed five hours before the tracker row was ticked, and the
+// record said 2 files, +219 lines, for a 9,008-line change. Any commit made
+// during the window for other work is counted too; the source says so.
+function diffStat(dir, commit, start) {
   if (commit) {
     const s = parseShortstat(git(dir, ['show', '--shortstat', '--format=', commit]));
     return s ? { ...s, source: `commit ${commit}` } : null;
@@ -150,8 +156,16 @@ function diffStat(dir, commit) {
     }
     const env = { GIT_INDEX_FILE: tmp };
     if (git(top, ['add', '-A', '--', '.'], env) === null) return null;
-    const s = parseShortstat(git(top, ['diff', '--cached', '--shortstat', 'HEAD'], env));
-    return s ? { ...s, source: 'working tree vs HEAD at ship' } : null;
+    const base = start ? git(top, ['rev-list', '-1', `--before=${start}`, 'HEAD']) : null;
+    const against = base || 'HEAD';
+    const s = parseShortstat(git(top, ['diff', '--cached', '--shortstat', against], env));
+    if (!s) return null;
+    return {
+      ...s,
+      source: base
+        ? `since ${base.slice(0, 7)} (last commit before the start), committed or not`
+        : 'working tree vs HEAD at ship',
+    };
   } finally {
     try {
       fs.rmSync(tmp, { force: true });
@@ -338,7 +352,8 @@ if (command === 'receipt') {
   const want = args._[1] ? approach.keyOf(args._[1]) : null;
   const r = want ? records.find((x) => approach.keyOf(x.milestone) === want) : records[records.length - 1];
   if (!r) fail(want ? `no record for M${want} in ${paths.jsonl}` : `no records yet in ${paths.jsonl}`);
-  process.stdout.write(`${receipt.format(r, { enabledGates: ENABLED_GATES })}\n`);
+  const gatesThen = Array.isArray(r.enabledGates) ? r.enabledGates : ENABLED_GATES;
+  process.stdout.write(`${receipt.format(r, { enabledGates: gatesThen })}\n`);
   process.exit(0);
 }
 
@@ -433,7 +448,12 @@ const record = {
     costUsd: a.costUsd,
   })),
   gates: recordedGates,
-  diff: diffStat(dir, args.commit),
+  diff: diffStat(dir, args.commit, start),
+  // The gates this project had switched on when the milestone ran, so a
+  // receipt printed later is judged against them, not against today's
+  // config. Found on M47b: ui-verify, switched on for a later milestone,
+  // showed as NOT RUN on a milestone that ran without it.
+  enabledGates: ENABLED_GATES,
   devkit: null,
   recordedAt: new Date().toISOString(),
   pluginVersion: pluginVersion(),

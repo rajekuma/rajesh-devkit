@@ -283,3 +283,57 @@ test('a window with no loop events says so instead of claiming the loop did noth
     assert.doesNotMatch(text, /0 stops/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The record measures the real change, and remembers the gates of its time
+// ---------------------------------------------------------------------------
+
+function git(dir, ...args) {
+  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], {
+    cwd: dir,
+    encoding: 'utf8',
+  });
+  assert.strictEqual(r.status, 0, r.stderr);
+  return r.stdout.trim();
+}
+
+test('code committed before the row is ticked still counts toward the change', () => {
+  // Found on M47b: committed five hours before the tracker was updated, and
+  // recorded as 2 files, +219 lines, for a 9,008-line change.
+  withProject((dir, home) => {
+    git(dir, 'init', '-q');
+    git(dir, 'add', '-A');
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'base'], {
+      cwd: dir,
+      env: { ...process.env, GIT_COMMITTER_DATE: at(-30), GIT_AUTHOR_DATE: at(-30) },
+    });
+    // The milestone's code, committed inside the window...
+    fs.writeFileSync(path.join(dir, 'feature.js'), 'a\nb\nc\nd\n', 'utf8');
+    git(dir, 'add', 'feature.js');
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'feature'], {
+      cwd: dir,
+      env: { ...process.env, GIT_COMMITTER_DATE: at(150), GIT_AUTHOR_DATE: at(150) },
+    });
+    // ...and a little left uncommitted when the row is ticked.
+    fs.writeFileSync(path.join(dir, 'notes.md'), 'x\n', 'utf8');
+    const r = run('milestone-metrics.js', dir, home, ['record', 'M1']);
+    assert.strictEqual(r.exitCode, 0, r.stderr);
+    const [rec] = records(dir);
+    assert.ok(rec.diff.insertions >= 5, `committed lines were missed: ${JSON.stringify(rec.diff)}`);
+    assert.match(rec.diff.source, /last commit before the start/);
+  });
+});
+
+test('a receipt is judged against the gates enabled when the milestone ran', () => {
+  withProject((dir, home) => {
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    const cfg = path.join(dir, '.claude', 'devkit.json');
+    fs.writeFileSync(cfg, JSON.stringify({ stages: ['implement', 'review'] }), 'utf8');
+    run('milestone-metrics.js', dir, home, ['record', 'M1']);
+    // Later, ui-verify is switched on for another milestone.
+    fs.writeFileSync(cfg, JSON.stringify({ stages: ['implement', 'ui-verify', 'review'] }), 'utf8');
+    const text = receiptOf(dir, home);
+    assert.match(text, /review: NOT RUN/);
+    assert.doesNotMatch(text, /ui-verify: NOT RUN/, "judged against today's config");
+  });
+});

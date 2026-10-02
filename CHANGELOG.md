@@ -13,6 +13,19 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Fixed (0.11.4)
+
+- **A milestone's change size counts code committed before its row is
+  ticked.** It was the working tree against HEAD at the moment of ticking. On
+  M47b the code was committed five hours earlier, and the record said 2
+  files, +219 lines, for a 9,008-line change. It is now everything since the
+  last commit before the milestone started, committed or not. A commit for
+  other work inside the window is counted too, and the record's `source`
+  says so.
+- **A receipt printed later uses the gates enabled when the milestone ran.**
+  Each record now stores `enabledGates`. Before, `ui-verify`, switched on
+  for a later milestone, showed as `NOT RUN` on M47b, which ran without it.
+
 ### Added (0.11.3)
 
 - **A DevKit receipt for every finished milestone.** In real use the plugin's
