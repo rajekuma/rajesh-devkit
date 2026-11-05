@@ -1,0 +1,14 @@
+schema_version: "1.1"
+name: journeys-draft-asks-first
+description: >
+  devkit-journeys proposes journeys from the vision and tracker, writes nothing before
+  approval, and invents no check for a project that has no end-to-end command.
+tags: [component, journeys]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 15
+  timeout_seconds: 300
+  allowed_tools: [Read, Glob, Grep, Bash, Skill, Write]
+  prompt: |
+    devkit journeys draft

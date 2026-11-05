@@ -240,6 +240,9 @@ and prints the tag command; nothing here runs it.
   runs the behavioral evals, and reads the prompt components for the drift
   neither suite can catch (a report-only agent that stopped saying so, a
   reworded verdict string, a document describing last week's behaviour).
+- `devkit-journeys` — drafts `JOURNEYS.md`, the outcomes a person must be able to
+  achieve end to end, each with a check that can fail. Writes only after approval.
+  See "User journeys".
 - `devkit-stats` — a skill that reports real duration, real USD cost, and a
   heuristic manual-effort comparison per milestone from that local telemetry
   log (see "Telemetry" below).
@@ -302,6 +305,8 @@ rajesh-devkit/
 │   │   └── SKILL.md             # guided setup: git, vision, starter files, preset
 │   ├── devkit-vision/
 │   │   └── SKILL.md             # the product-vision interview
+│   ├── devkit-journeys/
+│   │   └── SKILL.md             # drafts JOURNEYS.md: what a person must be able to do
 │   ├── devkit-roadmap/
 │   │   └── SKILL.md             # proposes the next milestones from what shipped + production
 │   ├── devkit-stats/
@@ -334,6 +339,7 @@ rajesh-devkit/
 │   │   ├── gates.js            # was this gate verdict issued against the tree
 │   │   │                         # that is here now?
 │   │   ├── arm.js              # is THIS session driving the loop?
+│   │   ├── journeys.js         # parses JOURNEYS.md; states, proofs, reports
 │   │   └── session-status.js   # when each session was last worked, its status line and title
 │   ├── continue-loop.js        # Stop hook: nudge toward next milestone, in a
 │   │                             # session that said "devkit continue"
@@ -345,6 +351,7 @@ rajesh-devkit/
 │   │                             # session killed by a usage limit loses nothing
 │   ├── session-welcome.js      # SessionStart hook: "what's next" banner
 │   ├── scaffold.js             # not a hook - copies starter templates, never overwriting
+│   ├── journeys.js             # not a hook - runs journey checks and records the result
 │   ├── record-gate.js          # not a hook - stamps a gate verdict with the tree
 │   │                             # it saw; `check` says which went stale
 │   └── token-report.js         # not a hook - invoked by devkit-stats on demand;
@@ -578,7 +585,8 @@ default except `deliver`: `specify`, `ux`, `datamodel`, `implement`,
 `ui-verify`, `review`, `quality`, `security`, `ship`, `docs`, `release`,
 `pipeline`. No UI? Drop `ux` and `ui-verify`. The other keys — `loopStart`,
 `loop`, `checkpointCommit`, `parkedPattern`, `sensitivePatterns`,
-`sessionLeaseTtlMinutes`, `prices`, `metrics`, `metricsDir` — are explained in "The rest of
+`sessionLeaseTtlMinutes`, `prices`, `metrics`, `metricsDir`, `sessionStatus`,
+`journeys`, `journeyGate` — are explained in "The rest of
 `.claude/devkit.json`".
 
 **2. Just for you — `.claude/rajesh-devkit/devkit.local.json`.** Same shape,
@@ -974,6 +982,7 @@ doesn't know needs a model that reasons well.
 | `devkit-onboard` | anything from Sonnet up | The most procedural component here: inventory, detect the stack, run the test command, write `PROGRESS.md`, run `session-welcome.js` to confirm the loop can parse it. Its judgment calls (don't clobber, which ADRs are load-bearing) are stated very explicitly, and explicit instructions are what mid-tier models follow reliably. It also verifies its own work by executing things, so mistakes surface instead of hiding. 9/9 on its eval. |
 | `devkit-vision` | **a strong model** (Opus / Fable) | Every milestone, spec and review is judged against the vision it writes. Its discipline is refusing to fill gaps: an honest "we don't know yet" goes under Open questions, because a plausible guess gets treated as a requirement from then on. |
 | `devkit-roadmap` | **a strong model** (Opus / Fable) | The same failure mode as `devkit-specify`, one level up: a weaker model fills the blank page with plausible features. Its whole discipline is refusing a candidate with no evidence line, and that refusal is the judgment. |
+| `devkit-journeys` | **a strong model** (Opus / Fable) | It decides what counts as the product working. A weak model restates milestones as journeys or invents a check. |
 | `devkit-help`, `devkit-stats`, `devkit-eval` | anything | Mechanical: relay a status check, read a telemetry log, run a suite. |
 
 **Subagents** (frontmatter `model:` is honoured, and they don't follow your
@@ -1124,7 +1133,7 @@ tier to one OpenRouter model. With the shipped mapping:
 | Component | Tier | On your Claude subscription | In the OpenRouter fallback |
 |---|---|---|---|
 | The session itself — the orchestrator that follows the loop | the session's | the model you picked | `qwen/qwen3-coder` (the launcher starts on `sonnet`) |
-| Skills: `devkit-specify`, `devkit-adr`, `devkit-roadmap`, `devkit-vision`, `devkit-onboard`, `devkit-help`, `devkit-stats`, `devkit-eval` | inherit the session | the session's model | the session's model — `qwen/qwen3-coder` by default |
+| Skills: `devkit-specify`, `devkit-adr`, `devkit-roadmap`, `devkit-vision`, `devkit-journeys`, `devkit-onboard`, `devkit-help`, `devkit-stats`, `devkit-eval` | inherit the session | the session's model | the session's model — `qwen/qwen3-coder` by default |
 | `devkit-implementer`, `devkit-ship`, `devkit-docs`, `devkit-ux`, `devkit-ui-verify`, `devkit-datamodel`, `devkit-quality`, `devkit-security`, `devkit-pipeline`, `devkit-release`, `devkit-deliver` | `sonnet` | Claude Sonnet | `qwen/qwen3-coder` |
 | `devkit-reviewer`, `devkit-dep-audit` | `haiku` | Claude Haiku | `google/gemini-2.5-flash` |
 | Claude Code's **built-in** `Explore` and `Plan` agents, and `--model opus` | `opus` / `fable` | Claude Opus | `qwen/qwen3-coder` — deliberately the same cheap model (see below) |
@@ -1350,6 +1359,7 @@ number rather than a feeling.
 | `devkit-eval` | "run the devkit tests", "devkit eval", "devkit regression" | `sonnet` | This plugin's own regression check, for editing *this repo* rather than a host project. Runs `node --test tests/*.test.js` (below), then checks the half no script can assert: that report-only components still declare themselves report-only, that nothing has quietly gained permission to commit, that verdict strings the orchestrator routes on are unchanged, that the handoff chain in the prompts still matches the chain in `continue-loop.js`'s nudge messages, and that the README hasn't drifted from the code. |
 | `devkit-specify` | "devkit spec this feature", "devkit specify \<feature\>", "draft a devkit spec for \<feature\>" | `fable`, `effort: high` | Learns the repo's own layout and conventions (`CLAUDE.md`, `.claude/rules/`, whatever decision-record folder it finds) before reading the relevant code, interviews you one question at a time for anything it can't infer, writes `specs/<kebab-feature>.md`, then stops — never scaffolds implementation code itself. Marks any requirement touching an existing invariant, a security/auth boundary, a data-model change, an external integration, or a backward-compatibility break with `🔒 SENSITIVE:` — the marker the escalation gate (see "Hooks" below) keys off of — and leads its final report with those flags if any exist. |
 | `devkit-help` | "devkit help", "how do I use devkit", "getting started with devkit" | `haiku` | Runs the same state check as the `SessionStart` hook (below) and relays it conversationally — the verified on-demand fallback for the automatic banner. Read-only. |
+| `devkit-journeys` | "devkit journeys draft", "devkit draft journeys" | session's | Proposes journeys from the vision, tracker and code, and writes `JOURNEYS.md` only after approval. Never invents a check. |
 | `devkit-stats` | "devkit stats", "devkit cost report", "devkit milestone timing" | `haiku` | Reads the local telemetry log, pairs each milestone's started/shipped events, and reports real duration, real USD cost (via `token-report.js`'s transcript scan), and a heuristic manual-effort/speedup comparison per milestone (see "Telemetry" below for what's measured vs. estimated). Read-only. |
 
 ## Subagents
@@ -1442,6 +1452,38 @@ deliberate: it is the point at which a person looks at what shipped before
 the next thing starts. A project that genuinely wants every session driven
 unattended can set `"loopStart": "always"` in `.claude/devkit.json` to get the
 pre-0.7 behaviour back.
+
+**User journeys.** Gates judge one milestone's diff, so a project can pass them all and
+still not be usable. `JOURNEYS.md` at the project root says what a person must be able to
+do. It is optional, and without it nothing changes. Say `devkit journeys draft` to
+propose some.
+
+```markdown
+## J1 Treasurer records an expense
+For: treasurer
+Outcome: The expense, with its receipt, appears on a resident's statement.
+Needs: M28, M82
+Check: npm run e2e -- expense-to-statement
+Timeout: 300
+```
+
+- **`devkit journeys`** lists each journey's state and the closest one, at no token cost.
+  States are `proven`, `accepted`, `failing`, `unknown`, `stale`, `ready` and `blocked`.
+- **Only a real run counts.** `node <plugin>/scripts/journeys.js run J1` (or `--needs M12`,
+  `--all`) runs the check and records its exit code. No command stamps a pass, and hooks
+  never run a check. A result goes stale when the code or the check changes, and
+  ticking the tracker doesn't count as a change. Check output is never stored.
+- **Manual journeys:** with `Check: manual`, you accept it by saying
+  `devkit journey J1 passed` once you have tried it. Only your own words count.
+- **In the loop:** closing a milestone runs the checks it unlocks and sends failures back.
+  After three failures it stops and asks, until you say `devkit continue`. The receipt
+  shows what moved, the phase-end reminder asks for `run --all`, and `devkit continue`
+  says when a milestone moves no journey but still takes it.
+- **It can't tell a check that tests nothing:** `devkit-reviewer` reads a check when its
+  diff changes one, but a check is only as good as what it does.
+
+The status line says `journeys 2/8 passed at last run`, because proving freshness takes
+over a second per turn on a mid-sized repo. `devkit journeys` and the banner check it.
 
 **Coming back to a session.** After `devkit continue`, a session tells you when
 it was last worked and where it stands, so you don't have to open several
@@ -1847,6 +1889,10 @@ behaviour that existed before it:
   into the project's own repository (on by default, in `docs/metrics/`). See
   "Milestone records you commit" under Telemetry. `"metrics": false` turns it
   off.
+
+- **`journeys`** / **`journeyGate`** — `"journeys": false` turns journeys off with
+  `JOURNEYS.md` still there. `"journeyGate": "block"` makes a linked journey that isn't
+  proven hold a milestone open; by default it only reports. See "User journeys".
 
 - **`sessionStatus`** — `false` turns off the dated end-of-turn line, the
   session titles and the session list. On by default, and only ever visible in

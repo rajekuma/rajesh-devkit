@@ -40,6 +40,9 @@ repo's own files and the user's answers.
    in which case the new spec should reference the original rather than silently
    restate it as new work.
 
+   If `JOURNEYS.md` exists, name in `## Context` the journey this feature serves, or
+   say it serves none. Don't invent a link to make a feature look more important.
+
 2. **Read reality.** Search the codebase for whatever the feature actually
    touches — related endpoints/routes, data models, services, and existing
    tests — using the layout you just learned. Don't skip this because the

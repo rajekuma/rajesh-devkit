@@ -85,9 +85,29 @@ function git(dir, args, env) {
 //
 // Returns null whenever the question cannot be answered, and every caller
 // reads null as "cannot prove fresh" - never as a match.
-function treeFingerprint(dir) {
+//
+// `exclude` lists paths under `dir` to leave out, for a caller whose verdict
+// should survive edits to them. They are removed from the throwaway index as well,
+// because it starts as a copy of the real one: without that, staging an excluded
+// file would still change the answer.
+function treeFingerprint(dir, { exclude = [] } = {}) {
   const top = git(dir, ['rev-parse', '--show-toplevel']);
   if (!top) return null;
+  const excluded = exclude.map((p) => {
+    let base = dir;
+    try {
+      base = fs.realpathSync(dir);
+    } catch {
+      /* compare as given */
+    }
+    let root = top;
+    try {
+      root = fs.realpathSync(top);
+    } catch {
+      /* compare as given */
+    }
+    return path.relative(root, path.resolve(base, p)).split(path.sep).join('/');
+  });
   // --path-format needs git 2.31; an older git prints the path relative to
   // the top level instead, which resolves to the same file.
   let realIndex = git(top, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
@@ -108,7 +128,14 @@ function treeFingerprint(dir) {
       }
     }
     const env = { GIT_INDEX_FILE: tmp };
-    if (git(top, ['add', '-A', '--', '.'], env) === null) return null;
+    const skip = excluded.map((p) => `:(exclude)${p}`);
+    if (git(top, ['add', '-A', '--', '.', ...skip], env) === null) return null;
+    if (
+      excluded.length > 0 &&
+      git(top, ['rm', '-r', '-q', '--cached', '--ignore-unmatch', '--', ...excluded], env) === null
+    ) {
+      return null;
+    }
     const tree = git(top, ['write-tree'], env);
     return tree && /^[0-9a-f]{40,64}$/.test(tree) ? tree : null;
   } finally {

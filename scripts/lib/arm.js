@@ -159,6 +159,8 @@ function isDriving(dir, config, sessionId, milestone) {
 //   ... as ui                   any of the above, with a stage preset for this
 //                               session only (full, api, ui, product, design)
 //   devkit sessions             which session worked what, newest first
+//   devkit journeys             what a person can actually do yet
+//   devkit journey J3 passed    accept a manual journey, in the user's own words
 //
 // Anything else after "continue" is ignored, as it always was, so a stray
 // word never turns a plain continue into something narrower by accident.
@@ -168,9 +170,19 @@ const PAUSE_RE = /^\s*\/?devkit[\s-]+(?:pause|stop)\b/i;
 // status of the M3 spec?" has to reach the model.
 const SESSIONS_RE = /^\s*\/?devkit[\s-]+(?:sessions|status)\s*[.!?]*\s*$/i;
 
+// Whole line too, and for a stronger reason: accepting a manual journey is a claim
+// made in the user's name, so "devkit journey J3 passed but only on web" must not
+// count. "devkit journeys draft" falls through, to the skill.
+const JOURNEYS_RE = /^\s*\/?devkit[\s-]+journeys\s*[.!?]*\s*$/i;
+const JOURNEY_ACCEPT_RE = /^\s*\/?devkit[\s-]+journey\s+(J\d[\w.-]*)\s+passed\s*[.!]*\s*$/;
+
 function parseCommand(prompt) {
   if (typeof prompt !== 'string') return null;
-  if (SESSIONS_RE.test(prompt.split(/\r?\n/)[0])) return { action: 'sessions' };
+  const first = prompt.split(/\r?\n/)[0];
+  if (SESSIONS_RE.test(first)) return { action: 'sessions' };
+  if (JOURNEYS_RE.test(first)) return { action: 'journeys' };
+  const accept = first.match(JOURNEY_ACCEPT_RE);
+  if (accept) return { action: 'journey-accept', id: accept[1] };
   const c = prompt.split(/\r?\n/)[0].match(CONTINUE_RE);
   if (c) {
     let rest = c[1].trim().replace(/[.!]+$/, '');

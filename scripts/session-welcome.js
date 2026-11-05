@@ -24,6 +24,7 @@ const d = require('./lib/devkit');
 const lease = require('./lib/lease');
 const arm = require('./lib/arm');
 const sessionStatus = require('./lib/session-status');
+const journeys = require('./lib/journeys');
 const { detectProvider, describeProvider } = require('./lib/provider');
 
 const hookInput = d.readStdinJson();
@@ -55,8 +56,8 @@ const providerLine = describeProvider(provider);
 // along with something worth reading. Silent on a stock Claude session; see
 // describeProvider.
 function say(text) {
-  const body = text.trim();
-  process.stdout.write(`${providerLine ? `${body}\n\n${providerLine}` : body}\n`);
+  const extras = [journeys.bannerLine(dir, config), providerLine].filter(Boolean);
+  process.stdout.write(`${[text.trim(), ...extras].join('\n\n')}\n`);
 }
 
 // This banner defers for the same reason continue-loop does, plus one of its

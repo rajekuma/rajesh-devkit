@@ -30,6 +30,9 @@ rather than with your taste.
    If there is no vision document, say so first: you can still propose from
    follow-ups and production signals, but "what we haven't built yet" has no
    answer without one, and you should not invent it.
+   If `JOURNEYS.md` exists, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/journeys.js" status`
+   too. A proposal that completes an unproven journey is stronger evidence than one
+   that doesn't, so prefer those and name the journey in its "why now".
 
 2. **Gather the evidence, from four sources, and label each proposal with
    which one it came from.** Read; don't infer what you could read.

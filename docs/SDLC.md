@@ -452,6 +452,16 @@ the tree it saw (`scripts/record-gate.js`), and anything whose stamp no
 longer matches — or that was never stamped — is `STALE`. Unknown provenance
 is never a pass.
 
+### Beyond the gates — user journeys
+
+The gates judge one milestone's diff, so they can all pass while the product still can't
+be used. `JOURNEYS.md` is optional and says what a person must be able to do, each
+outcome with a check that can fail. `devkit journeys draft` proposes them and
+`devkit journeys` shows their state at no token cost. Only a real run of a check counts,
+and it goes `stale` when the code changes. Closing a milestone runs the checks it
+unlocks. A failure reports unless `"journeyGate": "block"` is set, and three failures stop
+and ask. `devkit-journeys` drafts the file; the README has the format.
+
 ---
 
 ## What is deliberately not automated
