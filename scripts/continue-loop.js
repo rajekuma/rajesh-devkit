@@ -13,10 +13,22 @@ const lease = require('./lib/lease');
 const gates = require('./lib/gates');
 const arm = require('./lib/arm');
 const approach = require('./lib/approach');
+const sessionStatus = require('./lib/session-status');
 
 const NUDGE_CAP = 8;
 
 const hookInput = d.readStdinJson();
+
+// A turn that really ends gets the dated status line. On exit rather than at
+// each of this script's many exit-0 paths, one of which is the stop_hook_active
+// guard just below: the stop after a nudge is the one that usually ends the
+// turn. Exit 2 is a nudge, so the turn carries on and an unattended run stays
+// quiet. Skipped after the cap's message, whose plain stdout would make this
+// JSON unparseable to the harness.
+let statusLineAllowed = true;
+process.on('exit', (code) => {
+  if (code === 0 && statusLineAllowed) sessionStatus.stopFooter(hookInput);
+});
 
 // The harness's own recursion guard: this Stop is already a continuation of a
 // previous Stop-hook block. Don't stack another one on top of it.
@@ -249,6 +261,7 @@ if (previous && previous.milestone === milestone.display) {
 }
 
 if (count > NUDGE_CAP) {
+  statusLineAllowed = false;
   process.stdout.write(
     `continue-loop: '${milestone.display}' hit the ${NUDGE_CAP}-nudge cap without shipping - ` +
       `stopping instead of looping forever. Delete ${statePath} to reset the counter.\n`

@@ -29,6 +29,7 @@ const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const lease = require('./lib/lease');
 const arm = require('./lib/arm');
+const sessionStatus = require('./lib/session-status');
 const { detectProvider } = require('./lib/provider');
 
 // Drains the harness payload, and reads the session identity out of it. This
@@ -171,6 +172,10 @@ if (sessionId && arm.isDriving(dir, config, sessionId, milestone)) {
     { ttl: lease.ttlMs(config) }
   );
 }
+
+// Best-effort and only for a session already on the loop. A session cut off by
+// a usage limit never reaches Stop, so this keeps its "last worked" date honest.
+if (sessionStatus.enabled(config)) sessionStatus.touch(dir, sessionId);
 
 const outDir = d.telemetryDir(dir);
 try {

@@ -85,6 +85,9 @@ rather than as a terse dump.
      that never said `devkit continue` is never nudged - by design, since
      sessions opened for other work used to be driven (and asked about
      collisions) at every stop. This skill is for checking status on demand.
+   - **`devkit sessions`** lists this project's sessions, newest first, with
+     what each was last working on, for finding the latest window. It costs
+     no tokens.
 
    The usual order is onboard → specify → (ux) → implement → review → ship →
    docs, but nothing forces it; each piece is independently invokable.

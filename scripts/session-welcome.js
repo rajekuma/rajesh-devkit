@@ -23,6 +23,7 @@ const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const lease = require('./lib/lease');
 const arm = require('./lib/arm');
+const sessionStatus = require('./lib/session-status');
 const { detectProvider, describeProvider } = require('./lib/provider');
 
 const hookInput = d.readStdinJson();
@@ -31,7 +32,17 @@ const hookInput = d.readStdinJson();
 // or a compaction - that would be repetitive noise mid-project. Defaults to
 // showing the message when `source` is absent or unrecognised, erring toward
 // being seen once rather than silently never firing.
-if (hookInput && hookInput.source && hookInput.source !== 'startup') process.exit(0);
+//
+// The exception is a session that has run the loop, coming back. That is not a
+// repeat of the greeting: it is the moment someone returning after a week needs
+// to know when this window was last worked and whether it is the latest one.
+if (hookInput && hookInput.source && hookInput.source !== 'startup') {
+  if (hookInput.source === 'resume' || hookInput.source === 'compact') {
+    const report = sessionStatus.returnReport(hookInput);
+    if (report) process.stdout.write(`${JSON.stringify(report)}\n`);
+  }
+  process.exit(0);
+}
 
 const dir = d.projectDir();
 if (!dir) process.exit(0);

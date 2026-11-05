@@ -158,14 +158,19 @@ function isDriving(dir, config, sessionId, milestone) {
 //   devkit continue M46         that one milestone, even if it isn't first
 //   ... as ui                   any of the above, with a stage preset for this
 //                               session only (full, api, ui, product, design)
+//   devkit sessions             which session worked what, newest first
 //
 // Anything else after "continue" is ignored, as it always was, so a stray
 // word never turns a plain continue into something narrower by accident.
 const CONTINUE_RE = /^\s*\/?devkit[\s-]+(?:continue|resume|start)\b(.*)$/i;
 const PAUSE_RE = /^\s*\/?devkit[\s-]+(?:pause|stop)\b/i;
+// The whole line, unlike the two above: this one swallows the prompt, so "devkit
+// status of the M3 spec?" has to reach the model.
+const SESSIONS_RE = /^\s*\/?devkit[\s-]+(?:sessions|status)\s*[.!?]*\s*$/i;
 
 function parseCommand(prompt) {
   if (typeof prompt !== 'string') return null;
+  if (SESSIONS_RE.test(prompt.split(/\r?\n/)[0])) return { action: 'sessions' };
   const c = prompt.split(/\r?\n/)[0].match(CONTINUE_RE);
   if (c) {
     let rest = c[1].trim().replace(/[.!]+$/, '');

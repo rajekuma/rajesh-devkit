@@ -13,6 +13,24 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Added (0.12.0)
+
+- **A session says when it was last worked, on what, and whether it is the
+  latest.** Reported in real use: after a week away, with several long-lived,
+  compacted sessions on one project, nothing in a session gave its last date or
+  milestone, and the sidebar's generated titles were out of date, so finding the
+  latest window meant opening two or three and reading them. A session that has
+  run the loop now gets a dated status line at the end of each turn and on
+  resume, with a warning if another session is more recent. Its title follows
+  the milestone, unless the user named it. `devkit sessions` (or `devkit status`)
+  lists sessions newest first without a model turn. A compaction reminds the
+  model of the status in one line. A session that never ran the loop sees none
+  of this; `"sessionStatus": false` turns it off. The list is in the common git
+  directory, because a per-worktree file could not see other windows or outlive
+  an archived worktree. Live-checked with `claude -p` for the title, the resume
+  line and the blocked prompt; the end-of-turn line and the desktop app are not
+  yet checked live.
+
 ### Fixed (0.11.4)
 
 - **A milestone's change size counts code committed before its row is

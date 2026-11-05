@@ -27,17 +27,53 @@ const { spawnSync } = require('child_process');
 const d = require('./lib/devkit');
 const arm = require('./lib/arm');
 const lease = require('./lib/lease');
+const sessionStatus = require('./lib/session-status');
 
 const hookInput = d.readStdinJson();
 const command = arm.parseCommand(hookInput && hookInput.prompt);
-if (!command) process.exit(0);
+if (!command) {
+  // An ordinary prompt. Stop cannot set a title, so this is where a session's
+  // title catches up with a milestone it finished since the last prompt.
+  const title = sessionStatus.promptTitle(hookInput);
+  if (title) {
+    process.stdout.write(
+      `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'UserPromptSubmit', sessionTitle: title } })}\n`
+    );
+  }
+  process.exit(0);
+}
 
 const dir = d.projectDir();
 if (!dir) process.exit(0);
 const config = d.readStageConfig(dir);
 
-function say(text) {
-  process.stdout.write(`${text.trim()}\n`);
+function say(text, sessionTitle = null) {
+  // Plain stdout unless there is a title to set, which only JSON can carry.
+  process.stdout.write(
+    sessionTitle
+      ? `${JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'UserPromptSubmit',
+            additionalContext: text.trim(),
+            sessionTitle,
+          },
+        })}\n`
+      : `${text.trim()}\n`
+  );
+  process.exit(0);
+}
+
+// A list the user asked for, so it should not cost a model turn: on a long
+// session that turn re-reads the whole context to repeat a table. A blocked
+// prompt never reaches the model, and its reason is shown to the user.
+if (command.action === 'sessions') {
+  process.stdout.write(
+    `${JSON.stringify({
+      decision: 'block',
+      reason: sessionStatus.listReport(dir, hookInput && hookInput.session_id),
+      hookSpecificOutput: { hookEventName: 'UserPromptSubmit', suppressOriginalPrompt: true },
+    })}\n`
+  );
   process.exit(0);
 }
 
@@ -65,7 +101,8 @@ if (command.action === 'pause') {
       'milestone, and this session no longer claims one. Finish or park the current step ' +
       'safely - leave the suite in a known state and say where you stopped - then do whatever ' +
       'the user asks next. Say "devkit continue" to resume; the ticks and resume.json keep ' +
-      'the place.'
+      'the place.',
+    sessionStatus.recordCommand(dir, config, sessionId, hookInput)
   );
 }
 
@@ -190,5 +227,6 @@ say(
         : ''),
     '',
     next || 'The Stop hook has nothing to nudge toward for this milestone right now.',
-  ].join('\n')
+  ].join('\n'),
+  sessionStatus.recordCommand(dir, config, sessionId, hookInput)
 );
