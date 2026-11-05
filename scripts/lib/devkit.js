@@ -156,6 +156,9 @@ function readExtras(cfg) {
     // (scripts/milestone-metrics.js). On unless switched off: they are what
     // makes the next estimate a measurement instead of a guess.
     metrics: cfg.metrics !== false,
+    // The dated status line, session titles and session list - see
+    // lib/session-status.js. They only ever appear in a session that ran the loop.
+    sessionStatus: cfg.sessionStatus !== false,
     metricsDir: typeof cfg.metricsDir === 'string' && cfg.metricsDir.trim() ? cfg.metricsDir.trim() : null,
   };
 }

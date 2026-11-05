@@ -333,7 +333,8 @@ rajesh-devkit/
 │   │   │                         # in this working tree right now?
 │   │   ├── gates.js            # was this gate verdict issued against the tree
 │   │   │                         # that is here now?
-│   │   └── arm.js              # is THIS session driving the loop?
+│   │   ├── arm.js              # is THIS session driving the loop?
+│   │   └── session-status.js   # when each session was last worked, its status line and title
 │   ├── continue-loop.js        # Stop hook: nudge toward next milestone, in a
 │   │                             # session that said "devkit continue"
 │   ├── loop-command.js         # UserPromptSubmit hook: "devkit continue" /
@@ -1442,6 +1443,34 @@ the next thing starts. A project that genuinely wants every session driven
 unattended can set `"loopStart": "always"` in `.claude/devkit.json` to get the
 pre-0.7 behaviour back.
 
+**Coming back to a session.** After `devkit continue`, a session tells you when
+it was last worked and where it stands, so you don't have to open several
+windows to find the latest one. All of this comes from hooks and costs no model
+turn:
+
+- **At the end of every turn** you get a dated line. It stays in the
+  transcript, so a week later the last one still says when:
+
+  ```
+  DevKit | last worked 2026-11-05 14:32 | M47 - Statements | implementing, 12/36 criteria | branch m47, uncommitted changes
+  ```
+
+- **When you resume the session** you get the same line and how long you were
+  away. If another session worked this project more recently, it says "This is
+  not the latest window" and names that session.
+- **The session title follows the milestone:** `M47 Statements`, then
+  `M47 done, next M48`, or `M47 Statements (paused)`. The title changes on your
+  next prompt after the state changes. A title you set yourself is left alone.
+- **`devkit sessions`** (or `devkit status`) lists the sessions in this project,
+  newest first, across all its git worktrees. Each row shows the status as of
+  that session's last stop. The prompt never reaches the model, so it costs no
+  tokens.
+
+A session that never ran the loop gets none of this. `"sessionStatus": false`
+in `.claude/devkit.json` turns it off. The list lives in the repository's git
+directory (`.git/rajesh-devkit/sessions.json`), so it is never committed and
+outlives a deleted worktree.
+
 ### Why the Stop hook defers to a project's own loop skill
 
 If a host project already has a milestone-loop skill (like the `spec-loop`
@@ -1818,6 +1847,10 @@ behaviour that existed before it:
   into the project's own repository (on by default, in `docs/metrics/`). See
   "Milestone records you commit" under Telemetry. `"metrics": false` turns it
   off.
+
+- **`sessionStatus`** — `false` turns off the dated end-of-turn line, the
+  session titles and the session list. On by default, and only ever visible in
+  a session that ran the loop. See "Coming back to a session".
 
 - **`loop`** — `"devkit"` makes this plugin drive even where the project has
   its own `spec-loop` skill; `"project"` makes it stand down even where it
