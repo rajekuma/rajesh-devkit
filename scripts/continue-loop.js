@@ -14,6 +14,7 @@ const gates = require('./lib/gates');
 const arm = require('./lib/arm');
 const approach = require('./lib/approach');
 const sessionStatus = require('./lib/session-status');
+const journeys = require('./lib/journeys');
 
 const NUDGE_CAP = 8;
 
@@ -45,6 +46,7 @@ const fs = require('fs');
 // quietly skip. Forward slashes so it survives being pasted into bash on
 // Windows, where a backslash inside double quotes can be eaten.
 const RECORD_GATE = path.join(__dirname, 'record-gate.js').split(path.sep).join('/');
+const JOURNEYS_CLI = path.join(__dirname, 'journeys.js').split(path.sep).join('/');
 
 const config = d.readStageConfig(dir);
 const on = (stage) => d.stageEnabled(config, stage);
@@ -186,6 +188,16 @@ if (conflict) {
   );
   process.exit(2);
 }
+
+// The journey check has failed three times on this milestone and journeys.js told
+// the session to stop and ask. A nudge here would push straight past that question,
+// so the stop is allowed and stays quiet until the user says "devkit continue".
+const journeysOn = journeys.active(dir, config);
+const journeyKey = milestone.number != null ? `M${milestone.number}` : null;
+if (journeysOn && journeyKey && journeys.attemptsFor(dir, journeyKey) >= journeys.MAX_ATTEMPTS) {
+  process.exit(0);
+}
+const journeyLinked = Boolean(journeysOn && journeyKey && journeys.linkedTo(dir, journeyKey).length > 0);
 
 // devkit-ux writes specs/<name>.ux.md alongside the feature spec.
 const uxSpecPath = specPath ? specPath.replace(/\.md$/, '.ux.md') : null;
@@ -392,7 +404,8 @@ function downstream(how = 'delegate') {
         "advisories, secrets, open follow-ups, and a row for every other gate's verdict - " +
         'one it has not seen is UNKNOWN, and one stamped against a tree that has since ' +
         `changed is STALE; neither is a pass), then stamp its own verdict with \`node ` +
-        `"${RECORD_GATE}" ship <verdict>\`;`
+        `"${RECORD_GATE}" ship <verdict>\`;` +
+        (journeysOn ? ` also give it the output of \`node "${JOURNEYS_CLI}" status\`;` : '')
     );
   }
   if (on('docs')) {
@@ -421,6 +434,21 @@ function downstream(how = 'delegate') {
     );
   }
   if (steps.length > 0) {
+    // Every gate above judges this milestone's diff. This is the one step that asks
+    // whether a person can now do what the milestone was for. Only for a milestone
+    // a journey names, so an unlinked one spends nothing here.
+    if (journeyLinked) {
+      steps.push(
+        `run the journey checks this milestone unlocks with \`node "${JOURNEYS_CLI}" run --needs ${journeyKey}\` ` +
+          '(they can take minutes, so allow a long timeout or run it in the background). If one fails or cannot ' +
+          'run, fix that failure only, change nothing unrelated, and run it again; if the output says to stop ' +
+          'and ask, do exactly that. ' +
+          (config.journeyGate === 'block'
+            ? 'This project requires it: do not mark the milestone done until they pass.'
+            : 'If one still fails when you close the milestone, say so plainly in your report.') +
+          ' A journey reported as blocked by another milestone is not a failure;'
+      );
+    }
     // "Treat the milestone as done" was the whole closing instruction, and it
     // named nobody. Every other step here hands work to a component that owns
     // it; this one assumed the orchestrator would update the tracker on its

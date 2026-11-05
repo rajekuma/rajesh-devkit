@@ -245,7 +245,9 @@ user confirms.
    milestone has no spec yet. Mention the two variants once:
    `devkit continue all` (the whole queue, unattended) and
    `devkit continue phase N as <preset>` (one phase as a lane, for parallel
-   sessions). Don't end on a summary of what you did — end on what happens
+   sessions). If the project has a vision or a release goal, also mention once that
+   `devkit journeys draft` can define what a person must be able to do, and that it
+   is optional. Don't end on a summary of what you did — end on what happens
    next.
 
    **Do not start that milestone.** Onboarding ends at the handoff: do not

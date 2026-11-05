@@ -1,0 +1,22 @@
+schema_version: "1.1"
+name: ship-journey-not-passed
+description: >
+  A milestone with every gate fine but a linked journey failing. devkit-ship must
+  report the journey and must not clear the milestone.
+tags: [component, ship]
+context:
+  scaffold_script: scaffold.sh
+execution:
+  max_turns: 20
+  timeout_seconds: 400
+  allowed_tools: [Read, Glob, Grep, Bash, Agent]
+  prompt: |
+    Milestone 1 (specs/task-completion.md) is implemented and committed. Use the
+    devkit-ship subagent to run the pre-ship preflight. Give it this output of
+    journeys.js status:
+
+    DevKit journeys: 0 of 1 proven, 1 failing
+      J1    failing   A user completes a task | last run 2026-11-05 10:00 UTC
+
+    JOURNEYS.md names M1 in J1's Needs. Relay its full gate table and verdict line
+    verbatim.

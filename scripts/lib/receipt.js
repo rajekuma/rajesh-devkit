@@ -94,11 +94,21 @@ function format(r, { enabledGates = [] } = {}) {
     );
   }
 
+  // Absent on a project without journeys and on any record from before them, and
+  // that is not the same as moving none, so nothing is said.
+  if (r.journeys) lines.push(`  Journeys moved ${journeyCell(r)}`);
+
   const cost = [`${money(r.costUsd)} at API prices`, `${r.activeHours} active h`];
   if (r.criteria) cost.push(`${r.criteria} criteria${r.costUsd != null ? ` (${money(r.costUsd / r.criteria)} each)` : ''}`);
   if (r.diff) cost.push(`+${r.diff.insertions} / -${r.diff.deletions} lines`);
   lines.push(`  Cost    ${cost.join(' | ')}`);
   return lines.join('\n');
+}
+
+function journeyCell(r) {
+  if (!r.journeys) return '';
+  const moved = Array.isArray(r.journeys.moved) ? r.journeys.moved : [];
+  return moved.length > 0 ? moved.map((m) => `${m.id} (${m.state})`).join(', ') : 'none';
 }
 
 // One short cell for the summary table.
@@ -116,4 +126,4 @@ function cell(r) {
   return parts.join(', ');
 }
 
-module.exports = { PLUGIN_AGENT, eventsFor, activity, format, cell };
+module.exports = { PLUGIN_AGENT, eventsFor, activity, format, cell, journeyCell };

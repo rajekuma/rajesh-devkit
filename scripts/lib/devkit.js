@@ -159,6 +159,12 @@ function readExtras(cfg) {
     // The dated status line, session titles and session list - see
     // lib/session-status.js. They only ever appear in a session that ran the loop.
     sessionStatus: cfg.sessionStatus !== false,
+    // User journeys - see lib/journeys.js. JOURNEYS.md is the opt-in; this is the
+    // way to turn them off with the file still there. A linked journey that isn't
+    // proven only reports unless "journeyGate" asks for more, because flaky checks
+    // are a real risk and blocking has not yet earned its keep.
+    journeys: cfg.journeys !== false,
+    journeyGate: cfg.journeyGate === 'block' ? 'block' : 'report',
     metricsDir: typeof cfg.metricsDir === 'string' && cfg.metricsDir.trim() ? cfg.metricsDir.trim() : null,
   };
 }

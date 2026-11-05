@@ -13,6 +13,25 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Added (0.13.0)
+
+- **User journeys: "done" can now mean a person can use it.** Every gate judges one
+  milestone's diff, so they all passed while the app they guarded couldn't be used.
+  Dogfooding found 29 tracker mentions of "API-side", a core feature's API finished
+  with its screen unstarted, and fixes landing for faults between the parts. A project
+  can now add a `JOURNEYS.md` of outcomes with checks that can fail. `devkit journeys`
+  shows each one's state at no token cost, and the banner, status line, receipt and
+  `devkit-ship` report it. `devkit continue` says when a milestone moves no journey, and
+  still takes it. A close-out runs the checks a milestone unlocks and sends failures
+  back; three failures stop and ask. Failures only report unless `"journeyGate":
+  "block"` is set. The plugin records only runs it performed, so no model can stamp a
+  pass, and only the user's own words can accept a manual journey. Hooks never run a
+  check, and check output is never stored. Without the file nothing changes. The new
+  `devkit-journeys` skill drafts the file and writes only after approval. Measured once
+  each on the default profile: `journeys-draft-asks-first` 3/3 ($0.18),
+  `ship-journey-not-passed` 3/3 ($0.49), and the existing `ship-unknown-not-pass` still
+  8/8 ($0.52). Close-out inside a real loop has not been run yet.
+
 ### Added (0.12.0)
 
 - **A session says when it was last worked, on what, and whether it is the

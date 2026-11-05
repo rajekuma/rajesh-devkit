@@ -22,6 +22,7 @@ const d = require('./lib/devkit');
 const gates = require('./lib/gates');
 const arm = require('./lib/arm');
 const receipt = require('./lib/receipt');
+const journeys = require('./lib/journeys');
 
 const hookInput = d.readStdinJson();
 
@@ -129,6 +130,43 @@ if (expected.length > 0) {
   }
 }
 
+// What a finished milestone did for the journeys. Only for a driving session, and
+// said once, because this fires on the one edit that flips the row. Reads recorded
+// results and never runs a check. Best-effort: a problem here costs the note, not
+// the edit.
+const journeyNotes = [];
+const journeyBlocks = [];
+try {
+  if (finishedHere.length > 0 && journeys.active(dir, config)) {
+    const { journeys: list } = journeys.evaluate(dir, config);
+    for (const key of finishedHere) {
+      const linked = list.filter((j) => !j.invalid && journeys.namesMilestone(j, key));
+      if (linked.length === 0) {
+        d.appendTelemetry(dir, 'journey_unlinked', current[key].display);
+        journeyNotes.push(
+          `${current[key].display} is named by no journey in JOURNEYS.md. Ask the user once whether it belongs to ` +
+            'one (then add it to that journey\'s Needs) or is deliberately enabling work. Either answer is fine.'
+        );
+        continue;
+      }
+      // A journey still waiting on another milestone isn't this one's to prove.
+      const open = linked.filter((j) => !journeys.isProven(j) && j.state !== 'blocked');
+      if (open.length === 0) continue;
+      const names = open.map((j) => `${j.id} (${j.state})`).join(', ');
+      if (config.journeyGate === 'block') {
+        journeyBlocks.push(
+          `${current[key].display} was marked done, but its journeys are not proven: ${names}. This project sets ` +
+            '"journeyGate": "block", so treat it as unfinished: undo the tick, fix the failure and run the check.'
+        );
+      } else {
+        journeyNotes.push(`${current[key].display} closed with journeys not proven: ${names}. Say so in your report.`);
+      }
+    }
+  }
+} catch {
+  /* the milestone is recorded either way */
+}
+
 // Record each finished milestone into the project's own metrics
 // (scripts/milestone-metrics.js): active time, cost, size of the change, and
 // what devkit did for it. Here rather than in the close-out instructions
@@ -202,7 +240,12 @@ function phaseNote(key) {
     : 'This loop never pushes. Tell the user plainly that the phase is ready to push, so CI runs ' +
       "(and whatever deployment this project's CI starts), give them the push command for the " +
       'current branch, and do not run it yourself.';
-  return `Phase ${row.phase} is complete with ${m.display} (all ${p.total} of its milestones done).${totals} ${handoff}`;
+  // A milestone's close-out re-proves only its own journeys, and the rest go stale
+  // as the phase's code changes. Before a push is the point to check them all.
+  const rerun = journeys.active(dir, config)
+    ? ` Before that, run every journey check with \`node "${path.join(__dirname, 'journeys.js').split(path.sep).join('/')}" run --all\`.`
+    : '';
+  return `Phase ${row.phase} is complete with ${m.display} (all ${p.total} of its milestones done).${totals}${rerun} ${handoff}`;
 }
 
 const receipts = [];
@@ -213,7 +256,7 @@ for (const key of finishedHere) {
 const phaseNotes = finishedHere.map(phaseNote).filter(Boolean);
 
 const shown = [...receipts, ...phaseNotes].join('\n\n');
-const report =
+const report = [
   receipts.length + phaseNotes.length > 0
     ? (receipts.length > 0
         ? 'DevKit receipt for the milestone just marked done (from the record written to the ' +
@@ -223,21 +266,30 @@ const report =
           'verbatim in a code block, rather than leaving the user to ask for devkit-stats.'
         : '') +
       (phaseNotes.length > 0 ? `${receipts.length > 0 ? '\n' : ''}${phaseNotes.join(' ')}` : '')
-    : '';
+    : '',
+  ...journeyNotes,
+]
+  .filter(Boolean)
+  .join('\n');
 
-if (warnings.length === 0) {
+if (warnings.length === 0 && journeyBlocks.length === 0) {
   if (report) {
     // systemMessage is shown to the user directly, so the receipt does not
     // depend on the model choosing to repeat it; additionalContext gives the
     // model the same text for its summary. Exit 0: nothing is blocked.
     process.stdout.write(
       `${JSON.stringify({
-        systemMessage: shown,
+        ...(shown ? { systemMessage: shown } : {}),
         hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: report },
       })}\n`
     );
   }
   process.exit(0);
+}
+
+if (warnings.length === 0) {
+  process.stderr.write(`${journeyBlocks.join(' ')}${report ? ` ${report}` : ''}\n`);
+  process.exit(2);
 }
 
 const recordGate = path.join(__dirname, 'record-gate.js').split(path.sep).join('/');
@@ -257,6 +309,7 @@ process.stderr.write(
     'treat the milestone as unfinished until the gates pass. If the user deliberately ' +
     'skipped a gate for this milestone, say so in your reply instead - never stamp a ' +
     'verdict for a gate that did not run.' +
+    (journeyBlocks.length > 0 ? ` ${journeyBlocks.join(' ')}` : '') +
     (report ? ` ${report}` : '') +
     '\n'
 );

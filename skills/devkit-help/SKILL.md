@@ -85,6 +85,9 @@ rather than as a terse dump.
      that never said `devkit continue` is never nudged - by design, since
      sessions opened for other work used to be driven (and asked about
      collisions) at every stop. This skill is for checking status on demand.
+   - **`devkit journeys`** shows what a person can actually do yet: each journey's
+     state and the closest one, at no token cost. `devkit journeys draft` proposes
+     them if the project has none.
    - **`devkit sessions`** lists this project's sessions, newest first, with
      what each was last working on, for finding the latest window. It costs
      no tokens.

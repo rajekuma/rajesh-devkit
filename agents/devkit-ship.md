@@ -261,7 +261,18 @@ reading the conversation. It is recorded:
      tests passing says nothing about what rendered, which is the whole
      reason that stage exists.
 
-12. **Report.** A compact table — one row per gate, no prose padding:
+12. **Journeys.** Applies when the project has a `JOURNEYS.md`. Otherwise **PASS
+   (not applicable: no journeys)**. Use the `journeys.js status` output you were
+   given; none given → **UNKNOWN**. Judge only journeys whose `Needs` name this
+   milestone and that aren't still `blocked` by another one.
+   - All `proven` or `accepted` → **PASS**. None linked → **PASS (not applicable:
+     moves no journey)**, and say so in the detail.
+   - `failing` → **BLOCKED**, naming the journey and exit code.
+   - `stale` → **STALE**. `unknown` or `ready` (never run) → **UNKNOWN**. A check
+     nobody ran proves nothing, however good the tests look.
+   Never run a check yourself and never report one as passing from reading it.
+
+13. **Report.** A compact table — one row per gate, no prose padding:
 
    ```
    | Gate            | Result  | Detail                                  |
@@ -276,6 +287,7 @@ reading the conversation. It is recorded:
    | Quality         | PASS    | clean; 1 advisory (see devkit-quality)  |
    | Data model      | PASS    | 0007_add_archived_at.sql in diff        |
    | UI states       | PASS    | not applicable: no UX spec              |
+   | Journeys        | UNKNOWN | J2 is unlocked but its check never ran  |
    ```
 
    Then a single verdict line. They are listed in precedence order: the
@@ -296,6 +308,6 @@ reading the conversation. It is recorded:
    legitimately not applicable, and any deferrals are recorded. Safe to mark
    done.
 
-13. **Do not modify any files.** Read-only, same as `devkit-reviewer` and
+14. **Do not modify any files.** Read-only, same as `devkit-reviewer` and
    `devkit-dep-audit`. If a gate is blocked, the fix is a separate,
    explicitly-requested piece of work — not something you start here.

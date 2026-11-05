@@ -337,3 +337,32 @@ test('a receipt is judged against the gates enabled when the milestone ran', () 
     assert.doesNotMatch(text, /ui-verify: NOT RUN/, "judged against today's config");
   });
 });
+
+test('a project with journeys records what the milestone moved, and shows the column', () => {
+  const files = { 'JOURNEYS.md': '## J1 A journey\nFor: someone\nOutcome: something\nNeeds: M1\nCheck: node x.js\n' };
+  withProject(
+    (dir, home) => {
+      // An event with no milestone must not upset anything reading the log.
+      fs.appendFileSync(
+        path.join(dir, '.claude', 'rajesh-devkit', 'telemetry.jsonl'),
+        JSON.stringify({ event: 'journey_run', milestone: null, timestamp: at(150), id: 'J1' }) + '\n',
+        'utf8'
+      );
+      const text = contextOf(finishM1(dir, home, PHASED));
+      assert.match(text, /Journeys\s+moved J1/);
+      assert.match(text, /run --all/, 'the phase-end reminder does not ask for every check');
+      const page = fs.readFileSync(path.join(dir, 'docs', 'metrics', 'README.md'), 'utf8');
+      assert.match(page, /Journeys moved/);
+      assert.match(page, /J1 \(/);
+    },
+    { files }
+  );
+});
+
+test('a project without journeys has no column and no reminder', () => {
+  withProject((dir, home) => {
+    const text = contextOf(finishM1(dir, home, PHASED));
+    assert.doesNotMatch(text, /Journeys|run --all/);
+    assert.doesNotMatch(fs.readFileSync(path.join(dir, 'docs', 'metrics', 'README.md'), 'utf8'), /Journeys moved/);
+  });
+});

@@ -28,6 +28,7 @@ const d = require('./lib/devkit');
 const arm = require('./lib/arm');
 const lease = require('./lib/lease');
 const sessionStatus = require('./lib/session-status');
+const journeys = require('./lib/journeys');
 
 const hookInput = d.readStdinJson();
 const command = arm.parseCommand(hookInput && hookInput.prompt);
@@ -47,15 +48,16 @@ const dir = d.projectDir();
 if (!dir) process.exit(0);
 const config = d.readStageConfig(dir);
 
-function say(text, sessionTitle = null) {
-  // Plain stdout unless there is a title to set, which only JSON can carry.
+function say(text, sessionTitle = null, notice = null) {
+  // Plain stdout unless there is a title or a user notice, which only JSON can carry.
   process.stdout.write(
-    sessionTitle
+    sessionTitle || notice
       ? `${JSON.stringify({
+          ...(notice ? { systemMessage: notice } : {}),
           hookSpecificOutput: {
             hookEventName: 'UserPromptSubmit',
-            additionalContext: text.trim(),
-            sessionTitle,
+            additionalContext: notice ? `${text.trim()}\n\n${notice}` : text.trim(),
+            ...(sessionTitle ? { sessionTitle } : {}),
           },
         })}\n`
       : `${text.trim()}\n`
@@ -63,18 +65,54 @@ function say(text, sessionTitle = null) {
   process.exit(0);
 }
 
-// A list the user asked for, so it should not cost a model turn: on a long
+// Something the user asked to see, so it should not cost a model turn: on a long
 // session that turn re-reads the whole context to repeat a table. A blocked
 // prompt never reaches the model, and its reason is shown to the user.
-if (command.action === 'sessions') {
+function answerWithoutModel(reason) {
   process.stdout.write(
     `${JSON.stringify({
       decision: 'block',
-      reason: sessionStatus.listReport(dir, hookInput && hookInput.session_id),
+      reason,
       hookSpecificOutput: { hookEventName: 'UserPromptSubmit', suppressOriginalPrompt: true },
     })}\n`
   );
   process.exit(0);
+}
+
+if (command.action === 'sessions') {
+  answerWithoutModel(sessionStatus.listReport(dir, hookInput && hookInput.session_id));
+}
+
+if (command.action === 'journeys') {
+  answerWithoutModel(
+    journeys.active(dir, config)
+      ? journeys.report(journeys.evaluate(dir, config))
+      : `DevKit journeys: none here. Say "devkit journeys draft" to propose some from your vision and tracker.`
+  );
+}
+
+// Read here, and nowhere else, because this hook sees only what the user typed.
+// A command-checked journey is refused: its only evidence is a real run.
+if (command.action === 'journey-accept') {
+  const target = journeys.active(dir, config)
+    ? journeys.readJourneys(dir).find((j) => j.id === command.id)
+    : null;
+  if (!target) answerWithoutModel(`DevKit journeys: no journey called ${command.id}, so nothing was recorded.`);
+  if (target.invalid) answerWithoutModel(`DevKit journeys: ${target.id} is invalid (${target.invalid}), so nothing was recorded.`);
+  if (!target.manual) {
+    answerWithoutModel(
+      `DevKit journeys: ${target.id} has a check, so only running it can prove it. Nothing was recorded.`
+    );
+  }
+  journeys.prepare(dir);
+  const tree = journeys.fingerprint(dir, config);
+  journeys.recordProof(dir, target, { result: 'accepted', tree });
+  d.appendTelemetry(dir, 'journey_accepted', null, undefined, { id: target.id });
+  answerWithoutModel(
+    tree
+      ? `DevKit journeys: ${target.id} accepted for this code. It goes stale when the code changes.`
+      : `DevKit journeys: ${target.id} recorded, but this tree can't be fingerprinted, so it reads as stale.`
+  );
 }
 
 if (!d.devkitOwnsLoop(dir, config)) {
@@ -187,6 +225,11 @@ arm.arm(
   sessionStages
 );
 
+// The user has seen the failures and chosen to go on, so the loop may push again.
+if (milestone.number != null && journeys.active(dir, config)) {
+  journeys.setAttempts(dir, `M${milestone.number}`, 0);
+}
+
 // What to do first is exactly what the Stop hook would say at this moment,
 // so ask it rather than keeping a second copy of the chain here to drift.
 // The session is now armed, so it answers as it would for a driving session
@@ -228,5 +271,6 @@ say(
     '',
     next || 'The Stop hook has nothing to nudge toward for this milestone right now.',
   ].join('\n'),
-  sessionStatus.recordCommand(dir, config, sessionId, hookInput)
+  sessionStatus.recordCommand(dir, config, sessionId, hookInput),
+  journeys.continueNotice(dir, config, milestone)
 );

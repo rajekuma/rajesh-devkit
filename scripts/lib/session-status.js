@@ -33,6 +33,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const d = require('./devkit');
 const arm = require('./arm');
+const journeys = require('./journeys');
 
 const REGISTRY_FILE = 'sessions.json';
 const MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
@@ -223,7 +224,10 @@ function stopFooter(hookInput, now = Date.now()) {
     const summary = summaryOf(s);
     update(dir, sessionId, { milestone: s.milestone, summary, branch: bits.branch }, now);
     const tree = treeOf(bits);
-    const line = `DevKit | last worked ${when(new Date(now).toISOString())} | ${summary}${tree ? ` | ${tree}` : ''}`;
+    const journeyBit = journeys.lastRunSummary(dir, config);
+    const line =
+      `DevKit | last worked ${when(new Date(now).toISOString())} | ${summary}` +
+      `${tree ? ` | ${tree}` : ''}${journeyBit ? ` | ${journeyBit}` : ''}`;
     fs.writeSync(1, `${JSON.stringify({ systemMessage: line })}\n`);
   } catch {
     // A status line is never worth a failed stop.

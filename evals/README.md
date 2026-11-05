@@ -115,6 +115,8 @@ were left alone. Check them by hand if you change the base.
 | `specify-marks-sensitive` | `devkit-specify` | A feature touching auth + the data model gets `SENSITIVE:`; no code is written |
 | `implementer-red-green` | `devkit-implementer` | Caches the test runner, runs the suite more than once, ticks criteria, reports RED then GREEN |
 | `reviewer-catches-unmet` | `devkit-reviewer` | An unmet criterion and a ticked-but-deferred one both produce `needs-changes`; no files touched |
+| `ship-journey-not-passed` | `devkit-ship` | A linked journey that is failing → `Journeys` row `BLOCKED`, and never a plain `clear`. |
+| `journeys-draft-asks-first` | `devkit-journeys` | Drafts journeys but writes no `JOURNEYS.md` before approval. |
 | `ship-unknown-not-pass` | `devkit-ship` | No CI config and no coverage threshold → `UNKNOWN`, never `PASS`; verdict is `clear-with-unknowns`, not `clear` |
 | `ship-blocks-unaccounted` | `devkit-ship` | An unticked criterion with no follow-up entry → `blocked` |
 | `ux-enumerates-states` | `devkit-ux` | Empty/loading/error/permission states named, existing tokens and components reused, a11y criteria appended to the feature spec, no components written |

@@ -97,3 +97,11 @@ Steps:
 6. Below the verdict, one line: files reviewed (count) and diff size (lines
    added/removed), so the orchestrator can track review cost against milestone size
    over time. Don't expand this into a report — one line.
+
+## When the diff changes a journey check
+
+If this project has a `JOURNEYS.md` and the diff adds or changes the command a
+`Check:` line runs, or the script behind it, read that check. The plugin can only see
+its exit code, so this is the one place anyone asks whether it tests anything. It must
+drive the real thing through the journey and be able to fail. One that passes without
+doing so is a finding, because it reports a journey as proven when it isn't.

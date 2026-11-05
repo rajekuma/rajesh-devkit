@@ -34,6 +34,7 @@ const d = require('./lib/devkit');
 const gates = require('./lib/gates');
 const approach = require('./lib/approach');
 const receipt = require('./lib/receipt');
+const journeys = require('./lib/journeys');
 
 const DEFAULT_DIR = path.join('docs', 'metrics');
 const JSONL = 'milestones.jsonl';
@@ -227,6 +228,8 @@ function perCriterion(v, criteria, unit) {
 
 function summarize(records) {
   const sorted = [...records].sort((a, b) => String(a.window.start).localeCompare(String(b.window.start)));
+  // Old records leave this cell blank; a project with no journeys has no column.
+  const withJourneys = sorted.some((r) => r.journeys);
   const lines = [
     '# Milestone metrics',
     '',
@@ -254,15 +257,15 @@ function summarize(records) {
     '',
     '## Milestones',
     '',
-    '| Milestone | Phase | Built by | Active h | Wall h | Cost | Implementing / gates | Criteria | $ per criterion | Active min per criterion | Lines +/- | DevKit did | Source |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    `| Milestone | Phase | Built by | Active h | Wall h | Cost | Implementing / gates | Criteria | $ per criterion | Active min per criterion | Lines +/- | DevKit did | ${withJourneys ? 'Journeys moved | ' : ''}Source |`,
+    `|---|---|---|---|---|---|---|---|---|---|---|---|${withJourneys ? '---|' : ''}---|`,
   ];
   for (const r of sorted) {
     const built = `${r.primaryModel ?? 'unknown'}${r.approach ? ` (${r.approach})` : ''}`;
     const split = `${money(r.mainSession && r.mainSession.costUsd)} / ${money(r.subagentCostUsd)}`;
     const diff = r.diff ? `+${r.diff.insertions} / -${r.diff.deletions}` : '-';
     lines.push(
-      `| ${r.milestone} | ${r.phase ?? '-'} | ${built} | ${r.activeHours} | ${r.wallClockHours} | ${money(r.costUsd)} | ${split} | ${r.criteria ?? '-'} | ${perCriterion(r.costUsd, r.criteria, '$')} | ${perCriterion(r.activeHours * 60, r.criteria, 'min')} | ${diff} | ${receipt.cell(r)} | ${r.window.source} |`
+      `| ${r.milestone} | ${r.phase ?? '-'} | ${built} | ${r.activeHours} | ${r.wallClockHours} | ${money(r.costUsd)} | ${split} | ${r.criteria ?? '-'} | ${perCriterion(r.costUsd, r.criteria, '$')} | ${perCriterion(r.activeHours * 60, r.criteria, 'min')} | ${diff} | ${receipt.cell(r)} | ${withJourneys ? `${receipt.journeyCell(r)} | ` : ''}${r.window.source} |`
     );
   }
 
@@ -458,6 +461,20 @@ const record = {
   recordedAt: new Date().toISOString(),
   pluginVersion: pluginVersion(),
 };
+// What this milestone moved. Only where the project has journeys, so a project
+// without them keeps its record and summary page exactly as they were.
+try {
+  if (journeys.active(dir, config)) {
+    record.journeys = {
+      moved: journeys
+        .evaluate(dir, config)
+        .journeys.filter((j) => !j.invalid && journeys.namesMilestone(j, record.milestone))
+        .map((j) => ({ id: j.id, state: j.state })),
+    };
+  }
+} catch {
+  /* the record is worth keeping without this */
+}
 record.devkit = receipt.activity(receipt.eventsFor(telemetry, approach.keyOf, key, start, end), record.subagents);
 if (mainCost == null && report.mainSession && report.mainSession.tokens > 0) record.mainSession.costUsd = null;
 
