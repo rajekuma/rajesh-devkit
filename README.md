@@ -340,6 +340,7 @@ rajesh-devkit/
 │   │   │                         # that is here now?
 │   │   ├── arm.js              # is THIS session driving the loop?
 │   │   ├── journeys.js         # parses JOURNEYS.md; states, proofs, reports
+│   │   ├── git.js              # every git call, with a time limit
 │   │   └── session-status.js   # when each session was last worked, its status line and title
 │   ├── continue-loop.js        # Stop hook: nudge toward next milestone, in a
 │   │                             # session that said "devkit continue"

@@ -32,6 +32,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { ensureGitignoreEntry, telemetryDir } = require('./devkit');
+const { run: gitRun, TREE_MS } = require('./git');
 
 const GATES_FILE = 'gates.json';
 
@@ -58,18 +59,9 @@ function gatesPath(dir) {
   return path.join(telemetryDir(dir), GATES_FILE);
 }
 
+// The tree limit throughout: staging a large tree is slow but not stuck.
 function git(dir, args, env) {
-  try {
-    const r = spawnSync('git', args, {
-      cwd: dir,
-      encoding: 'utf8',
-      env: env ? { ...process.env, ...env } : process.env,
-    });
-    if (r.error || r.status !== 0) return null;
-    return (r.stdout ?? '').trim();
-  } catch {
-    return null;
-  }
+  return gitRun(dir, args, { env, timeoutMs: TREE_MS });
 }
 
 // A content hash of the working tree as it stands - committed, staged,

@@ -48,9 +48,7 @@ function fail(message) {
 function resolveProjectDir() {
   const fromEnv = d.projectDir();
   if (fromEnv) return fromEnv;
-  const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
-  if (!r.error && r.status === 0 && (r.stdout ?? '').trim()) return r.stdout.trim();
-  return process.cwd();
+  return require('./lib/git').run(null, ['rev-parse', '--show-toplevel']) || process.cwd();
 }
 
 function parseArgs(argv) {
@@ -116,8 +114,7 @@ function tokenReport(dir, start, end) {
 }
 
 function git(dir, args, env) {
-  const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env: env ? { ...process.env, ...env } : process.env });
-  return r.error || r.status !== 0 ? null : (r.stdout ?? '').trim();
+  return require('./lib/git').run(dir, args, { env, timeoutMs: require('./lib/git').TREE_MS });
 }
 
 function parseShortstat(text) {

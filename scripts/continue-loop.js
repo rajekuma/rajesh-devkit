@@ -122,15 +122,14 @@ try {
 }
 
 if (sessionId) {
-  const { spawnSync } = require('child_process');
-  const b = spawnSync('git', ['branch', '--show-current'], { cwd: dir, encoding: 'utf8' });
+  const branch = require('./lib/git').run(dir, ['branch', '--show-current']) || null;
   lease.renew(
     dir,
     {
       sessionId,
       milestone: milestone.display,
       worktree,
-      branch: !b.error && b.status === 0 ? (b.stdout ?? '').trim() || null : null,
+      branch,
       transcript:
         hookInput && typeof hookInput.transcript_path === 'string'
           ? hookInput.transcript_path

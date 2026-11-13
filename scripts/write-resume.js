@@ -91,9 +91,7 @@ const milestone = d.findNextMilestone(progressPath, config.parked, arm.scopeOf(d
 if (!milestone) process.exit(0);
 
 function git(...args) {
-  const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
-  if (r.error || r.status !== 0) return null;
-  return (r.stdout ?? '').trim();
+  return require('./lib/git').run(dir, args);
 }
 
 const specPath = d.findSpecForMilestone(dir, milestone.number, milestone.name);

@@ -96,11 +96,8 @@ function normalizePath(p) {
 // absent or the project is not a repository at all.
 function worktreeId(dir) {
   try {
-    const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: dir, encoding: 'utf8' });
-    if (!r.error && r.status === 0) {
-      const top = (r.stdout ?? '').trim();
-      if (top) return normalizePath(top);
-    }
+    const top = require('./git').run(dir, ['rev-parse', '--show-toplevel']);
+    if (top) return normalizePath(top);
   } catch {
     // No git on PATH is not an error here - the fallback is a real answer.
   }
