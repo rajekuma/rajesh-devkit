@@ -13,6 +13,17 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Fixed (0.13.2)
+
+- **A hung git can no longer hang a hook.** Found on Windows: a system gitconfig set
+  `core.fsmonitor`, and a `git add -A` waited on the file-watcher daemon for 40
+  minutes. The hooks' git calls had no time limit, so the same wait would hold up the
+  session a hook ran in, on every edit. Every git call now goes through
+  `scripts/lib/git.js`: 5 seconds for quick reads, 30 for fingerprinting a tree.
+  A timeout reads as "cannot tell", so a gate verdict reads as stale rather than
+  fresh. Git's optional locks are off for these calls, so a killed `git status`
+  cannot leave an `index.lock` that breaks the user's next git command.
+
 ### Added (0.13.1)
 
 - **`"sessionStatus": "all"` dates every session, not just loop ones.** Found in real

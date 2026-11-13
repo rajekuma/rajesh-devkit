@@ -33,9 +33,7 @@ const approach = require('./lib/approach');
 function resolveProjectDir() {
   const fromEnv = d.projectDir();
   if (fromEnv) return fromEnv;
-  const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
-  if (!r.error && r.status === 0 && (r.stdout ?? '').trim()) return r.stdout.trim();
-  return process.cwd();
+  return require('./lib/git').run(null, ['rev-parse', '--show-toplevel']) || process.cwd();
 }
 
 // The milestone being worked here. In a parallel lane that is not the first

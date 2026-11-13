@@ -204,9 +204,7 @@ try {
 }
 
 function branchName() {
-  const r = spawnSync('git', ['branch', '--show-current'], { cwd: dir, encoding: 'utf8' });
-  if (r.error || r.status !== 0) return null;
-  return (r.stdout ?? '').trim() || null;
+  return require('./lib/git').run(dir, ['branch', '--show-current']) || null;
 }
 
 // Claimed whether or not a conflict was found, but only by a session that is

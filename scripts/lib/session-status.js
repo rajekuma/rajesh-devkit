@@ -192,10 +192,7 @@ function titleOf(s) {
 }
 
 function gitBits(dir) {
-  const git = (...args) => {
-    const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8', timeout: 5000 });
-    return r.error || r.status !== 0 ? null : (r.stdout ?? '').trim();
-  };
+  const git = (...args) => require('./git').run(dir, args);
   const status = git('status', '--porcelain');
   return { branch: git('branch', '--show-current') || null, dirty: status === null ? null : status.length > 0 };
 }
