@@ -13,6 +13,17 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Added (0.13.1)
+
+- **`"sessionStatus": "all"` dates every session, not just loop ones.** Found in real
+  use: after 0.12.0 the user still could not see when their windows were last
+  worked, because only one had ever said `devkit continue` and the rest, by design,
+  showed nothing. With `"all"`, every session gets the dated end-of-turn line, the
+  resume line that says whether it is the latest window, and a row in
+  `devkit sessions` under the name the user gave it. A session off the loop says
+  "not on the loop" rather than claiming a milestone, and its title is never
+  changed. The default is unchanged: only loop sessions are shown anything.
+
 ### Added (0.13.0)
 
 - **User journeys: "done" can now mean a person can use it.** Every gate judges one

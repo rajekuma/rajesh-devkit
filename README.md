@@ -1508,8 +1508,13 @@ turn:
   that session's last stop. The prompt never reaches the model, so it costs no
   tokens.
 
-A session that never ran the loop gets none of this. `"sessionStatus": false`
-in `.claude/devkit.json` turns it off. The list lives in the repository's git
+By default a session that never ran the loop gets none of this. To date every
+session, including ones opened for other work, set `"sessionStatus": "all"` in
+`.claude/devkit.json` (or, just for you, in
+`.claude/rajesh-devkit/devkit.local.json`). Those sessions then get the dated
+line, the resume line and a row in `devkit sessions`, and say "not on the loop"
+instead of a milestone; their titles are never changed. `"sessionStatus": false`
+turns it all off. The list lives in the repository's git
 directory (`.git/rajesh-devkit/sessions.json`), so it is never committed and
 outlives a deleted worktree.
 
@@ -1895,8 +1900,10 @@ behaviour that existed before it:
   proven hold a milestone open; by default it only reports. See "User journeys".
 
 - **`sessionStatus`** — `false` turns off the dated end-of-turn line, the
-  session titles and the session list. On by default, and only ever visible in
-  a session that ran the loop. See "Coming back to a session".
+  session titles and the session list. On by default, and then only visible in
+  a session that ran the loop; `"all"` gives every session the dated line and a
+  row in the list, without retitling the ones off the loop. See "Coming back to
+  a session".
 
 - **`loop`** — `"devkit"` makes this plugin drive even where the project has
   its own `spec-loop` skill; `"project"` makes it stand down even where it
