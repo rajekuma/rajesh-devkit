@@ -90,7 +90,9 @@ rather than as a terse dump.
      them if the project has none.
    - **`devkit sessions`** lists this project's sessions, newest first, with
      what each was last working on, for finding the latest window. It costs
-     no tokens.
+     no tokens. By default only sessions that ran the loop appear; if the user
+     wants every window dated, tell them to set `"sessionStatus": "all"` in
+     `.claude/devkit.json`.
 
    The usual order is onboard → specify → (ux) → implement → review → ship →
    docs, but nothing forces it; each piece is independently invokable.

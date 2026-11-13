@@ -157,8 +157,9 @@ function readExtras(cfg) {
     // makes the next estimate a measurement instead of a guess.
     metrics: cfg.metrics !== false,
     // The dated status line, session titles and session list - see
-    // lib/session-status.js. They only ever appear in a session that ran the loop.
-    sessionStatus: cfg.sessionStatus !== false,
+    // lib/session-status.js. By default only a session that ran the loop gets
+    // them; "all" gives every session the dated line and a place in the list.
+    sessionStatus: cfg.sessionStatus === false ? false : cfg.sessionStatus === 'all' ? 'all' : true,
     // User journeys - see lib/journeys.js. JOURNEYS.md is the opt-in; this is the
     // way to turn them off with the file still there. A linked journey that isn't
     // proven only reports unless "journeyGate" asks for more, because flaky checks

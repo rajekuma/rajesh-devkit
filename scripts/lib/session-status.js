@@ -18,8 +18,12 @@
 //   - a title naming its milestone (`sessionTitle`), unless the user named it.
 // `devkit sessions` prints the registry below, newest first.
 //
-// Only a session that drove the loop is ever mentioned. One opened for other
-// work gets nothing (PRINCIPLES 4). `"sessionStatus": false` turns it all off.
+// By default only a session that drove the loop is ever mentioned. One opened
+// for other work gets nothing (PRINCIPLES 4). `"sessionStatus": "all"` is the
+// user asking otherwise: reported in real use, the windows they could not tell
+// apart were mostly not loop sessions. Those get the dated line, the resume
+// warning and a row in `devkit sessions`, but never a milestone title, since
+// they are not working one. `"sessionStatus": false` turns it all off.
 //
 // Why the registry lives in the git directory. A desktop or lane session often
 // runs in its own worktree, and that worktree is deleted when the session is
@@ -115,6 +119,14 @@ function enabled(config) {
   return !config || config.sessionStatus !== false;
 }
 
+function everySession(config) {
+  return Boolean(config) && config.sessionStatus === 'all';
+}
+
+// A session under "all" that is not on the loop: it has a date and a branch,
+// but no milestone of its own to report.
+const OFF_LOOP = Object.freeze({ state: 'off' });
+
 const pad = (n) => String(n).padStart(2, '0');
 
 // Local time, because this is read by the person who sat there. It stays in the
@@ -164,6 +176,7 @@ function snapshot(dir, config, sessionId, entry) {
 }
 
 function summaryOf(s) {
+  if (s.state === 'off') return 'not on the loop';
   if (s.state === 'working') return `${s.milestone} | ${s.stage}`;
   if (s.state === 'paused') return `${s.milestone} | paused, say "devkit continue" to resume`;
   return `${s.milestone} | done${s.next ? ` | next: ${s.next}, say "devkit continue"` : ' | queue empty'}`;
@@ -204,7 +217,11 @@ function trackedEntry(dir, config, sessionId) {
   if (entry) return entry;
   const mine = d.findNextMilestone(path.join(dir, 'PROGRESS.md'), config.parked, arm.scopeOf(dir, sessionId));
   const armed = Boolean(arm.readArms(dir)[sessionId]);
-  return armed || (mine && arm.isDriving(dir, config, sessionId, mine)) ? {} : null;
+  return armed || everySession(config) || (mine && arm.isDriving(dir, config, sessionId, mine)) ? {} : null;
+}
+
+function standing(dir, config, sessionId, entry) {
+  return snapshot(dir, config, sessionId, entry) || (everySession(config) ? OFF_LOOP : null);
 }
 
 // The end-of-turn line. Written with writeSync because this runs from an exit
@@ -218,7 +235,7 @@ function stopFooter(hookInput, now = Date.now()) {
     const config = d.readStageConfig(dir);
     const entry = trackedEntry(dir, config, sessionId);
     if (!entry) return;
-    const s = snapshot(dir, config, sessionId, entry);
+    const s = standing(dir, config, sessionId, entry);
     if (!s) return;
     const bits = gitBits(dir);
     const summary = summaryOf(s);
@@ -256,8 +273,11 @@ function returnReport(hookInput, now = Date.now()) {
     const config = d.readStageConfig(dir);
     const entry = trackedEntry(dir, config, sessionId);
     if (!entry || !entry.lastAt) return null;
-    const s = snapshot(dir, config, sessionId, entry);
+    const s = standing(dir, config, sessionId, entry);
     if (!s) return null;
+    // Off the loop there is nothing for the model to carry on with, and a
+    // compaction is mid-work, so the user needs nothing either.
+    if (s.state === 'off' && hookInput.source !== 'resume') return null;
     const summary = summaryOf(s);
     const out = {
       hookSpecificOutput: {
@@ -277,6 +297,11 @@ function returnReport(hookInput, now = Date.now()) {
         );
       }
       out.systemMessage = lines.join('\n');
+      if (s.state === 'off') {
+        delete out.hookSpecificOutput.additionalContext;
+        rememberCustomTitle(dir, sessionId, hookInput, entry);
+        return out;
+      }
       const title = nextTitle(dir, config, sessionId, hookInput, entry, s, now);
       if (title) out.hookSpecificOutput.sessionTitle = title;
     }
@@ -301,6 +326,15 @@ function nextTitle(dir, config, sessionId, hookInput, entry, s, now = Date.now()
   return title;
 }
 
+// Off the loop the title is never ours to set, but the name the user gave it is
+// what `devkit sessions` should call it.
+function rememberCustomTitle(dir, sessionId, hookInput, entry, now = Date.now()) {
+  const current = typeof hookInput.session_title === 'string' ? hookInput.session_title : null;
+  if (current && current !== entry.customTitle && current !== entry.titleSet) {
+    update(dir, sessionId, { customTitle: current, lastAt: entry.lastAt }, now);
+  }
+}
+
 // For a UserPromptSubmit that is not a loop command. A title that catches up
 // with a milestone finished since the last prompt; Stop cannot set one.
 function promptTitle(hookInput, now = Date.now()) {
@@ -311,7 +345,11 @@ function promptTitle(hookInput, now = Date.now()) {
     const config = d.readStageConfig(dir);
     const entry = trackedEntry(dir, config, sessionId);
     if (!entry || !entry.lastAt) return null;
-    const s = snapshot(dir, config, sessionId, entry);
+    const s = standing(dir, config, sessionId, entry);
+    if (s && s.state === 'off') {
+      rememberCustomTitle(dir, sessionId, hookInput, entry, now);
+      return null;
+    }
     return s ? nextTitle(dir, config, sessionId, hookInput, entry, s, now) : null;
   } catch {
     return null;

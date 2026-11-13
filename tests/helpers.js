@@ -12,6 +12,19 @@ const { spawnSync } = require('child_process');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..');
 
+// Every fixture repository is brand new, and a machine whose system gitconfig
+// sets core.fsmonitor starts a watcher daemon in each one. Found on Windows
+// (Git for Windows 2.43): a fixture's `git add -A` waited on that daemon for 40
+// minutes and the suite never finished. Set here, before anything spawns, so
+// the tests' own git calls and the hooks they run all inherit it. Appended to
+// any GIT_CONFIG_COUNT already set rather than replacing it.
+{
+  const n = Number(process.env.GIT_CONFIG_COUNT) || 0;
+  process.env[`GIT_CONFIG_KEY_${n}`] = 'core.fsmonitor';
+  process.env[`GIT_CONFIG_VALUE_${n}`] = 'false';
+  process.env.GIT_CONFIG_COUNT = String(n + 1);
+}
+
 // Glyphs as escapes, so these test sources stay pure ASCII for the same
 // reason the hooks do - see scripts/lib/devkit.js.
 const GLYPH = {

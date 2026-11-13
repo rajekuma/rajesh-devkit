@@ -263,3 +263,46 @@ test('linked worktrees share one registry, which outlives the worktree', () => {
     }
   });
 });
+
+// "all": the user wants to find the latest window, whatever each one was doing.
+const ALL = { files: { '.claude/devkit.json': JSON.stringify({ sessionStatus: 'all' }) } };
+
+test('with sessionStatus all, a session off the loop gets a dated line and is listed', () => {
+  withProject((dir) => {
+    const message = json(stop(dir)).systemMessage;
+    assert.match(message, /\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+    assert.doesNotMatch(message, /M1 - User login/, 'it is not working a milestone, so it must not claim one');
+    assert.ok(registry(dir)[ME], 'it is recorded so devkit sessions can find it');
+    assert.match(json(prompt(dir, 'devkit sessions')).reason, /this session/);
+  }, ALL);
+});
+
+test('with sessionStatus all, a session off the loop keeps its title, and its own name is listed', () => {
+  withProject((dir) => {
+    stop(dir);
+    assert.strictEqual(titleIn(prompt(dir, 'fix the typo')), undefined);
+    assert.strictEqual(titleIn(prompt(dir, 'fix the typo', { session_title: 'Bug hunt' })), undefined);
+    assert.match(json(prompt(dir, 'devkit sessions')).reason, /Bug hunt/);
+  }, ALL);
+});
+
+test('with sessionStatus all, resuming a session off the loop says when, and warns when another is newer', () => {
+  withProject((dir) => {
+    setRegistry(dir, {
+      [ME]: { lastAt: new Date(Date.now() - 7 * 86400000).toISOString() },
+      [OTHER]: { lastAt: new Date(Date.now() - 3600000).toISOString(), milestone: 'M2 - Password reset', titleSet: 'M2 Password reset' },
+    });
+    const out = json(start(dir, 'resume'));
+    assert.match(out.systemMessage, /7 days/);
+    assert.match(out.systemMessage, /M2 Password reset/);
+    assert.strictEqual(out.hookSpecificOutput.sessionTitle, undefined);
+  }, ALL);
+});
+
+test('with sessionStatus all, a session that then runs the loop reports its milestone', () => {
+  withProject((dir) => {
+    stop(dir);
+    prompt(dir, 'devkit continue');
+    assert.match(json(stop(dir, { stop_hook_active: true })).systemMessage, /M1 - User login/);
+  }, ALL);
+});
