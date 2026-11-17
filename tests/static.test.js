@@ -164,7 +164,7 @@ test('every trigger phrase is namespaced to devkit', () => {
   // This plugin is a GUEST in someone else's repository. A phrase like
   // "write a spec" or "review the diff" is a plain-English description of a
   // universal dev activity, and is exactly what a project's own components
-  // already answer to - MyHomeMaintenance's `specify`, `implementer` and
+  // already answer to - one host project's `specify`, `implementer` and
   // `reviewer` claimed all three verbatim. The harness resolves that
   // ambiguity silently, so the user never learns which one ran.
   //

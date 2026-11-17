@@ -13,6 +13,16 @@ reader six months from now cannot recover from the diff.
 
 ## [Unreleased]
 
+### Changed (docs only, no version change)
+
+- **The docs no longer identify the private project the plugin is dogfooded
+  on.** The README, plans, changelog and test fixtures named that product, its
+  website, its market, its milestone titles and its source file names. Together
+  they were a public outline of a private product's roadmap, and naming the
+  host project also cuts against §1 (generic first). Incidents keep their
+  dates, numbers and lessons; only identifying names were made neutral. No
+  behaviour changed, so the version stays 0.13.2.
+
 ### Fixed (0.13.2)
 
 - **A hung git can no longer hang a hook.** Found on Windows: a system gitconfig set
@@ -358,11 +368,11 @@ reader six months from now cannot recover from the diff.
   to the second.
 
   What that cost, on 2026-09-22 at 21:37: `session-welcome.js` greeted a new
-  session with "picking up M28 - Expense Categories, mid-flight ... resume at
+  session with "picking up M28 - Categories, mid-flight ... resume at
   criterion 4" while another session, started nine minutes earlier in the
   same tree, was already implementing M28. That session wrote
-  `ExpenseCategoryService.cs`, `ExpenseCategoryEndpoints.cs` and a 44-test
-  suite in the window, and added `app.MapExpenseCategoryEndpoints();` plus
+  `CategoryService.cs`, `CategoryEndpoints.cs` and a 44-test
+  suite in the window, and added `app.MapCategoryEndpoints();` plus
   its DI registration - the exact two lines the newly-greeted session had
   independently diagnosed as missing and was about to write itself. Nothing
   caught it. The second session happened to re-list a directory for an
@@ -404,7 +414,7 @@ reader six months from now cannot recover from the diff.
 - **A gate verdict is stamped with the tree it saw, and a stale one is never
   a pass.** In M28 `devkit-reviewer` returned `ship`, `devkit-security`
   `clear`, `devkit-quality` `clean`; the orchestrator then applied two of
-  quality's findings - an edit to `ExpenseCategoryService.ListAsync` and a
+  quality's findings - an edit to `CategoryService.ListAsync` and a
   docstring - and carried on toward ship with all three verdicts treated as
   current. They described a diff that no longer existed. `devkit-ship` caught
   it only because it happened to re-run the suite after the edits; the same
@@ -622,7 +632,7 @@ reader six months from now cannot recover from the diff.
 
 - **`devkit-reviewer` reviews the working tree, and re-checks each finding
   before reporting it.** In M28 its only concrete finding was a stale `"32
-  leaves"` comment in `ExpenseCategorySeed.cs` that had been corrected in
+  leaves"` comment in `CategorySeed.cs` that had been corrected in
   the working tree before the review began - it had read a committed copy.
   Being the only specific finding, it was the one a reader skimming the
   verdict would have acted on, and it was not real. The change under review
@@ -631,7 +641,7 @@ reader six months from now cannot recover from the diff.
 
 - **The README says Claude Code must be started *in* the project.** The whole
   dogfooding session ran from `C:\Dev` against a plugin installed
-  `--scope project` in `C:\Dev\MyHomeMaintenance`: none of its agents,
+  `--scope project` in `C:\Dev\MyProject`: none of its agents,
   skills or hooks loaded, `claude plugin list` said **enabled** throughout,
   and hand-running the hook scripts with `CLAUDE_PROJECT_DIR` set masked it
   for hours, until delegating to `devkit-implementer` failed with "Agent type
@@ -773,7 +783,7 @@ of them.
 
 - **Milestone rows with an annotated status cell are no longer invisible.**
   `milestoneRowPattern` required the status cell to contain the glyph and
-  nothing else, so a tracker that writes `| 28 | Expense Categories |
+  nothing else, so a tracker that writes `| 28 | Categories |
   (glyph) spec Approved 2026-09-18 (...) |` had half its rows silently
   unparsed. Measured on a real `PROGRESS.md`: 43 of 87 rows seen, and the
   loop confidently nudged toward M42 while M28 was the actual next
@@ -857,7 +867,7 @@ of them.
   sensitive-escalation gate, and does not consume it - there is no point
   asking how to build something nobody has approved building.
 - **Parked rows.** A tracker that doubles as an idea list has rows that are
-  genuinely unstarted and genuinely not next: `| 29a | Expense Drafting
+  genuinely unstarted and genuinely not next: `| 29a | Drafting
   Assistant | (glyph) not spec'd - see product_vision.md |`. The loop stalled
   on the first one forever, nudging for a spec the owner had deliberately
   parked. They are now skipped by the loop and reported by `devkit-help` -

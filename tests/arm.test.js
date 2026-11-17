@@ -215,13 +215,13 @@ const PHASED = [
   '| # | Milestone | Status |',
   '|---|---|---|',
   `| 1 | Rules | ${GLYPH.notStarted} |`,
-  `| 2 | Invoices | ${GLYPH.notStarted} |`,
+  `| 2 | Exports | ${GLYPH.notStarted} |`,
   '',
-  '## Phase 2 - Water',
+  '## Phase 2 - Search',
   '',
   '| # | Milestone | Status |',
   '|---|---|---|',
-  `| 3 | Meter entry | ${GLYPH.notStarted} |`,
+  `| 3 | Data entry | ${GLYPH.notStarted} |`,
   `| 4 | Consumption | ${GLYPH.notStarted} |`,
   '',
 ].join('\n');
@@ -257,10 +257,10 @@ test('the lane keywords parse, and anything else stays a plain continue', () => 
 test('devkit continue phase N starts on that phase, not on the first row', () => {
   withPhased((dir) => {
     const r = say(dir, 'devkit continue phase 2');
-    assert.match(r.stdout, /M3 - Meter entry/, `wrong milestone: ${r.stdout}`);
+    assert.match(r.stdout, /M3 - Data entry/, `wrong milestone: ${r.stdout}`);
     const s = stop(dir);
     assert.strictEqual(s.exitCode, 2);
-    assert.match(s.stderr, /M3 - Meter entry/);
+    assert.match(s.stderr, /M3 - Data entry/);
     assert.doesNotMatch(s.stderr, /M1 - Rules/);
   });
 });
@@ -279,12 +279,12 @@ test('a phase lane walks its own phase and stops at the end of it', () => {
 test('two sessions on two phases work in parallel without colliding', () => {
   withPhased((dir) => {
     say(dir, 'devkit continue phase 1', 'claude-lane');
-    const water = say(dir, 'devkit continue phase 2', 'gateway-lane');
-    assert.doesNotMatch(water.stdout, /NOT started/, `treated separate phases as a collision: ${water.stdout}`);
+    const lane2 = say(dir, 'devkit continue phase 2', 'gateway-lane');
+    assert.doesNotMatch(lane2.stdout, /NOT started/, `treated separate phases as a collision: ${lane2.stdout}`);
     const a = stop(dir, 'claude-lane');
     const b = stop(dir, 'gateway-lane');
     assert.match(a.stderr, /M1 - Rules/);
-    assert.match(b.stderr, /M3 - Meter entry/);
+    assert.match(b.stderr, /M3 - Data entry/);
     assert.doesNotMatch(a.stderr + b.stderr, /Another session appears/);
   });
 });

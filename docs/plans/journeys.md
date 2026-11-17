@@ -7,25 +7,25 @@ Target: devkit 0.13.0 · Status: **Approved 2026-11-05** · Related: `docs/PRINC
 Devkit proves each milestone is built correctly. Nothing proves that the
 milestones add up to something a person can use.
 
-Evidence from dogfooding on MyHomeMaintenance, measured 2026-11-05 on its
-`feat/phase5-expenses` branch:
+Evidence from dogfooding on the private project the plugin came from,
+measured 2026-11-05 on its `feat/phase5` branch:
 
 - The tracker says "API-side" 29 times, and UI milestones M81-M86 are all
-  unticked. M82 Expenses UI has not started, although the expense API (M28)
+  unticked. M82, the first UI for an API built in M28, has not started, although that API
   dates from September.
 - `mobile/` has a `web` folder but no `android` or `ios` folder.
 - Every recorded gate verdict is a pass or `clear-with-unknowns`. The gates are
   doing their job, which is to judge one milestone's diff.
 - Fixes reached the repo for faults between the parts: the register form against
   the API's password rules, CORS, and a sign-in popup header.
-- Reordering work for a good reason, such as building the water milestones
+- Reordering work for a good reason, such as building one area's milestones
   first, had no visible cost. Nothing showed how far that left the app from a
   usable state.
 
 This would help any project: a library has "a consumer installs it and calls
 it", and a CLI has "a new user runs it and gets the result". The evidence above
 must not leak into the plugin as an assumption about APIs, mobile apps or
-expenses (§1).
+one product's domain (§1).
 
 ## Terms
 
@@ -45,11 +45,11 @@ the recorded result of the plugin running that command.
    edit it and a hook can parse it without a dependency:
 
    ```markdown
-   ## J1 Treasurer records an expense
-   For: treasurer
-   Outcome: The expense, with its receipt, appears on a resident's statement.
+   ## J1 Customer places an order
+   For: customer
+   Outcome: The order, with its receipt, appears in the customer's order history.
    Needs: M28, M29, M82, M51
-   Check: npm run e2e -- expense-to-statement
+   Check: npm run e2e -- order-to-history
    Timeout: 300
    ```
 
@@ -194,7 +194,7 @@ silent in hooks (§5) and are visible as `unknown` in `journeys.js status`.
 - Hooks with no `JOURNEYS.md`: one failed file stat, no measurable change.
 - End-of-turn line: parse two small files, no git, under 50 ms.
 - Banner and `devkit journeys`: one fingerprint, measured at about 1.6 s on the
-  824-file MyHomeMaintenance repository on Windows.
+  824-file dogfood repository on Windows.
 - Model tokens: hooks and reports spend none. Tokens are spent drafting the file,
   writing checks as normal milestones, and each returned failure. This is unmeasured
   and gets measured in the dogfood run below.
@@ -248,7 +248,7 @@ Prompts, measured with `node tests/run-evals.js` (§3):
 Generic use (§1):
 
 - [ ] A test project with no UI, a library with one consumer journey, works end to end.
-- [ ] No file in `agents/`, `skills/` or `scripts/` names MyHomeMaintenance, or assumes a
+- [ ] No file in `agents/`, `skills/` or `scripts/` names the dogfood project, or assumes a
       mobile app, an API or a browser.
 
 Release (§2, §9):
@@ -264,12 +264,12 @@ Each step is usable and testable on its own:
 2. `devkit journeys`, the banner, the status line and the acceptance keyword.
 3. Close-out step, receipt line, return path and `journeyGate`.
 4. Prompt changes and evals: `devkit-journeys`, ship, onboard, roadmap, specify.
-5. Dogfood on MyHomeMaintenance and record results.
+5. Dogfood on the private project and record results.
 
 ## Dogfood and how we judge it
 
-Draft 5-8 journeys for MyHomeMaintenance, from the owner's choice of what a pilot needs.
-Likely first candidate: a treasurer records an expense and a resident sees it. Then
+Draft 5-8 journeys for the dogfood project, from the owner's choice of what a pilot needs.
+Likely first candidate: the product's core write-then-read flow, end to end. Then
 record in this file, good or bad (§8):
 
 - Days from adoption until the first journey is `proven`, and how many tracker rows were

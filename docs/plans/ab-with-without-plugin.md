@@ -18,11 +18,11 @@ whether that mattered.
 
 Pick a milestone with an **Approved** spec, ideally one with a `SENSITIVE:`
 requirement, since that is where gates should matter most. The plan was
-written against MyHomeMaintenance, where two options exist (2026-10-02):
+written against the private dogfood project, where two options exist (2026-10-02):
 
 | Option | Base commit | Reference | Cost to you |
 |---|---|---|---|
-| **Replay M47b** (meter accuracy tests) | `6887705` (data plan done, before the code) | The real devkit run is recorded: $68.54 at API prices, 3.22 active h, 23 criteria. A third data point. | Two fresh arms, both thrown away afterwards (≈ $120–140 of quota at API-equivalent prices). |
+| **Replay M47b** (accuracy tests) | `6887705` (data plan done, before the code) | The real devkit run is recorded: $68.54 at API prices, 3.22 active h, 23 criteria. A third data point. | Two fresh arms, both thrown away afterwards (≈ $120–140 of quota at API-equivalent prices). |
 | **Next milestone forward** (e.g. M48, once M47c has landed) | The commit M48 starts from | None | Two arms; the better one is kept as the real work, so only one is spent. |
 
 Recommended: **the next milestone forward**, because half the spend becomes
@@ -50,7 +50,7 @@ after the other.
   answer in both.
 
 **Run one arm at a time, never in parallel,** and never while another session
-in the main checkout is running tests. MyHomeMaintenance's shared test
+in the main checkout is running tests. The dogfood project's shared test
 template database races when two runs overlap.
 
 ## Setup
@@ -58,22 +58,22 @@ template database races when two runs overlap.
 From the main checkout (any shell; these are git and claude commands only):
 
 ```bash
-git worktree add ../mhm-ab-with -b ab/with <base-commit>
+git worktree add ../proj-ab-with -b ab/with <base-commit>
 ```
 ```bash
-git worktree add ../mhm-ab-without -b ab/without <base-commit>
+git worktree add ../proj-ab-without -b ab/without <base-commit>
 ```
 
 Copy the gitignored local settings the app and its tests need (connection
 strings, `.env`, and so on) into both worktrees. A worktree starts without
 them.
 
-In `../mhm-ab-with`:
+In `../proj-ab-with`:
 ```bash
 claude plugin install rajesh-devkit@rajesh-devkit --scope project
 ```
 
-In `../mhm-ab-without`:
+In `../proj-ab-without`:
 ```bash
 git rm -r -q .claude/skills/spec-loop
 ```

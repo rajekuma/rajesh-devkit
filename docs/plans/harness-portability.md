@@ -67,7 +67,7 @@ Decide per harness from what is verified, not from what is advertised.
 
 ### 0. Experiment first, before building anything
 
-1. Take one approved MyHomeMaintenance-sized spec (any real project works).
+1. Take one approved, real-sized spec (any real project works).
 2. In a separate git worktree, on a phase no Claude session is working, let
    Codex implement it test-first, with the repo's `AGENTS.md` and the spec as
    its only guidance.
