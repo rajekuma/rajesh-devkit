@@ -4,11 +4,9 @@
 spec, design, test-first implementation, review, security, ship, docs — one
 milestone at a time, with measured evidence behind its design choices.**
 
-It was extracted from, and is dogfooded on, a live product:
-**[MyHomeMaintenance](https://www.myhomemaintenance.in)** — transparent
-maintenance billing for residents' welfare associations (16 phases, 57
-specs, 20 architecture decision records; the product's repository is
-private). The plugin is stack-agnostic: it reads each project's own
+It was extracted from, and is dogfooded on, a live product in production
+(16 phases, 57 specs, 20 architecture decision records; the product's
+repository is private). The plugin is stack-agnostic: it reads each project's own
 conventions, test runner and coverage gate instead of assuming one.
 
 ```mermaid
@@ -410,7 +408,7 @@ which reports what to do next in that specific repository.
 > plugin is not loaded, whatever the list says.
 >
 > This cost an entire dogfooding session. It ran from `C:\Dev` against a
-> plugin installed `--scope project` in `C:\Dev\MyHomeMaintenance`; the
+> plugin installed `--scope project` in `C:\Dev\MyProject`; the
 > hook *scripts* could still be run by hand with `CLAUDE_PROJECT_DIR` set,
 > which made the loop look like it was working for hours. It surfaced only
 > when delegating to `devkit-implementer` failed with "Agent type not
@@ -1305,7 +1303,7 @@ derived from the repo, so it needs no cooperation from the model and can
 never be more than one edit stale. `SessionStart` reads it back, which is
 why a brand-new session — different window, different machine, different
 provider — opens with *"picking up M28, mid-flight: criteria 7/24, resume at
-criterion 8, branch feat/phase5-expenses, tree dirty"* instead of
+criterion 8, branch feat/phase5, tree dirty"* instead of
 rediscovering the project from scratch.
 
 So the handoff is (the short checklist is "When you hit the usage limit",
@@ -1460,11 +1458,11 @@ do. It is optional, and without it nothing changes. Say `devkit journeys draft` 
 propose some.
 
 ```markdown
-## J1 Treasurer records an expense
-For: treasurer
-Outcome: The expense, with its receipt, appears on a resident's statement.
+## J1 Customer places an order
+For: customer
+Outcome: The order, with its receipt, appears in the customer's order history.
 Needs: M28, M82
-Check: npm run e2e -- expense-to-statement
+Check: npm run e2e -- order-to-history
 Timeout: 300
 ```
 
@@ -1495,14 +1493,14 @@ turn:
   transcript, so a week later the last one still says when:
 
   ```
-  DevKit | last worked 2026-11-05 14:32 | M47 - Statements | implementing, 12/36 criteria | branch m47, uncommitted changes
+  DevKit | last worked 2026-11-05 14:32 | M47 - Reports | implementing, 12/36 criteria | branch m47, uncommitted changes
   ```
 
 - **When you resume the session** you get the same line and how long you were
   away. If another session worked this project more recently, it says "This is
   not the latest window" and names that session.
-- **The session title follows the milestone:** `M47 Statements`, then
-  `M47 done, next M48`, or `M47 Statements (paused)`. The title changes on your
+- **The session title follows the milestone:** `M47 Reports`, then
+  `M47 done, next M48`, or `M47 Reports (paused)`. The title changes on your
   next prompt after the state changes. A title you set yourself is left alone.
 - **`devkit sessions`** (or `devkit status`) lists the sessions in this project,
   newest first, across all its git worktrees. Each row shows the status as of
@@ -1647,12 +1645,12 @@ right now*, and for a while the hooks read the first as an answer to the
 second.
 
 **What that cost, measured.** On 2026-09-22 at 21:37, `session-welcome.js`
-greeted a new session in `MyHomeMaintenance` with "picking up M28 — Expense
+greeted a new session in the dogfood project with "picking up M28 —
 Categories, mid-flight … resume at criterion 4". Another session had started
 in the same working tree nine minutes earlier and was already implementing
-M28: within that window it wrote `ExpenseCategoryService.cs`,
-`ExpenseCategoryEndpoints.cs` and a 44-test `ExpenseCategoryEndpointTests.cs`,
-and added `app.MapExpenseCategoryEndpoints();` plus its DI registration — the
+M28: within that window it wrote `CategoryService.cs`,
+`CategoryEndpoints.cs` and a 44-test `CategoryEndpointTests.cs`,
+and added `app.MapCategoryEndpoints();` plus its DI registration — the
 exact two lines the newly-greeted session had independently diagnosed as
 missing and was about to write itself. Nothing caught it. The second session
 happened to re-list the test directory for an unrelated reason and noticed a
@@ -1742,7 +1740,7 @@ nudge, silently costing the project its whole Stop loop. It's guarded now.
 **What went wrong.** In M28, `devkit-reviewer` returned `ship`,
 `devkit-security` returned `clear`, `devkit-quality` returned `clean`. The
 orchestrator then applied two of quality's findings — an edit to
-`ExpenseCategoryService.ListAsync` and a docstring — and carried on toward
+`CategoryService.ListAsync` and a docstring — and carried on toward
 ship with all three verdicts treated as current. They described a diff that
 no longer existed. `devkit-ship` caught it only because it re-runs the suite
 itself and happened to run *after* the edits; a fix applied after ship would
@@ -2421,7 +2419,7 @@ what the plugin did for it, built from its own records (telemetry events,
 gate stamps, the transcript scan), so it costs no model tokens:
 
 ```
-DevKit | M35b Statement Ownership & Former-Resident Access | done
+DevKit | M35b Record Ownership & Former-Member Access | done
   Loop    3 stops turned into the next step by devkit | asked the sensitive-milestone question | built by claude-opus-5-5 (self)
   Gates   review: ship | quality: ship | security: clear | ship: clear-with-unknowns | docs: ran
           5 devkit agent runs (reviewer, security, quality, ship, docs), $8.06
@@ -2618,7 +2616,7 @@ agent involved, which is worth enabling regardless (Settings → Code security
 | `6931fe2` | 2026-09-15 | Initial scaffold: `devkit-specify`/`devkit-reviewer` copied with explicit `name:` frontmatter, `continue-loop.ps1`/`run-verify.ps1` hooks |
 | `db7be31` | 2026-09-15 | Renamed to `devkit-specify`/`devkit-reviewer` to avoid a name-conflict load error in a host project that already has its own `specify`/`reviewer` |
 | `b50897f` | 2026-09-15 | Added `devkit-dep-audit` for dependency CVE scanning |
-| `94cd457` | 2026-09-15 | Generalized `devkit-specify` and `devkit-dep-audit` off MyHomeMaintenance-specific assumptions (`api/`/`mobile/` folders, dotnet/pub-only scanning); added `devkit-implementer` |
+| `94cd457` | 2026-09-15 | Generalized `devkit-specify` and `devkit-dep-audit` off one host project's assumptions (`api/`/`mobile/` folders, dotnet/pub-only scanning); added `devkit-implementer` |
 | `2e3de90` | 2026-09-15 | Added timing-only telemetry (`milestone_started`/`milestone_shipped` events) and `devkit-stats` |
 | `c2d62d4` | 2026-09-15 | Fixed a UTF-8 BOM in telemetry/state writes (Windows PowerShell 5.1's `-Encoding utf8` quirk) — found by running the hooks against a real scratch project |
 | `c64b340` | 2026-09-15 | Fixed `devkit-specify`'s circular template-precedence logic and undefined ask/default threshold — found by dogfooding the skill against a scratch project |

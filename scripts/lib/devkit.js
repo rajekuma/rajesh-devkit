@@ -310,7 +310,7 @@ function readLines(file) {
 //
 // The status cell is the glyph PLUS whatever annotation the project writes
 // after it. Requiring the glyph to stand alone was a real bug, not a nicety:
-// a tracker that writes "| 28 | Expense Categories | <glyph> spec Approved
+// a tracker that writes "| 28 | Categories | <glyph> spec Approved
 // 2026-09-18 (seeded system + custom) |" had half its rows silently
 // invisible to every hook here, and the loop nudged toward a milestone forty
 // rows further down. The annotation is captured (group 4) rather than
@@ -329,7 +329,7 @@ function milestoneRowPattern(glyphs) {
 // Returns null when there's nothing queued, which is a normal outcome.
 //
 // `parked` skips rows whose status annotation matches it. A tracker that
-// doubles as an idea list - "| 29a | Expense Drafting Assistant | <glyph>
+// doubles as an idea list - "| 29a | Drafting Assistant | <glyph>
 // not spec'd - see product_vision.md |" - has rows that are genuinely
 // unstarted and genuinely not next: nobody has decided to build them. The
 // loop would otherwise stall on the first such row forever, nudging toward a
@@ -341,7 +341,7 @@ function milestoneRowPattern(glyphs) {
 //   { milestone: '46' } only that one row, parked or not, because the user
 //                       named it explicitly
 // Without a scope the whole tracker is one queue, exactly as before. Phase
-// headings are matched loosely ("## Phase 9", "### Phase 9 - Water") because
+// headings are matched loosely ("## Phase 9", "### Phase 9 - Search") because
 // that is how trackers are written; a tracker with no Phase headings simply
 // has no phases to scope to, and a phase scope finds nothing there.
 const PHASE_HEADING = /^\s*#{1,6}\s*Phase\s+([\w.]+)\b/i;

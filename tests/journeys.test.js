@@ -586,5 +586,5 @@ test('the plugin assumes no project, stack or surface', () => {
   const lib = fs.readFileSync(path.join(PLUGIN_ROOT, 'scripts', 'lib', 'journeys.js'), 'utf8');
   const cliSource = fs.readFileSync(path.join(PLUGIN_ROOT, 'scripts', 'journeys.js'), 'utf8');
   const skill = fs.readFileSync(path.join(PLUGIN_ROOT, 'skills', 'devkit-journeys', 'SKILL.md'), 'utf8');
-  for (const text of [lib, cliSource, skill]) assert.doesNotMatch(text, /MyHomeMaintenance|flutter|playwright/i);
+  for (const text of [lib, cliSource, skill]) assert.doesNotMatch(text, /flutter|playwright/i);
 });

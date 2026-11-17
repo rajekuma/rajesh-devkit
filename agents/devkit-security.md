@@ -20,7 +20,7 @@ against the project's own stated invariants**, which you read first:
 
 - **Decision records** (`docs/adr/`, `docs/decisions/`, a decision log) —
   these are where a project writes down how isolation, auth, or data handling
-  is *supposed* to work. An ADR saying "every society-scoped row is filtered
+  is *supposed* to work. An ADR saying "every tenant-scoped row is filtered
   by a global query filter, enforced in one place" turns a vague "check
   multi-tenancy" into a precise question: does this new entity have one?
 - **Convention files** (`CLAUDE.md`, `AGENTS.md`, `.claude/rules/*.md`) — layering rules,

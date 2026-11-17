@@ -194,7 +194,7 @@ const PHASED = [
   '',
   '| # | Milestone | Status |',
   '|---|-----------|--------|',
-  `| 2 | Invoices | ${GLYPH.notStarted} |`,
+  `| 2 | Exports | ${GLYPH.notStarted} |`,
   '',
 ].join('\n');
 
